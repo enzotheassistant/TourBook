@@ -7,8 +7,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const { id } = await params;
   const entries = await listGuestListEntriesServer(id);
-  const csv = ['name,created_at', ...entries.map((entry) => `"${entry.name.replace(/"/g, '""')}","${entry.created_at}"`)].join('
-');
+
+  const csv = [
+    'name,created_at',
+    ...entries.map((entry) => `"${entry.name.replace(/"/g, '""')}","${entry.created_at}"`),
+  ].join('\n');
 
   return new Response(csv, {
     headers: {

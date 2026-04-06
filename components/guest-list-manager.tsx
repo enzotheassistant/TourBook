@@ -6,8 +6,7 @@ import { GuestListEntry } from '@/lib/types';
 
 function parseBulkInput(value: string) {
   return value
-    .split(/?
-/)
+    .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 }
