@@ -15,3 +15,10 @@ export function isToday(date: string) {
 
   return `${yyyy}-${mm}-${dd}` === date;
 }
+
+export function isPastShow(date: string) {
+  const today = new Date();
+  const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const showDate = new Date(`${date}T00:00:00`);
+  return showDate < localToday;
+}

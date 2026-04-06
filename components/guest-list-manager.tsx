@@ -1,15 +1,28 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { addGuestListEntry, readGuestListFromStorage } from '@/lib/local-storage';
+import { addGuestListEntry, listGuestListEntries } from '@/lib/data-client';
 import { GuestListEntry } from '@/lib/types';
 
 export function GuestListManager({ showId }: { showId: string }) {
   const [value, setValue] = useState('');
   const [entries, setEntries] = useState<GuestListEntry[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setEntries(readGuestListFromStorage(showId));
+    let active = true;
+
+    async function load() {
+      const nextEntries = await listGuestListEntries(showId);
+      if (!active) return;
+      setEntries(nextEntries);
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
   }, [showId]);
 
   const sortedEntries = useMemo(
@@ -17,15 +30,17 @@ export function GuestListManager({ showId }: { showId: string }) {
     [entries],
   );
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const trimmed = value.trim();
-    if (!trimmed) return;
+    if (!trimmed || saving) return;
 
-    const entry = addGuestListEntry(showId, trimmed);
-    setEntries((current) => [...current, entry]);
+    setSaving(true);
+    const entry = await addGuestListEntry(showId, trimmed);
+    setEntries((current) => [...current.filter((item) => item.id !== entry.id), entry]);
     setValue('');
+    setSaving(false);
   }
 
   return (
@@ -40,9 +55,10 @@ export function GuestListManager({ showId }: { showId: string }) {
         />
         <button
           type="submit"
-          className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900"
+          disabled={saving}
+          className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60"
         >
-          Add
+          {saving ? 'Adding...' : 'Add'}
         </button>
       </form>
 

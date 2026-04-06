@@ -1,3 +1,11 @@
+export type ShowVisibility = {
+  show_venue: boolean;
+  show_dos_contact: boolean;
+  show_parking_load_info: boolean;
+  show_schedule: boolean;
+  show_accommodation: boolean;
+};
+
 export type Show = {
   id: string;
   date: string;
@@ -18,6 +26,7 @@ export type Show = {
   hotel_maps_url: string;
   hotel_notes: string;
   created_at: string;
+  visibility: ShowVisibility;
 };
 
 export type GuestListEntry = {

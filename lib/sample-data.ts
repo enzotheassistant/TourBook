@@ -1,5 +1,13 @@
 import { Show } from '@/lib/types';
 
+const defaultVisibility = {
+  show_venue: true,
+  show_dos_contact: true,
+  show_parking_load_info: true,
+  show_schedule: true,
+  show_accommodation: true,
+};
+
 export const sampleShows: Show[] = [
   {
     id: 'toronto-danforth-2026-04-06',
@@ -22,6 +30,7 @@ export const sampleShows: Show[] = [
     hotel_maps_url: 'https://maps.google.com/?q=88+Broadview+Ave+Toronto+ON',
     hotel_notes: '2 queen rooms under TourBook hold. Parking clearance is 6’8”. Breakfast starts at 6:30 AM.',
     created_at: '2026-03-15T10:00:00.000Z',
+    visibility: defaultVisibility,
   },
   {
     id: 'montreal-rialto-2026-04-08',
@@ -44,6 +53,7 @@ export const sampleShows: Show[] = [
     hotel_maps_url: 'https://maps.google.com/?q=155+Avenue+du+Mont-Royal+E+Montreal+QC',
     hotel_notes: 'Front desk needs vehicle plate numbers at check-in. Late-night food spot two blocks east.',
     created_at: '2026-03-16T10:00:00.000Z',
+    visibility: defaultVisibility,
   },
   {
     id: 'ottawa-bronson-2026-04-10',
@@ -66,5 +76,6 @@ export const sampleShows: Show[] = [
     hotel_maps_url: 'https://maps.google.com/?q=120+Kent+St+Ottawa+ON',
     hotel_notes: '3 rooms on artist rate. Use side entrance for gear if arriving before standard check-in.',
     created_at: '2026-03-17T10:00:00.000Z',
+    visibility: defaultVisibility,
   },
 ];

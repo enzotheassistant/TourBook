@@ -1,31 +1,52 @@
-import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import { GuestListEntry, Show, ShowFormValues, ShowVisibility } from '@/lib/types';
 import { sampleShows } from '@/lib/sample-data';
 
 const SHOWS_KEY = 'tourbook.shows';
 const GUEST_LIST_KEY = 'tourbook.guestList';
 
+const defaultVisibility: ShowVisibility = {
+  show_venue: true,
+  show_dos_contact: true,
+  show_parking_load_info: true,
+  show_schedule: true,
+  show_accommodation: true,
+};
+
 function canUseStorage() {
   return typeof window !== 'undefined';
 }
 
+function normalizeShow(show: ShowFormValues | Show): Show {
+  return {
+    ...show,
+    created_at: show.created_at ?? new Date().toISOString(),
+    visibility: {
+      ...defaultVisibility,
+      ...(show.visibility ?? {}),
+    },
+  };
+}
+
 export function readShowsFromStorage(): Show[] {
   if (!canUseStorage()) {
-    return [...sampleShows];
+    return [...sampleShows].map(normalizeShow);
   }
 
   const raw = window.localStorage.getItem(SHOWS_KEY);
 
   if (!raw) {
-    window.localStorage.setItem(SHOWS_KEY, JSON.stringify(sampleShows));
-    return [...sampleShows];
+    const normalized = sampleShows.map(normalizeShow);
+    window.localStorage.setItem(SHOWS_KEY, JSON.stringify(normalized));
+    return normalized;
   }
 
   try {
     const parsed = JSON.parse(raw) as Show[];
-    return [...parsed].sort((a, b) => a.date.localeCompare(b.date));
+    return [...parsed].map(normalizeShow).sort((a, b) => a.date.localeCompare(b.date));
   } catch {
-    window.localStorage.setItem(SHOWS_KEY, JSON.stringify(sampleShows));
-    return [...sampleShows];
+    const normalized = sampleShows.map(normalizeShow);
+    window.localStorage.setItem(SHOWS_KEY, JSON.stringify(normalized));
+    return normalized;
   }
 }
 
@@ -33,16 +54,13 @@ export function writeShowsToStorage(shows: Show[]) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(
     SHOWS_KEY,
-    JSON.stringify([...shows].sort((a, b) => a.date.localeCompare(b.date))),
+    JSON.stringify([...shows].map(normalizeShow).sort((a, b) => a.date.localeCompare(b.date))),
   );
 }
 
 export function saveShowToStorage(values: ShowFormValues) {
   const currentShows = readShowsFromStorage();
-  const show: Show = {
-    ...values,
-    created_at: values.created_at ?? new Date().toISOString(),
-  };
+  const show = normalizeShow(values);
 
   const existingIndex = currentShows.findIndex((item) => item.id === show.id);
 
@@ -54,6 +72,16 @@ export function saveShowToStorage(values: ShowFormValues) {
 
   writeShowsToStorage(currentShows);
   return show;
+}
+
+export function deleteShowFromStorage(showId: string) {
+  const nextShows = readShowsFromStorage().filter((show) => show.id !== showId);
+  writeShowsToStorage(nextShows);
+
+  const remainingGuestList = readAllGuestListEntries().filter((entry) => entry.show_id !== showId);
+  if (canUseStorage()) {
+    window.localStorage.setItem(GUEST_LIST_KEY, JSON.stringify(remainingGuestList));
+  }
 }
 
 export function readGuestListFromStorage(showId: string): GuestListEntry[] {
@@ -72,7 +100,7 @@ export function readGuestListFromStorage(showId: string): GuestListEntry[] {
   }
 }
 
-export function addGuestListEntry(showId: string, name: string): GuestListEntry {
+export function addGuestListEntryToStorage(showId: string, name: string): GuestListEntry {
   const entry: GuestListEntry = {
     id: crypto.randomUUID(),
     show_id: showId,
