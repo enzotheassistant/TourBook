@@ -2,6 +2,10 @@ import Link from 'next/link';
 import { ReactNode } from 'react';
 import { LogoutButton } from '@/components/logout-button';
 
+function tabClassName() {
+  return 'rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/5';
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-50">
@@ -16,10 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Link
-                href="/admin"
-                className="rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/5"
-              >
+              <Link href="/admin" className={tabClassName()}>
                 Admin
               </Link>
               <LogoutButton />
@@ -27,16 +28,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2 text-sm">
-            <Link
-              href="/?tab=upcoming"
-              className="rounded-full border border-white/10 px-3 py-2 text-zinc-200 transition hover:border-white/20 hover:bg-white/5"
-            >
+            <Link href="/?tab=upcoming" className={tabClassName()}>
               Upcoming
             </Link>
-            <Link
-              href="/?tab=past"
-              className="rounded-full border border-white/10 px-3 py-2 text-zinc-200 transition hover:border-white/20 hover:bg-white/5"
-            >
+            <Link href="/?tab=past" className={tabClassName()}>
               Past
             </Link>
           </div>

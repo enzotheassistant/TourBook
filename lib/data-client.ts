@@ -1,138 +1,81 @@
 'use client';
 
-import {
-  addGuestListEntryToStorage,
-  deleteShowFromStorage,
-  readAllGuestListEntries,
-  readGuestListFromStorage,
-  readShowsFromStorage,
-  saveShowToStorage,
-} from '@/lib/local-storage';
-import { getSupabaseBrowserClient, isSupabaseEnabled } from '@/lib/supabase';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 
-function sortedShows(shows: Show[]) {
-  return [...shows].sort((a, b) => a.date.localeCompare(b.date));
+async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(payload.error ?? 'Request failed');
+  }
+
+  return response.json() as Promise<T>;
 }
 
-export async function listShows(): Promise<Show[]> {
-  if (!isSupabaseEnabled()) {
-    return readShowsFromStorage();
-  }
-
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return readShowsFromStorage();
-  }
-
-  const { data, error } = await supabase.from('shows').select('*').order('date', { ascending: true });
-  if (error || !data) {
-    return readShowsFromStorage();
-  }
-
-  return sortedShows(data as Show[]);
+export function listShows() {
+  return request<Show[]>('/api/shows');
 }
 
-export async function upsertShow(values: ShowFormValues): Promise<Show> {
-  const fallbackShow = saveShowToStorage(values);
+export function getShow(id: string) {
+  return request<Show>(`/api/shows/${id}`);
+}
 
-  if (!isSupabaseEnabled()) {
-    return fallbackShow;
+export function upsertShow(values: ShowFormValues) {
+  if (values.id) {
+    return request<Show>(`/api/shows/${values.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(values),
+    });
   }
 
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return fallbackShow;
-  }
-
-  const { data, error } = await supabase.from('shows').upsert(fallbackShow).select().single();
-  if (error || !data) {
-    return fallbackShow;
-  }
-
-  return data as Show;
+  return request<Show>('/api/shows', {
+    method: 'POST',
+    body: JSON.stringify(values),
+  });
 }
 
 export async function deleteShow(showId: string) {
-  deleteShowFromStorage(showId);
-
-  if (!isSupabaseEnabled()) {
-    return;
-  }
-
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return;
-  }
-
-  await supabase.from('shows').delete().eq('id', showId);
-  await supabase.from('guest_list_entries').delete().eq('show_id', showId);
+  await request<{ ok: boolean }>(`/api/shows/${showId}`, {
+    method: 'DELETE',
+  });
 }
 
-export async function listGuestListEntries(showId: string): Promise<GuestListEntry[]> {
-  if (!isSupabaseEnabled()) {
-    return readGuestListFromStorage(showId);
-  }
-
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return readGuestListFromStorage(showId);
-  }
-
-  const { data, error } = await supabase
-    .from('guest_list_entries')
-    .select('*')
-    .eq('show_id', showId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data) {
-    return readGuestListFromStorage(showId);
-  }
-
-  return data as GuestListEntry[];
+export function listGuestListEntries(showId: string) {
+  return request<GuestListEntry[]>(`/api/shows/${showId}/guest-list`);
 }
 
-export async function addGuestListEntry(showId: string, name: string): Promise<GuestListEntry> {
-  const fallbackEntry = addGuestListEntryToStorage(showId, name);
-
-  if (!isSupabaseEnabled()) {
-    return fallbackEntry;
-  }
-
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return fallbackEntry;
-  }
-
-  const payload = {
-    id: fallbackEntry.id,
-    show_id: showId,
-    name,
-    created_at: fallbackEntry.created_at,
-  };
-
-  const { data, error } = await supabase.from('guest_list_entries').insert(payload).select().single();
-  if (error || !data) {
-    return fallbackEntry;
-  }
-
-  return data as GuestListEntry;
+export function addGuestListEntries(showId: string, names: string[]) {
+  return request<GuestListEntry[]>(`/api/shows/${showId}/guest-list`, {
+    method: 'POST',
+    body: JSON.stringify({ names }),
+  });
 }
 
-export async function listAllGuestListEntries(): Promise<GuestListEntry[]> {
-  if (!isSupabaseEnabled()) {
-    return readAllGuestListEntries();
-  }
+export function updateGuestListEntry(entryId: string, name: string) {
+  return request<GuestListEntry>(`/api/guest-list/${entryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
 
-  const supabase = getSupabaseBrowserClient();
-  if (!supabase) {
-    return readAllGuestListEntries();
-  }
+export async function deleteGuestListEntry(entryId: string) {
+  await request<{ ok: boolean }>(`/api/guest-list/${entryId}`, {
+    method: 'DELETE',
+  });
+}
 
-  const { data, error } = await supabase.from('guest_list_entries').select('*');
-  if (error || !data) {
-    return readAllGuestListEntries();
+export async function exportGuestListCsv(showId: string) {
+  const response = await fetch(`/api/shows/${showId}/guest-list/export`, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Unable to export guest list');
   }
-
-  return data as GuestListEntry[];
+  return response.text();
 }

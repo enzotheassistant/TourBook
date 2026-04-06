@@ -1,120 +1,92 @@
-# TourBook
+# TourBook v3
 
-Mobile-first touring dashboard for a band and crew. Built with Next.js App Router, TypeScript, and Tailwind CSS.
+Mobile-first Next.js day-sheet and guest-list app for a touring band.
 
-## What is in this version
+## What changed in v3
 
-- Shared password login using `APP_PASSWORD`
-- Dashboard with `Upcoming` and `Past` tabs
-- Today's show highlight
-- Show detail page with optional section visibility controls
-- Guest list entry UI
-- Admin page with:
-  - create show
-  - edit show
-  - delete show
-  - export a show's guest list as CSV
-  - toggle whether sections are shown to crew
-- Works immediately with local sample data
-- Optional Supabase sync layer prepared for shared live data across devices
+- secure data flow through Next.js Route Handlers
+- shared crew password still lives at the app layer via `APP_PASSWORD`
+- Supabase is now server-side only for shows and guest lists
+- upcoming/past tabs with sticky year headers on Past
+- Day Sheet / Guest List tabs on each show
+- dynamic schedule rows with editable labels and times
+- guest list edit + delete + multiline paste support
+- guest list notes with show/hide toggle
+- admin delete show
+- address autocomplete hooks for venue and hotel
+
+## Required environment variables
+
+```bash
+APP_PASSWORD=your-shared-crew-password
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=optional-for-address-autocomplete
+```
+
+### Important
+
+- `APP_PASSWORD` is the shared crew password used by `/login`.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only. Do **not** expose it in the browser.
+- `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` is optional. Without it, manual address entry still works.
 
 ## Local run
 
-1. Install dependencies:
-
 ```bash
 npm install
-```
-
-2. Copy env file:
-
-```bash
 cp .env.example .env.local
-```
-
-3. Set the shared password in `.env.local`.
-
-```bash
-APP_PASSWORD=your-shared-password
-```
-
-This password is used in the login route and route protection. Search the codebase for `APP_PASSWORD` to see the exact server-side usage.
-
-4. Start the dev server:
-
-```bash
 npm run dev
 ```
 
-5. Open `http://localhost:3000`
+Open `http://localhost:3000/login` and sign in with `APP_PASSWORD`.
 
 ## Vercel deployment
 
-1. Push the repo to GitHub.
-2. Import the repo into Vercel.
-3. Add the required environment variable:
+1. Push the project to GitHub.
+2. Import the repo into Vercel as a Next.js project.
+3. Add the environment variables above in **Project Settings → Environment Variables**.
+4. Redeploy.
 
-- `APP_PASSWORD`
+## Supabase schema
 
-4. Deploy.
-
-The app runs without Supabase.
-
-## Enable shared sync with Supabase
-
-The current code is ready for Supabase, but the app does not require it until you add the env vars and tables.
-
-### Add these Vercel environment variables
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-### Create these tables in Supabase
+Run this in Supabase SQL Editor:
 
 ```sql
-create table if not exists shows (
+create table if not exists public.shows (
   id text primary key,
   date text not null,
   city text not null,
   venue_name text not null,
-  venue_address text not null,
-  venue_maps_url text not null,
-  dos_name text not null,
-  dos_phone text not null,
-  parking_load_info text not null,
-  load_in text not null,
-  soundcheck text not null,
-  doors text not null,
-  show_time text not null,
-  curfew text not null,
-  hotel_name text not null,
-  hotel_address text not null,
-  hotel_maps_url text not null,
-  hotel_notes text not null,
+  venue_address text not null default '',
+  venue_maps_url text not null default '',
+  dos_name text not null default '',
+  dos_phone text not null default '',
+  parking_load_info text not null default '',
+  schedule_items jsonb not null default '[]'::jsonb,
+  hotel_name text not null default '',
+  hotel_address text not null default '',
+  hotel_maps_url text not null default '',
+  hotel_notes text not null default '',
+  notes text not null default '',
+  guest_list_notes text not null default '',
   created_at timestamptz not null default now(),
-  visibility jsonb not null default '{"show_venue": true, "show_dos_contact": true, "show_parking_load_info": true, "show_schedule": true, "show_accommodation": true}'::jsonb
+  visibility jsonb not null default '{"show_venue": true, "show_parking_load_info": true, "show_schedule": true, "show_dos_contact": true, "show_accommodation": true, "show_notes": false, "show_guest_list_notes": false}'::jsonb
 );
 
-create table if not exists guest_list_entries (
+create table if not exists public.guest_list_entries (
   id text primary key,
-  show_id text not null references shows(id) on delete cascade,
+  show_id text not null references public.shows(id) on delete cascade,
   name text not null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists guest_list_entries_show_id_idx on public.guest_list_entries(show_id);
 ```
 
-### Seed your sample shows
+### Security note
 
-You can either add rows manually in Supabase, or copy the sample data from `lib/sample-data.ts`.
+Because the app now uses Next.js Route Handlers plus a server-side Supabase client, the browser never receives the service role key.
 
-### What happens after Supabase is connected
+## Fallback behavior
 
-- Show edits sync across devices
-- New shows sync across devices
-- Deleted shows sync across devices
-- Guest list entries sync across devices
-
-## Notes
-
-- Without Supabase, data is stored in browser localStorage on each device.
-- With Supabase enabled, the app uses Supabase for shared data and still falls back to local mode if Supabase is unavailable.
+If Supabase env vars are missing, the app still renders with in-memory sample data for quick UI testing. That fallback is not persistent, so use Supabase for real shared touring use.

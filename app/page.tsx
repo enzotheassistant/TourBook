@@ -8,7 +8,7 @@ export default function DashboardPage() {
       <Suspense
         fallback={
           <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
-            Loading shows...
+            Loading dates...
           </div>
         }
       >

@@ -7,6 +7,13 @@ export function formatShowDate(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+export function formatMonthDay(date: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(`${date}T00:00:00`));
+}
+
 export function isToday(date: string) {
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -21,4 +28,8 @@ export function isPastShow(date: string) {
   const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const showDate = new Date(`${date}T00:00:00`);
   return showDate < localToday;
+}
+
+export function yearFromDate(date: string) {
+  return new Date(`${date}T00:00:00`).getFullYear();
 }

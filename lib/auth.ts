@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
 export const SESSION_COOKIE_NAME = 'tourbook_session';
 export const SESSION_COOKIE_VALUE = 'authenticated';
@@ -32,4 +33,10 @@ export async function isAuthenticated() {
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   return sessionCookie === SESSION_COOKIE_VALUE;
+}
+
+export async function requireApiAuth() {
+  const ok = await isAuthenticated();
+  if (ok) return null;
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }

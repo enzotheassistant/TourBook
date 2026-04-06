@@ -9,9 +9,7 @@ export function ShowCard({ show }: { show: Show }) {
     <Link
       href={`/shows/${show.id}`}
       className={`block rounded-3xl border p-4 shadow-sm transition active:scale-[0.99] ${
-        today
-          ? 'border-emerald-400/40 bg-emerald-500/10'
-          : 'border-white/10 bg-white/5 hover:border-white/20'
+        today ? 'border-emerald-400/40 bg-emerald-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'
       }`}
     >
       <div className="flex items-start justify-between gap-3">

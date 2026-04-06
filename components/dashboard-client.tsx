@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShowCard } from '@/components/show-card';
-import { isPastShow } from '@/lib/date';
+import { isPastShow, yearFromDate } from '@/lib/date';
 import { listShows } from '@/lib/data-client';
 import { Show } from '@/lib/types';
 
@@ -18,10 +18,13 @@ export function DashboardClient() {
 
     async function load() {
       setLoading(true);
-      const nextShows = await listShows();
-      if (!active) return;
-      setShows(nextShows);
-      setLoading(false);
+      try {
+        const nextShows = await listShows();
+        if (!active) return;
+        setShows(nextShows);
+      } finally {
+        if (active) setLoading(false);
+      }
     }
 
     load();
@@ -33,35 +36,51 @@ export function DashboardClient() {
     };
   }, []);
 
-  const filteredShows = useMemo(() => {
-    return shows.filter((show) => (tab === 'past' ? isPastShow(show.date) : !isPastShow(show.date)));
-  }, [shows, tab]);
+  const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
+  const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
+  const pastByYear = useMemo(() => {
+    const groups = new Map<number, Show[]>();
+    for (const show of pastShows) {
+      const year = yearFromDate(show.date);
+      groups.set(year, [...(groups.get(year) ?? []), show]);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[0] - a[0]);
+  }, [pastShows]);
 
   if (loading) {
-    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading shows...</div>;
+    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
   }
 
   return (
     <div className="space-y-3">
       <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-        <p className="text-sm uppercase tracking-wide text-zinc-400">{tab === 'past' ? 'Past shows' : 'Upcoming shows'}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {tab === 'past' ? 'Past dates' : 'Current and upcoming dates'}
-        </h1>
-        <p className="mt-2 text-sm text-zinc-300">
-          {tab === 'past'
-            ? 'Older dates move here automatically after the show date passes.'
-            : 'Tap any show to open venue info, schedule, hotel details, and guest list.'}
-        </p>
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300">{tab === 'past' ? 'PAST DATES' : 'UPCOMING DATES'}</p>
       </div>
 
-      {filteredShows.length === 0 ? (
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
-          No {tab} shows yet.
-        </div>
+      {tab === 'past' ? (
+        pastByYear.length === 0 ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No past dates yet.</div>
+        ) : (
+          <div className="space-y-5">
+            {pastByYear.map(([year, items]) => (
+              <section key={year} className="space-y-3">
+                <div className="sticky top-[84px] z-10 border-b border-white/10 bg-zinc-950/95 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur">
+                  {year}
+                </div>
+                <div className="grid gap-3">
+                  {items.map((show) => (
+                    <ShowCard key={show.id} show={show} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )
+      ) : upcomingShows.length === 0 ? (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No upcoming dates yet.</div>
       ) : (
         <div className="grid gap-3">
-          {filteredShows.map((show) => (
+          {upcomingShows.map((show) => (
             <ShowCard key={show.id} show={show} />
           ))}
         </div>

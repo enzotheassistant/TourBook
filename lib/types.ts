@@ -1,9 +1,22 @@
+export type AddressField = {
+  address: string;
+  maps_url: string;
+};
+
+export type ScheduleItem = {
+  id: string;
+  label: string;
+  time: string;
+};
+
 export type ShowVisibility = {
   show_venue: boolean;
-  show_dos_contact: boolean;
   show_parking_load_info: boolean;
   show_schedule: boolean;
+  show_dos_contact: boolean;
   show_accommodation: boolean;
+  show_notes: boolean;
+  show_guest_list_notes: boolean;
 };
 
 export type Show = {
@@ -16,15 +29,13 @@ export type Show = {
   dos_name: string;
   dos_phone: string;
   parking_load_info: string;
-  load_in: string;
-  soundcheck: string;
-  doors: string;
-  show_time: string;
-  curfew: string;
+  schedule_items: ScheduleItem[];
   hotel_name: string;
   hotel_address: string;
   hotel_maps_url: string;
   hotel_notes: string;
+  notes: string;
+  guest_list_notes: string;
   created_at: string;
   visibility: ShowVisibility;
 };
@@ -38,4 +49,11 @@ export type GuestListEntry = {
 
 export type ShowFormValues = Omit<Show, 'created_at'> & {
   created_at?: string;
+};
+
+export type AddressSuggestion = {
+  id: string;
+  label: string;
+  address: string;
+  maps_url: string;
 };
