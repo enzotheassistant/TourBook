@@ -21,19 +21,27 @@ export async function POST(request: NextRequest) {
   const authResponse = await requireApiAuth();
   if (authResponse) return authResponse;
 
-  const body = (await request.json()) as Partial<ShowFormValues>;
-  const date = body.date ?? '';
-  const city = body.city ?? '';
-  const venueName = body.venue_name ?? '';
-  const generatedId = `${slugify(city || 'show')}-${slugify(venueName || 'venue')}-${date || 'date'}`;
+  try {
+    const body = (await request.json()) as Partial<ShowFormValues>;
+    const date = body.date ?? '';
+    const city = body.city ?? '';
+    const venueName = body.venue_name ?? '';
+    const generatedId = `${slugify(city || 'show')}-${slugify(venueName || 'venue')}-${date || 'date'}`;
 
-  const show = await upsertShowServer(
-    normalizeShow({
-      ...emptyShowForm,
-      ...body,
-      id: generatedId,
-    }),
-  );
+    const show = await upsertShowServer(
+      normalizeShow({
+        ...emptyShowForm,
+        ...body,
+        id: generatedId,
+      }),
+    );
 
-  return NextResponse.json(show);
+    return NextResponse.json(show);
+  } catch (error) {
+    console.error('POST /api/shows failed:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to save show' },
+      { status: 500 }
+    );
+  }
 }
