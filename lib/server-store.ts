@@ -11,9 +11,18 @@ function getSupabaseServerClient(): SupabaseClient | null {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url || !key) {
-    return null;
-  }
+  console.log('SUPABASE_URL raw =', JSON.stringify(url));
+  console.log('SUPABASE_URL length =', url?.length ?? 0);
+  console.log('SUPABASE_URL host =', (() => {
+    try {
+      return url ? new URL(url).host : null;
+    } catch {
+      return 'INVALID_URL';
+    }
+  })());
+  console.log('HAS_SERVICE_ROLE_KEY =', Boolean(key));
+
+  if (!url || !key) return null;
 
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
