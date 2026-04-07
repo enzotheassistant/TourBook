@@ -23,6 +23,7 @@ export function normalizeShow(show: Partial<ShowFormValues> & { id?: string }): 
     date: show.date ?? '',
     city: show.city ?? '',
     venue_name: show.venue_name ?? '',
+    tour_name: show.tour_name ?? '',
     venue_address: show.venue_address ?? '',
     venue_maps_url: show.venue_maps_url ?? '',
     dos_name: show.dos_name ?? '',

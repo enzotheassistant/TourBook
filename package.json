@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
+    "@swc/helpers": "^0.5.21",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"

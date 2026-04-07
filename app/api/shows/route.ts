@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiAuth } from '@/lib/auth';
+import { requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
 import { emptyShowForm } from '@/lib/defaults';
 import { listShowsServer, upsertShowServer } from '@/lib/server-store';
 import { normalizeShow } from '@/lib/normalize';
@@ -18,30 +18,22 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const authResponse = await requireApiAuth();
+  const authResponse = await requireAdminApiAuth();
   if (authResponse) return authResponse;
 
-  try {
-    const body = (await request.json()) as Partial<ShowFormValues>;
-    const date = body.date ?? '';
-    const city = body.city ?? '';
-    const venueName = body.venue_name ?? '';
-    const generatedId = `${slugify(city || 'show')}-${slugify(venueName || 'venue')}-${date || 'date'}`;
+  const body = (await request.json()) as Partial<ShowFormValues>;
+  const date = body.date ?? '';
+  const city = body.city ?? '';
+  const venueName = body.venue_name ?? '';
+  const generatedId = `${slugify(city || 'show')}-${slugify(venueName || 'venue')}-${date || 'date'}`;
 
-    const show = await upsertShowServer(
-      normalizeShow({
-        ...emptyShowForm,
-        ...body,
-        id: generatedId,
-      }),
-    );
+  const show = await upsertShowServer(
+    normalizeShow({
+      ...emptyShowForm,
+      ...body,
+      id: generatedId,
+    }),
+  );
 
-    return NextResponse.json(show);
-  } catch (error) {
-    console.error('POST /api/shows failed:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to save show' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(show);
 }

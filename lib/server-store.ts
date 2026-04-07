@@ -11,18 +11,9 @@ function getSupabaseServerClient(): SupabaseClient | null {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  console.log('SUPABASE_URL raw =', JSON.stringify(url));
-  console.log('SUPABASE_URL length =', url?.length ?? 0);
-  console.log('SUPABASE_URL host =', (() => {
-    try {
-      return url ? new URL(url).host : null;
-    } catch {
-      return 'INVALID_URL';
-    }
-  })());
-  console.log('HAS_SERVICE_ROLE_KEY =', Boolean(key));
-
-  if (!url || !key) return null;
+  if (!url || !key) {
+    return null;
+  }
 
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -80,23 +71,12 @@ export async function upsertShowServer(values: ShowFormValues): Promise<Show> {
     return normalized;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('shows')
-      .upsert(normalized)
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error('SUPABASE ERROR:', error);
-      throw new Error(error?.message ?? 'Unable to save show');
-    }
-
-    return normalizeShow(data as Show);
-  } catch (err) {
-    console.error('UPSERT SHOW SERVER FAILED:', err, 'PAYLOAD:', normalized);
-    throw err;
+  const { data, error } = await supabase.from('shows').upsert(normalized).select().single();
+  if (error || !data) {
+    throw new Error(error?.message ?? 'Unable to save show');
   }
+
+  return normalizeShow(data as Show);
 }
 
 export async function deleteShowServer(id: string): Promise<void> {

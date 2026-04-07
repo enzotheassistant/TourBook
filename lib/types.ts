@@ -24,6 +24,7 @@ export type Show = {
   date: string;
   city: string;
   venue_name: string;
+  tour_name: string;
   venue_address: string;
   venue_maps_url: string;
   dos_name: string;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiAuth } from '@/lib/auth';
-import { getShowServer, deleteShowServer, upsertShowServer } from '@/lib/server-store';
+import { requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
+import { deleteShowServer, getShowServer, upsertShowServer } from '@/lib/server-store';
 import { ShowFormValues } from '@/lib/types';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +18,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authResponse = await requireApiAuth();
+  const authResponse = await requireAdminApiAuth();
   if (authResponse) return authResponse;
 
   const { id } = await params;
@@ -28,7 +28,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authResponse = await requireApiAuth();
+  const authResponse = await requireAdminApiAuth();
   if (authResponse) return authResponse;
 
   const { id } = await params;

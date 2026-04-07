@@ -1,11 +1,10 @@
 'use client';
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
-import { exportGuestListCsv, deleteShow, listShows, upsertShow } from '@/lib/data-client';
-import { formatShowDate } from '@/lib/date';
-import { emptyShowForm } from '@/lib/defaults';
-import { createEmptyScheduleItems } from '@/lib/defaults';
+import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
+import { formatShowDate, isPastShow } from '@/lib/date';
+import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues } from '@/lib/types';
 
 function slugify(value: string) {
@@ -16,17 +15,84 @@ function bubbleClassName() {
   return 'rounded-3xl border border-white/10 bg-black/20 p-4';
 }
 
+function normalizeTourName(value: string) {
+  return value.trim() || 'No tour';
+}
+
+function filterShows(shows: Show[], search: string, selectedTour: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  return shows.filter((show) => {
+    const matchesTour = selectedTour === 'All' || normalizeTourName(show.tour_name) === selectedTour;
+    const haystack = [show.city, show.venue_name, formatShowDate(show.date), show.date, show.tour_name].join(' ').toLowerCase();
+    const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
+    return matchesTour && matchesSearch;
+  });
+}
+
+function sortTourNamesForUpcoming(shows: Show[]) {
+  const map = new Map<string, string>();
+  for (const show of shows) {
+    const tour = normalizeTourName(show.tour_name);
+    const current = map.get(tour);
+    if (!current || show.date < current) map.set(tour, show.date);
+  }
+  return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0])).map(([tour]) => tour);
+}
+
+function sortTourNamesForPast(shows: Show[]) {
+  const map = new Map<string, string>();
+  for (const show of shows) {
+    const tour = normalizeTourName(show.tour_name);
+    const current = map.get(tour);
+    if (!current || show.date > current) map.set(tour, show.date);
+  }
+  return Array.from(map.entries()).sort((a, b) => b[1].localeCompare(a[1]) || a[0].localeCompare(b[0])).map(([tour]) => tour);
+}
+
 export function AdminPageClient() {
   const [shows, setShows] = useState<Show[]>([]);
   const [form, setForm] = useState<ShowFormValues>(emptyShowForm);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [upcomingSearch, setUpcomingSearch] = useState('');
+  const [pastSearch, setPastSearch] = useState('');
+  const [upcomingTour, setUpcomingTour] = useState('All');
+  const [pastTour, setPastTour] = useState('All');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadShows();
   }, []);
 
+  useEffect(() => {
+    function closeMenu() {
+      setOpenMenuId(null);
+    }
+    window.addEventListener('scroll', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    return () => {
+      window.removeEventListener('scroll', closeMenu);
+      window.removeEventListener('resize', closeMenu);
+    };
+  }, []);
+
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
+  const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
+  const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
+  const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows)], [upcomingShows]);
+  const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows)], [pastShows]);
+  const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingSearch, upcomingTour, upcomingShows]);
+  const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastSearch, pastTour, pastShows]);
+  const availableTours = useMemo(() => Array.from(new Set(shows.map((show) => show.tour_name.trim()).filter(Boolean))).sort(), [shows]);
+
+  useEffect(() => {
+    if (!upcomingTours.includes(upcomingTour)) setUpcomingTour('All');
+  }, [upcomingTour, upcomingTours]);
+
+  useEffect(() => {
+    if (!pastTours.includes(pastTour)) setPastTour('All');
+  }, [pastTour, pastTours]);
 
   async function loadShows() {
     const nextShows = await listShows();
@@ -38,13 +104,7 @@ export function AdminPageClient() {
   }
 
   function updateVisibility(key: keyof ShowFormValues['visibility'], value: boolean) {
-    setForm((current) => ({
-      ...current,
-      visibility: {
-        ...current.visibility,
-        [key]: value,
-      },
-    }));
+    setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
   }
 
   function resetForm() {
@@ -78,7 +138,8 @@ export function AdminPageClient() {
     setSaving(true);
 
     try {
-      const show = await upsertShow(form.id ? form : { ...form, id: '' });
+      const generatedId = `${slugify(form.city || 'show')}-${slugify(form.venue_name || 'venue')}-${form.date || 'date'}`;
+      const show = await upsertShow({ ...form, id: form.id || generatedId, tour_name: form.tour_name.trim() });
       await loadShows();
       setForm(show);
       setMessage(isEditing ? 'Show updated.' : 'Show created.');
@@ -93,7 +154,21 @@ export function AdminPageClient() {
   function loadShow(show: Show) {
     setForm(show);
     setMessage('Loaded show into editor.');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setOpenMenuId(null);
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function duplicateShow(show: Show) {
+    setForm({
+      ...show,
+      id: '',
+      date: '',
+      created_at: undefined,
+      schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
+    });
+    setMessage('Date duplicated into a new draft. Pick the new date and save.');
+    setOpenMenuId(null);
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function handleDelete(showId: string) {
@@ -105,6 +180,7 @@ export function AdminPageClient() {
     if (form.id === showId) {
       resetForm();
     }
+    setOpenMenuId(null);
     setMessage('Show deleted.');
     window.dispatchEvent(new Event('tourbook:shows-updated'));
   }
@@ -118,15 +194,16 @@ export function AdminPageClient() {
     anchor.download = `${showId}-guest-list.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
+    setOpenMenuId(null);
   }
 
   return (
     <div className="space-y-4">
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <section ref={formRef} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">Admin</h1>
-            <p className="text-sm text-zinc-400">Create, edit, hide, delete, and export shows.</p>
+            <p className="text-sm text-zinc-400">Create, edit, duplicate, filter, and manage shows.</p>
           </div>
           <button type="button" onClick={resetForm} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
             New show
@@ -141,34 +218,38 @@ export function AdminPageClient() {
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <Input label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
               <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+              <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
+              <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
             </div>
           </div>
 
           <BubbleSection title="Venue" enabled={form.visibility.show_venue} onToggle={(value) => updateVisibility('show_venue', value)}>
-            <div className="grid gap-3">
-              <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
-              <AddressAutocompleteField
-                label="Venue address"
-                value={form.venue_address}
-                mapsUrl={form.venue_maps_url}
-                onAddressChange={(value) => updateField('venue_address', value)}
-                onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
-              />
-            </div>
+            <AddressAutocompleteField
+              label="Venue address"
+              value={form.venue_address}
+              mapsUrl={form.venue_maps_url}
+              onAddressChange={(value) => updateField('venue_address', value)}
+              onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
+            />
           </BubbleSection>
 
           <BubbleSection title="Load / parking info" enabled={form.visibility.show_parking_load_info} onToggle={(value) => updateVisibility('show_parking_load_info', value)}>
-            <Textarea label="Load / parking details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
+            <Textarea label="Details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
           </BubbleSection>
 
           <BubbleSection title="Schedule" enabled={form.visibility.show_schedule} onToggle={(value) => updateVisibility('show_schedule', value)}>
             <div className="space-y-3">
-              {form.schedule_items.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr,140px,auto] gap-2">
-                  <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                  <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
-                  <div className="flex items-end">
-                    <button type="button" onClick={() => removeScheduleRow(item.id)} className="rounded-2xl border border-white/10 px-3 py-3 text-sm">−</button>
+              {form.schedule_items.map((item, index) => (
+                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
+                    <button type="button" onClick={() => removeScheduleRow(item.id)} className="rounded-full border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-200">
+                      Delete
+                    </button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),160px]">
+                    <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
+                    <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
                   </div>
                 </div>
               ))}
@@ -200,7 +281,7 @@ export function AdminPageClient() {
           </BubbleSection>
 
           <BubbleSection title="Notes" enabled={form.visibility.show_notes} onToggle={(value) => updateVisibility('show_notes', value)}>
-            <Textarea label="Day sheet notes" value={form.notes} onChange={(value) => updateField('notes', value)} />
+            <Textarea label="Notes" value={form.notes} onChange={(value) => updateField('notes', value)} />
           </BubbleSection>
 
           <BubbleSection title="Guest List Notes" enabled={form.visibility.show_guest_list_notes} onToggle={(value) => updateVisibility('show_guest_list_notes', value)}>
@@ -213,38 +294,42 @@ export function AdminPageClient() {
         </form>
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-base font-semibold">Existing shows</h2>
-        <div className="mt-3 space-y-3">
-          {shows.map((show) => (
-            <div key={show.id} className="rounded-2xl bg-black/20 p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
-                  <p className="text-sm font-medium">{show.city}</p>
-                  <p className="text-sm text-zinc-300">{show.venue_name}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => loadShow(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
-                    Edit
-                  </button>
-                  <button type="button" onClick={() => exportGuestList(show.id)} className="rounded-2xl bg-white px-3 py-2 text-sm font-medium text-zinc-900">
-                    Export guest list
-                  </button>
-                  <button type="button" onClick={() => handleDelete(show.id)} className="rounded-2xl border border-red-500/40 px-3 py-2 text-sm text-red-200">
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <ShowListSection
+        title="Upcoming dates"
+        search={upcomingSearch}
+        onSearchChange={setUpcomingSearch}
+        selectedTour={upcomingTour}
+        onTourChange={setUpcomingTour}
+        tours={upcomingTours}
+        shows={filteredUpcomingShows}
+        openMenuId={openMenuId}
+        onToggleMenu={setOpenMenuId}
+        onEdit={loadShow}
+        onExport={exportGuestList}
+        onDelete={handleDelete}
+        onDuplicate={duplicateShow}
+      />
+
+      <ShowListSection
+        title="Past dates"
+        search={pastSearch}
+        onSearchChange={setPastSearch}
+        selectedTour={pastTour}
+        onTourChange={setPastTour}
+        tours={pastTours}
+        shows={filteredPastShows}
+        openMenuId={openMenuId}
+        onToggleMenu={setOpenMenuId}
+        onEdit={loadShow}
+        onExport={exportGuestList}
+        onDelete={handleDelete}
+        onDuplicate={duplicateShow}
+      />
     </div>
   );
 }
 
-function BubbleSection({ title, enabled, onToggle, children }: { title: string; enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode; }) {
+function BubbleSection({ title, enabled, onToggle, children }: { title: string; enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
@@ -253,6 +338,106 @@ function BubbleSection({ title, enabled, onToggle, children }: { title: string; 
       </div>
       <div className="mt-3">{children}</div>
     </section>
+  );
+}
+
+function ShowListSection({
+  title,
+  search,
+  onSearchChange,
+  selectedTour,
+  onTourChange,
+  tours,
+  shows,
+  openMenuId,
+  onToggleMenu,
+  onEdit,
+  onExport,
+  onDelete,
+  onDuplicate,
+}: {
+  title: string;
+  search: string;
+  onSearchChange: (value: string) => void;
+  selectedTour: string;
+  onTourChange: (value: string) => void;
+  tours: string[];
+  shows: Show[];
+  openMenuId: string | null;
+  onToggleMenu: (value: string | null) => void;
+  onEdit: (show: Show) => void;
+  onExport: (showId: string) => void;
+  onDelete: (showId: string) => void;
+  onDuplicate: (show: Show) => void;
+}) {
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-base font-semibold">{title}</h2>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),220px]">
+          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search city, venue, or date" />
+          <label className="block text-sm text-zinc-300">
+            <span className="mb-1 block">Tour</span>
+            <select value={selectedTour} onChange={(event) => onTourChange(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20">
+              {tours.map((tour) => (
+                <option key={tour} value={tour}>{tour === 'All' ? 'All tours' : tour}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {shows.length === 0 ? (
+          <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">No shows match this filter.</div>
+        ) : (
+          shows.map((show) => {
+            const menuOpen = openMenuId === show.id;
+            return (
+              <div key={show.id} className="rounded-2xl bg-black/20 p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
+                    <p className="text-sm font-medium">{show.city}</p>
+                    <p className="text-sm text-zinc-300">{show.venue_name}</p>
+                    {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
+                  </div>
+                  <div className="relative flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
+                      …
+                    </button>
+                    {menuOpen ? (
+                      <div className="right-0 top-full z-10 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:absolute">
+                        <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
+                        <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
+                        <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MenuButton({ label, onClick, destructive = false }: { label: string; onClick: () => void; destructive?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full border-b border-white/5 px-4 py-3 text-left text-sm last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-200'}`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -269,7 +454,7 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boo
   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; }) {
+function Input({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string }) {
   return (
     <label className="block text-sm text-zinc-300">
       <span className="mb-1 block">{label}</span>
@@ -280,6 +465,26 @@ function Input({ label, value, onChange, type = 'text', placeholder }: { label: 
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
       />
+    </label>
+  );
+}
+
+function TourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  return (
+    <label className="block text-sm text-zinc-300">
+      <span className="mb-1 block">Tour</span>
+      <input
+        list="tour-options"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+        placeholder="Assign existing or type a new tour"
+      />
+      <datalist id="tour-options">
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
     </label>
   );
 }

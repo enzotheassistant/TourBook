@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
@@ -14,9 +15,12 @@ function hasAccommodation(show: Show) {
 }
 
 export function ShowPageClient({ showId }: { showId: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<'day-sheet' | 'guest-list'>('day-sheet');
 
   useEffect(() => {
     let active = true;
@@ -45,6 +49,12 @@ export function ShowPageClient({ showId }: { showId: string }) {
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
 
+  function setView(nextView: 'day-sheet' | 'guest-list') {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set('view', nextView);
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  }
+
   if (!loaded) {
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   }
@@ -60,11 +70,12 @@ export function ShowPageClient({ showId }: { showId: string }) {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
           <h1 className="text-3xl font-semibold tracking-tight">{show.city}</h1>
-          <p className="mt-1 text-zinc-300">{show.venue_name}</p>
+          <p className="mt-1 break-words text-zinc-300">{show.venue_name}</p>
+          {show.tour_name ? <p className="mt-2 text-sm text-emerald-300">{show.tour_name}</p> : null}
         </div>
         <Link href="/" className="rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200">
           Back
@@ -73,30 +84,23 @@ export function ShowPageClient({ showId }: { showId: string }) {
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-2">
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setTab('day-sheet')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${tab === 'day-sheet' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
+          <button type="button" onClick={() => setView('day-sheet')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${requestedView === 'day-sheet' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
             Day Sheet
           </button>
-          <button type="button" onClick={() => setTab('guest-list')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${tab === 'guest-list' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
+          <button type="button" onClick={() => setView('guest-list')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${requestedView === 'guest-list' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
             Guest List
           </button>
         </div>
       </div>
 
-      {tab === 'day-sheet' ? (
+      {requestedView === 'day-sheet' ? (
         <>
-          <SectionCard title="Day Sheet">
-            <div className="space-y-2 text-sm text-zinc-200">
-              <p>{formatShowDate(show.date)}</p>
-              <p>{show.city}</p>
-            </div>
-          </SectionCard>
-
           {show.visibility.show_venue ? (
             <SectionCard title="Venue">
               <div className="space-y-3 text-sm text-zinc-200">
                 <p className="font-medium">{show.venue_name}</p>
                 {show.venue_maps_url ? (
-                  <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">
+                  <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">
                     {show.venue_address}
                   </a>
                 ) : (
@@ -130,7 +134,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
                 {show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}
                 {show.hotel_address ? (
                   show.hotel_maps_url ? (
-                    <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="text-emerald-300 underline underline-offset-4">
+                    <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">
                       {show.hotel_address}
                     </a>
                   ) : (

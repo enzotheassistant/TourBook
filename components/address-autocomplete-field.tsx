@@ -20,10 +20,33 @@ export function AddressAutocompleteField({
   const [open, setOpen] = useState(false);
   const [manualMode, setManualMode] = useState(Boolean(mapsUrl));
   const abortRef = useRef<AbortController | null>(null);
+  const suppressNextLookupRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const target = containerRef.current;
+    if (!target) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (target && !target.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    if (suppressNextLookupRef.current) {
+      suppressNextLookupRef.current = false;
+      setSuggestions([]);
+      return;
+    }
+
     if (value.trim().length < 3) {
       setSuggestions([]);
+      setOpen(false);
       return;
     }
 
@@ -39,9 +62,10 @@ export function AddressAutocompleteField({
         });
         const payload = (await response.json()) as AddressSuggestion[];
         setSuggestions(payload);
-        setOpen(true);
+        setOpen(payload.length > 0);
       } catch {
         setSuggestions([]);
+        setOpen(false);
       }
     }, 250);
 
@@ -52,8 +76,10 @@ export function AddressAutocompleteField({
   }, [value]);
 
   function selectSuggestion(suggestion: AddressSuggestion) {
+    suppressNextLookupRef.current = true;
     onAddressChange(suggestion.address);
     onMapsUrlChange(suggestion.maps_url);
+    setSuggestions([]);
     setOpen(false);
     setManualMode(false);
   }
@@ -64,7 +90,7 @@ export function AddressAutocompleteField({
   }
 
   return (
-    <div className="space-y-2">
+    <div ref={containerRef} className="space-y-2">
       <label className="block text-sm text-zinc-300">
         <span className="mb-1 block">{label}</span>
         <input
@@ -75,7 +101,7 @@ export function AddressAutocompleteField({
               onMapsUrlChange('');
             }
           }}
-          onFocus={() => value.trim().length >= 3 && setOpen(true)}
+          onFocus={() => value.trim().length >= 3 && suggestions.length > 0 && setOpen(true)}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
           placeholder="Start typing an address"
         />
@@ -87,7 +113,10 @@ export function AddressAutocompleteField({
             <button
               key={suggestion.id}
               type="button"
-              onClick={() => selectSuggestion(suggestion)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectSuggestion(suggestion);
+              }}
               className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200 last:border-b-0"
             >
               {suggestion.label}
@@ -95,7 +124,10 @@ export function AddressAutocompleteField({
           ))}
           <button
             type="button"
-            onClick={revealManualLink}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              revealManualLink();
+            }}
             className="block w-full px-4 py-3 text-left text-sm text-emerald-300"
           >
             + Enter address / link manually

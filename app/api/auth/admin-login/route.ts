@@ -1,30 +1,30 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { createSessionValue, CREW_SESSION_COOKIE_NAME, isCrewPasswordValid } from '@/lib/auth';
+import { ADMIN_SESSION_COOKIE_NAME, ADMIN_SESSION_MAX_AGE_SECONDS, createSessionValue, isAdminPasswordValid } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { password?: string };
     const password = body.password ?? '';
 
-    if (!isCrewPasswordValid(password)) {
-      return NextResponse.json({ message: 'Invalid password.' }, { status: 401 });
+    if (!isAdminPasswordValid(password)) {
+      return NextResponse.json({ message: 'Invalid admin password.' }, { status: 401 });
     }
 
     const cookieStore = await cookies();
 
     cookieStore.set({
-      name: CREW_SESSION_COOKIE_NAME,
+      name: ADMIN_SESSION_COOKIE_NAME,
       value: createSessionValue(),
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: 60 * 60 * 24 * 14,
+      maxAge: ADMIN_SESSION_MAX_AGE_SECONDS,
     });
 
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ message: 'Unable to login.' }, { status: 500 });
+    return NextResponse.json({ message: 'Unable to unlock admin.' }, { status: 500 });
   }
 }
