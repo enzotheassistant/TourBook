@@ -71,10 +71,23 @@ export async function upsertShowServer(values: ShowFormValues): Promise<Show> {
     return normalized;
   }
 
-  const { data, error } = await supabase.from('shows').upsert(normalized).select().single();
+  try {
+  const { data, error } = await supabase
+    .from('shows')
+    .upsert(normalized)
+    .select()
+    .single();
+
   if (error || !data) {
+    console.error('SUPABASE UPSERT ERROR:', error, 'PAYLOAD:', normalized);
     throw new Error(error?.message ?? 'Unable to save show');
   }
+
+  return normalizeShow(data as Show);
+} catch (err) {
+  console.error('UPSERT SHOW SERVER FAILED:', err, 'PAYLOAD:', normalized);
+  throw err;
+}
 
   return normalizeShow(data as Show);
 }
