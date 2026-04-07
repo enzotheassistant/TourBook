@@ -1,10 +1,8 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function AdminUnlockPage() {
-  const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,23 +12,30 @@ export default function AdminUnlockPage() {
     setLoading(true);
     setError('');
 
-    const response = await fetch('/api/auth/admin-login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password }),
-    });
+    try {
+      const response = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({ password }),
+      });
 
-    setLoading(false);
+      const data = await response.json().catch(() => null);
 
-    if (!response.ok) {
-      setError('Incorrect admin password.');
-      return;
+      if (!response.ok) {
+        setError(data?.message ?? 'Incorrect admin password.');
+        setLoading(false);
+        return;
+      }
+
+      window.location.href = '/admin';
+    } catch {
+      setError('Unable to unlock admin.');
+      setLoading(false);
     }
-
-    router.push('/admin');
-    router.refresh();
   }
 
   return (

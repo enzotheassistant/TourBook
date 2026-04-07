@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow } from '@/lib/date';
@@ -15,14 +17,11 @@ function bubbleClassName() {
   return 'rounded-3xl border border-white/10 bg-black/20 p-4';
 }
 
-function normalizeTourName(value: string) {
-  return value.trim() || 'No tour';
-}
-
 function filterShows(shows: Show[], search: string, selectedTour: string) {
   const normalizedSearch = search.trim().toLowerCase();
   return shows.filter((show) => {
-    const matchesTour = selectedTour === 'All' || normalizeTourName(show.tour_name) === selectedTour;
+    const normalizedTour = show.tour_name.trim();
+    const matchesTour = selectedTour === 'All' || normalizedTour === selectedTour;
     const haystack = [show.city, show.venue_name, formatShowDate(show.date), show.date, show.tour_name].join(' ').toLowerCase();
     const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
     return matchesTour && matchesSearch;
@@ -32,7 +31,8 @@ function filterShows(shows: Show[], search: string, selectedTour: string) {
 function sortTourNamesForUpcoming(shows: Show[]) {
   const map = new Map<string, string>();
   for (const show of shows) {
-    const tour = normalizeTourName(show.tour_name);
+    const tour = show.tour_name.trim();
+    if (!tour) continue;
     const current = map.get(tour);
     if (!current || show.date < current) map.set(tour, show.date);
   }
@@ -42,14 +42,21 @@ function sortTourNamesForUpcoming(shows: Show[]) {
 function sortTourNamesForPast(shows: Show[]) {
   const map = new Map<string, string>();
   for (const show of shows) {
-    const tour = normalizeTourName(show.tour_name);
+    const tour = show.tour_name.trim();
+    if (!tour) continue;
     const current = map.get(tour);
     if (!current || show.date > current) map.set(tour, show.date);
   }
   return Array.from(map.entries()).sort((a, b) => b[1].localeCompare(a[1]) || a[0].localeCompare(b[0])).map(([tour]) => tour);
 }
 
-export function AdminPageClient() {
+function adminTabClassName(active: boolean) {
+  return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+}
+
+export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
+  const searchParams = useSearchParams();
+  const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [shows, setShows] = useState<Show[]>([]);
   const [form, setForm] = useState<ShowFormValues>(emptyShowForm);
   const [message, setMessage] = useState('');
@@ -94,6 +101,37 @@ export function AdminPageClient() {
     if (!pastTours.includes(pastTour)) setPastTour('All');
   }, [pastTour, pastTours]);
 
+  useEffect(() => {
+    if (mode !== 'new') return;
+
+    const editId = searchParams.get('edit');
+    const duplicateId = searchParams.get('duplicate');
+    if (!shows.length) return;
+
+    if (duplicateId) {
+      const source = shows.find((show) => show.id === duplicateId);
+      if (source) {
+        setForm({
+          ...source,
+          id: '',
+          date: '',
+          created_at: undefined,
+          schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
+        });
+        setMessage('Date duplicated into a new draft. Pick the new date and save.');
+      }
+      return;
+    }
+
+    if (editId) {
+      const source = shows.find((show) => show.id === editId);
+      if (source) {
+        setForm(source);
+        setMessage('Loaded date into editor.');
+      }
+    }
+  }, [mode, searchParams, shows]);
+
   async function loadShows() {
     const nextShows = await listShows();
     setShows(nextShows);
@@ -107,9 +145,9 @@ export function AdminPageClient() {
     setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
   }
 
-  function resetForm() {
+  function resetForm(nextMessage = 'Ready to create a new date.') {
     setForm({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() });
-    setMessage('Ready to create a new show.');
+    setMessage(nextMessage);
   }
 
   function updateScheduleItem(id: string, field: 'label' | 'time', value: string) {
@@ -141,9 +179,14 @@ export function AdminPageClient() {
       const generatedId = `${slugify(form.city || 'show')}-${slugify(form.venue_name || 'venue')}-${form.date || 'date'}`;
       const show = await upsertShow({ ...form, id: form.id || generatedId, tour_name: form.tour_name.trim() });
       await loadShows();
-      setForm(show);
-      setMessage(isEditing ? 'Show updated.' : 'Show created.');
       window.dispatchEvent(new Event('tourbook:shows-updated'));
+
+      if (isEditing) {
+        setForm(show);
+        setMessage('Show updated.');
+      } else {
+        resetForm('Show created. Form cleared for the next date.');
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to save show.');
     } finally {
@@ -152,13 +195,26 @@ export function AdminPageClient() {
   }
 
   function loadShow(show: Show) {
-    setForm(show);
-    setMessage('Loaded show into editor.');
     setOpenMenuId(null);
+
+    if (mode === 'dates') {
+      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}`;
+      return;
+    }
+
+    setForm(show);
+    setMessage('Loaded date into editor.');
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function duplicateShow(show: Show) {
+    setOpenMenuId(null);
+
+    if (mode === 'dates') {
+      window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}`;
+      return;
+    }
+
     setForm({
       ...show,
       id: '',
@@ -167,7 +223,6 @@ export function AdminPageClient() {
       schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
     });
     setMessage('Date duplicated into a new draft. Pick the new date and save.');
-    setOpenMenuId(null);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -199,132 +254,166 @@ export function AdminPageClient() {
 
   return (
     <div className="space-y-4">
-      <section ref={formRef} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">Admin</h1>
-            <p className="text-sm text-zinc-400">Create, edit, duplicate, filter, and manage shows.</p>
-          </div>
-          <button type="button" onClick={resetForm} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
-            New show
-          </button>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/admin" className={adminTabClassName(mode === 'new')}>
+          New Date
+        </Link>
+        <Link href="/admin/dates" className={adminTabClassName(mode === 'dates')}>
+          Existing Dates
+        </Link>
+      </div>
 
-        {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
-
-        <form onSubmit={handleSubmit} className="grid gap-3">
-          <div className={bubbleClassName()}>
-            <h2 className="text-base font-semibold">Basics</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
-              <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
-              <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
-              <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
+      {mode === 'new' ? (
+        <section ref={formRef} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold">New Date</h1>
+              <p className="text-sm text-zinc-400">Create a new tour date, then keep rolling into the next one.</p>
             </div>
+            <button type="submit" form="admin-show-form" disabled={saving} className="rounded-2xl border border-white/10 px-3 py-2 text-sm disabled:opacity-60">
+              {saving ? 'Saving...' : isEditing ? 'Update show' : 'Create show'}
+            </button>
           </div>
 
-          <BubbleSection title="Venue" enabled={form.visibility.show_venue} onToggle={(value) => updateVisibility('show_venue', value)}>
-            <AddressAutocompleteField
-              label="Venue address"
-              value={form.venue_address}
-              mapsUrl={form.venue_maps_url}
-              onAddressChange={(value) => updateField('venue_address', value)}
-              onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
-            />
-          </BubbleSection>
+          {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
 
-          <BubbleSection title="Load / parking info" enabled={form.visibility.show_parking_load_info} onToggle={(value) => updateVisibility('show_parking_load_info', value)}>
-            <Textarea label="Details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
-          </BubbleSection>
-
-          <BubbleSection title="Schedule" enabled={form.visibility.show_schedule} onToggle={(value) => updateVisibility('show_schedule', value)}>
-            <div className="space-y-3">
-              {form.schedule_items.map((item, index) => (
-                <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                    <button type="button" onClick={() => removeScheduleRow(item.id)} className="rounded-full border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-200">
-                      Delete
-                    </button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),160px]">
-                    <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                    <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={addScheduleRow} className="rounded-2xl border border-white/10 px-3 py-3 text-sm">
-                Add line
-              </button>
+          <form id="admin-show-form" onSubmit={handleSubmit} className="grid gap-3">
+            <div className={bubbleClassName()}>
+              <h2 className="text-base font-semibold">Basics</h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Input label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
+                <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+                <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
+              </div>
             </div>
-          </BubbleSection>
 
-          <BubbleSection title="DOS contact" enabled={form.visibility.show_dos_contact} onToggle={(value) => updateVisibility('show_dos_contact', value)}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input label="DOS contact name" value={form.dos_name} onChange={(value) => updateField('dos_name', value)} />
-              <Input label="DOS contact phone" value={form.dos_phone} onChange={(value) => updateField('dos_phone', value)} />
+            <BubbleSection title="Venue" enabled={form.visibility.show_venue} onToggle={(value) => updateVisibility('show_venue', value)}>
+              <div className="grid gap-3">
+                <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
+                <AddressAutocompleteField
+                  label="Venue address"
+                  value={form.venue_address}
+                  mapsUrl={form.venue_maps_url}
+                  onAddressChange={(value) => updateField('venue_address', value)}
+                  onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
+                />
+              </div>
+            </BubbleSection>
+
+            <BubbleSection title="Load / parking info" enabled={form.visibility.show_parking_load_info} onToggle={(value) => updateVisibility('show_parking_load_info', value)}>
+              <Textarea label="Details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
+            </BubbleSection>
+
+            <BubbleSection title="Schedule" enabled={form.visibility.show_schedule} onToggle={(value) => updateVisibility('show_schedule', value)}>
+              <div className="space-y-3">
+                {form.schedule_items.map((item, index) => (
+                  <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
+                      <button type="button" onClick={() => removeScheduleRow(item.id)} className="rounded-full border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-200">
+                        Delete
+                      </button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),140px]">
+                      <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
+                      <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={addScheduleRow} className="rounded-2xl border border-white/10 px-3 py-3 text-sm">
+                  Add line
+                </button>
+              </div>
+            </BubbleSection>
+
+            <BubbleSection title="DOS contact" enabled={form.visibility.show_dos_contact} onToggle={(value) => updateVisibility('show_dos_contact', value)}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Name" value={form.dos_name} onChange={(value) => updateField('dos_name', value)} />
+                <Input label="Phone number" value={form.dos_phone} onChange={(value) => updateField('dos_phone', value)} />
+              </div>
+            </BubbleSection>
+
+            <BubbleSection title="Accommodation" enabled={form.visibility.show_accommodation} onToggle={(value) => updateVisibility('show_accommodation', value)}>
+              <div className="grid gap-3">
+                <Input label="Hotel name" value={form.hotel_name} onChange={(value) => updateField('hotel_name', value)} />
+                <AddressAutocompleteField
+                  label="Hotel address"
+                  value={form.hotel_address}
+                  mapsUrl={form.hotel_maps_url}
+                  onAddressChange={(value) => updateField('hotel_address', value)}
+                  onMapsUrlChange={(value) => updateField('hotel_maps_url', value)}
+                />
+                <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
+              </div>
+            </BubbleSection>
+
+            <BubbleSection title="Notes" enabled={form.visibility.show_notes} onToggle={(value) => updateVisibility('show_notes', value)}>
+              <Textarea value={form.notes} onChange={(value) => updateField('notes', value)} ariaLabel="Notes" />
+            </BubbleSection>
+
+            <BubbleSection title="Guest List Notes" enabled={form.visibility.show_guest_list_notes} onToggle={(value) => updateVisibility('show_guest_list_notes', value)}>
+              <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
+            </BubbleSection>
+
+            <button type="submit" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
+              {saving ? 'Saving...' : isEditing ? 'Update show' : 'Create show'}
+            </button>
+          </form>
+        </section>
+      ) : (
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold">Existing Dates</h1>
+              <p className="text-sm text-zinc-400">Filter your upcoming and past dates without crowding the new-date form.</p>
             </div>
-          </BubbleSection>
+            <div className="flex gap-2">
+              <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
+                Upcoming
+              </Link>
+              <Link href="/admin/dates?tab=past" className={adminTabClassName(datesTab === 'past')}>
+                Past
+              </Link>
+            </div>
+          </div>
 
-          <BubbleSection title="Accommodation" enabled={form.visibility.show_accommodation} onToggle={(value) => updateVisibility('show_accommodation', value)}>
-            <div className="grid gap-3">
-              <Input label="Hotel name" value={form.hotel_name} onChange={(value) => updateField('hotel_name', value)} />
-              <AddressAutocompleteField
-                label="Hotel address"
-                value={form.hotel_address}
-                mapsUrl={form.hotel_maps_url}
-                onAddressChange={(value) => updateField('hotel_address', value)}
-                onMapsUrlChange={(value) => updateField('hotel_maps_url', value)}
+          <div className="mt-4">
+            {datesTab === 'past' ? (
+              <ShowListSection
+                title="Past dates"
+                search={pastSearch}
+                onSearchChange={setPastSearch}
+                selectedTour={pastTour}
+                onTourChange={setPastTour}
+                tours={pastTours}
+                shows={filteredPastShows}
+                openMenuId={openMenuId}
+                onToggleMenu={setOpenMenuId}
+                onEdit={loadShow}
+                onExport={exportGuestList}
+                onDelete={handleDelete}
+                onDuplicate={duplicateShow}
               />
-              <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
-            </div>
-          </BubbleSection>
-
-          <BubbleSection title="Notes" enabled={form.visibility.show_notes} onToggle={(value) => updateVisibility('show_notes', value)}>
-            <Textarea label="Notes" value={form.notes} onChange={(value) => updateField('notes', value)} />
-          </BubbleSection>
-
-          <BubbleSection title="Guest List Notes" enabled={form.visibility.show_guest_list_notes} onToggle={(value) => updateVisibility('show_guest_list_notes', value)}>
-            <Textarea label="Guest list notes" value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} />
-          </BubbleSection>
-
-          <button type="submit" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
-            {saving ? 'Saving...' : isEditing ? 'Update show' : 'Create show'}
-          </button>
-        </form>
-      </section>
-
-      <ShowListSection
-        title="Upcoming dates"
-        search={upcomingSearch}
-        onSearchChange={setUpcomingSearch}
-        selectedTour={upcomingTour}
-        onTourChange={setUpcomingTour}
-        tours={upcomingTours}
-        shows={filteredUpcomingShows}
-        openMenuId={openMenuId}
-        onToggleMenu={setOpenMenuId}
-        onEdit={loadShow}
-        onExport={exportGuestList}
-        onDelete={handleDelete}
-        onDuplicate={duplicateShow}
-      />
-
-      <ShowListSection
-        title="Past dates"
-        search={pastSearch}
-        onSearchChange={setPastSearch}
-        selectedTour={pastTour}
-        onTourChange={setPastTour}
-        tours={pastTours}
-        shows={filteredPastShows}
-        openMenuId={openMenuId}
-        onToggleMenu={setOpenMenuId}
-        onEdit={loadShow}
-        onExport={exportGuestList}
-        onDelete={handleDelete}
-        onDuplicate={duplicateShow}
-      />
+            ) : (
+              <ShowListSection
+                title="Upcoming dates"
+                search={upcomingSearch}
+                onSearchChange={setUpcomingSearch}
+                selectedTour={upcomingTour}
+                onTourChange={setUpcomingTour}
+                tours={upcomingTours}
+                shows={filteredUpcomingShows}
+                openMenuId={openMenuId}
+                onToggleMenu={setOpenMenuId}
+                onEdit={loadShow}
+                onExport={exportGuestList}
+                onDelete={handleDelete}
+                onDuplicate={duplicateShow}
+              />
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -376,13 +465,13 @@ function ShowListSection({
         <div>
           <h2 className="text-base font-semibold">{title}</h2>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),220px]">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),180px]">
           <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search city, venue, or date" />
           <label className="block text-sm text-zinc-300">
             <span className="mb-1 block">Tour</span>
             <select value={selectedTour} onChange={(event) => onTourChange(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20">
               {tours.map((tour) => (
-                <option key={tour} value={tour}>{tour === 'All' ? 'All tours' : tour}</option>
+                <option key={tour} value={tour}>{tour}</option>
               ))}
             </select>
           </label>
@@ -470,30 +559,63 @@ function Input({ label, value, onChange, type = 'text', placeholder }: { label: 
 }
 
 function TourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  const [creatingNew, setCreatingNew] = useState(!options.includes(value) && value.trim().length > 0);
+
+  useEffect(() => {
+    setCreatingNew(!options.includes(value) && value.trim().length > 0);
+  }, [options, value]);
+
+  const selectedValue = creatingNew ? '__new__' : value;
+
   return (
-    <label className="block text-sm text-zinc-300">
-      <span className="mb-1 block">Tour</span>
-      <input
-        list="tour-options"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
-        placeholder="Assign existing or type a new tour"
-      />
-      <datalist id="tour-options">
-        {options.map((option) => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
-    </label>
+    <div className="space-y-2 text-sm text-zinc-300">
+      <label className="block">
+        <span className="mb-1 block">Tour</span>
+        <select
+          value={selectedValue}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            if (nextValue === '__new__') {
+              setCreatingNew(true);
+              onChange('');
+              return;
+            }
+            setCreatingNew(false);
+            onChange(nextValue);
+          }}
+          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20"
+        >
+          <option value="">No tour assigned</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+          <option value="__new__">Create new tour…</option>
+        </select>
+      </label>
+
+      {creatingNew ? (
+        <label className="block">
+          <span className="mb-1 block">New tour name</span>
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+            placeholder="Type a new tour name"
+          />
+        </label>
+      ) : null}
+    </div>
   );
 }
 
-function Textarea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function Textarea({ label, value, onChange, ariaLabel }: { label?: string; value: string; onChange: (value: string) => void; ariaLabel?: string }) {
   return (
     <label className="block text-sm text-zinc-300">
-      <span className="mb-1 block">{label}</span>
+      {label ? <span className="mb-1 block">{label}</span> : null}
       <textarea
+        aria-label={ariaLabel ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         rows={4}
