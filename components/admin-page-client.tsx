@@ -78,8 +78,7 @@ export function AdminPageClient() {
     setSaving(true);
 
     try {
-      const generatedId = `${slugify(form.city || 'show')}-${slugify(form.venue_name || 'venue')}-${form.date || 'date'}`;
-      const show = await upsertShow({ ...form, id: form.id || generatedId });
+      const show = await upsertShow(form.id ? form : { ...form, id: '' });
       await loadShows();
       setForm(show);
       setMessage(isEditing ? 'Show updated.' : 'Show created.');
