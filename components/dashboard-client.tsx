@@ -122,7 +122,7 @@ export function DashboardClient() {
             <span>Past Dates</span>
             <select value={pastTour} onChange={(event) => setPastTour(event.target.value)} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none">
               {pastTours.map((tour) => (
-                <option key={tour} value={tour}>{tour === 'All' ? 'All tours' : tour}</option>
+                <option key={tour} value={tour}>{tour === 'All' ? 'All' : tour}</option>
               ))}
             </select>
           </label>
@@ -131,7 +131,7 @@ export function DashboardClient() {
             <span>Upcoming Dates</span>
             <select value={upcomingTour} onChange={(event) => setUpcomingTour(event.target.value)} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none">
               {upcomingTours.map((tour) => (
-                <option key={tour} value={tour}>{tour === 'All' ? 'All tours' : tour}</option>
+                <option key={tour} value={tour}>{tour === 'All' ? 'All' : tour}</option>
               ))}
             </select>
           </label>

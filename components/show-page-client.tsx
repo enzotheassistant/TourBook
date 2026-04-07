@@ -14,6 +14,10 @@ function hasAccommodation(show: Show) {
   return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
 }
 
+function viewButtonClassName(active: boolean) {
+  return `rounded-2xl border px-4 py-3 text-sm font-medium transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-transparent text-zinc-300'}`;
+}
+
 export function ShowPageClient({ showId }: { showId: string }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -70,24 +74,24 @@ export function ShowPageClient({ showId }: { showId: string }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="grid grid-cols-[auto,1fr] items-start gap-3">
+        <Link href="/" className="rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200">
+          Back
+        </Link>
+        <div className="min-w-0 text-right sm:text-left">
           <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
           <h1 className="text-3xl font-semibold tracking-tight">{show.city}</h1>
           <p className="mt-1 break-words text-zinc-300">{show.venue_name}</p>
           {show.tour_name ? <p className="mt-2 text-sm text-emerald-300">{show.tour_name}</p> : null}
         </div>
-        <Link href="/" className="rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200">
-          Back
-        </Link>
       </div>
 
       <div className="rounded-3xl border border-white/10 bg-white/5 p-2">
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setView('day-sheet')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${requestedView === 'day-sheet' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
+          <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>
             Day Sheet
           </button>
-          <button type="button" onClick={() => setView('guest-list')} className={`rounded-2xl px-4 py-3 text-sm font-medium ${requestedView === 'guest-list' ? 'bg-white text-zinc-950' : 'text-zinc-300'}`}>
+          <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>
             Guest List
           </button>
         </div>

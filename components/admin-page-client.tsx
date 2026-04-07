@@ -54,11 +54,121 @@ function adminTabClassName(active: boolean) {
   return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
+type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
+type VisibilityKey = keyof ShowFormValues['visibility'];
+type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
+type ExpandedSections = Record<SectionKey, boolean>;
+
+const EXPANDED_SECTIONS_STORAGE_KEY = 'tourbook:new-date-expanded-sections';
+
+const defaultExpandedSections: ExpandedSections = {
+  basics: true,
+  venue: true,
+  parking: false,
+  schedule: true,
+  dos: false,
+  accommodation: false,
+  notes: false,
+  guestListNotes: false,
+};
+
+const visibilityKeyBySection: Partial<Record<SectionKey, VisibilityKey>> = {
+  venue: 'show_venue',
+  parking: 'show_parking_load_info',
+  schedule: 'show_schedule',
+  dos: 'show_dos_contact',
+  accommodation: 'show_accommodation',
+  notes: 'show_notes',
+  guestListNotes: 'show_guest_list_notes',
+};
+
+function defaultVisibilityModes(mode: 'auto' | 'manual' = 'auto'): VisibilityModeMap {
+  return {
+    show_venue: mode,
+    show_parking_load_info: mode,
+    show_schedule: mode,
+    show_dos_contact: mode,
+    show_accommodation: mode,
+    show_notes: mode,
+    show_guest_list_notes: mode,
+  };
+}
+
+function hasScheduleContent(form: ShowFormValues) {
+  return form.schedule_items.some((item) => item.label.trim() || item.time.trim());
+}
+
+function sectionHasContent(section: SectionKey, form: ShowFormValues) {
+  switch (section) {
+    case 'basics':
+      return Boolean(form.date || form.city || form.tour_name);
+    case 'venue':
+      return Boolean(form.venue_name || form.venue_address || form.venue_maps_url);
+    case 'parking':
+      return Boolean(form.parking_load_info.trim());
+    case 'schedule':
+      return hasScheduleContent(form);
+    case 'dos':
+      return Boolean(form.dos_name || form.dos_phone);
+    case 'accommodation':
+      return Boolean(form.hotel_name || form.hotel_address || form.hotel_maps_url || form.hotel_notes);
+    case 'notes':
+      return Boolean(form.notes.trim());
+    case 'guestListNotes':
+      return Boolean(form.guest_list_notes.trim());
+    default:
+      return false;
+  }
+}
+
+function getExpandedSectionsForPopulatedForm(form: ShowFormValues): ExpandedSections {
+  return {
+    basics: true,
+    venue: sectionHasContent('venue', form),
+    parking: sectionHasContent('parking', form),
+    schedule: true,
+    dos: sectionHasContent('dos', form),
+    accommodation: sectionHasContent('accommodation', form),
+    notes: sectionHasContent('notes', form),
+    guestListNotes: sectionHasContent('guestListNotes', form),
+  };
+}
+
+function applyAutoVisibility(form: ShowFormValues, visibilityModes: VisibilityModeMap): ShowFormValues {
+  const nextVisibility = { ...form.visibility };
+
+  (Object.entries(visibilityKeyBySection) as Array<[SectionKey, VisibilityKey]>).forEach(([section, key]) => {
+    if (visibilityModes[key] === 'auto') {
+      nextVisibility[key] = sectionHasContent(section, form);
+    }
+  });
+
+  return {
+    ...form,
+    visibility: nextVisibility,
+  };
+}
+
+function readExpandedSectionsPreference() {
+  if (typeof window === 'undefined') return defaultExpandedSections;
+
+  try {
+    const raw = window.localStorage.getItem(EXPANDED_SECTIONS_STORAGE_KEY);
+    if (!raw) return defaultExpandedSections;
+    const parsed = JSON.parse(raw) as Partial<ExpandedSections>;
+    return { ...defaultExpandedSections, ...parsed };
+  } catch {
+    return defaultExpandedSections;
+  }
+}
+
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [shows, setShows] = useState<Show[]>([]);
-  const [form, setForm] = useState<ShowFormValues>(emptyShowForm);
+  const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
+  const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
+  const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [upcomingSearch, setUpcomingSearch] = useState('');
@@ -67,20 +177,43 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const [pastTour, setPastTour] = useState('All');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
+  const handledLoadRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadShows();
   }, []);
 
   useEffect(() => {
-    function closeMenu() {
+    if (mode !== 'new') return;
+    const stored = readExpandedSectionsPreference();
+    setExpandedSections(stored);
+    setForm((current) => applyAutoVisibility(current, visibilityModes));
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'new' || typeof window === 'undefined') return;
+    window.localStorage.setItem(EXPANDED_SECTIONS_STORAGE_KEY, JSON.stringify(expandedSections));
+  }, [expandedSections, mode]);
+
+  useEffect(() => {
+    function closeMenuOnViewportChange() {
       setOpenMenuId(null);
     }
-    window.addEventListener('scroll', closeMenu);
-    window.addEventListener('resize', closeMenu);
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-admin-menu-root="true"]')) return;
+      setOpenMenuId(null);
+    }
+
+    window.addEventListener('scroll', closeMenuOnViewportChange);
+    window.addEventListener('resize', closeMenuOnViewportChange);
+    document.addEventListener('mousedown', handlePointerDown);
+
     return () => {
-      window.removeEventListener('scroll', closeMenu);
-      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenuOnViewportChange);
+      window.removeEventListener('resize', closeMenuOnViewportChange);
+      document.removeEventListener('mousedown', handlePointerDown);
     };
   }, []);
 
@@ -102,33 +235,42 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }, [pastTour, pastTours]);
 
   useEffect(() => {
-    if (mode !== 'new') return;
+    if (mode !== 'new' || !shows.length) return;
 
     const editId = searchParams.get('edit');
     const duplicateId = searchParams.get('duplicate');
-    if (!shows.length) return;
+    const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
+
+    if (!nextAction || handledLoadRef.current === nextAction) return;
 
     if (duplicateId) {
       const source = shows.find((show) => show.id === duplicateId);
       if (source) {
-        setForm({
+        const duplicated = {
           ...source,
           id: '',
           date: '',
           created_at: undefined,
           schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-        });
+        };
+        setVisibilityModes(defaultVisibilityModes('manual'));
+        setForm(duplicated);
+        setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
         setMessage('Date duplicated into a new draft. Pick the new date and save.');
       }
-      return;
-    }
-
-    if (editId) {
+    } else if (editId) {
       const source = shows.find((show) => show.id === editId);
       if (source) {
+        setVisibilityModes(defaultVisibilityModes('manual'));
         setForm(source);
+        setExpandedSections(getExpandedSectionsForPopulatedForm(source));
         setMessage('Loaded date into editor.');
       }
+    }
+
+    handledLoadRef.current = nextAction;
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/admin');
     }
   }, [mode, searchParams, shows]);
 
@@ -137,38 +279,80 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setShows(nextShows);
   }
 
-  function updateField<K extends keyof ShowFormValues>(key: K, value: ShowFormValues[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+  function updateForm(mutator: (current: ShowFormValues) => ShowFormValues) {
+    setForm((current) => applyAutoVisibility(mutator(current), visibilityModes));
   }
 
-  function updateVisibility(key: keyof ShowFormValues['visibility'], value: boolean) {
+  function updateField<K extends keyof ShowFormValues>(key: K, value: ShowFormValues[K]) {
+    updateForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateVisibility(key: VisibilityKey, value: boolean) {
+    setVisibilityModes((current) => ({ ...current, [key]: 'manual' }));
     setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
   }
 
   function resetForm(nextMessage = 'Ready to create a new date.') {
-    setForm({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() });
+    const nextModes = defaultVisibilityModes();
+    setVisibilityModes(nextModes);
+    setExpandedSections(readExpandedSectionsPreference());
+    setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
+    handledLoadRef.current = null;
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/admin');
+    }
     setMessage(nextMessage);
   }
 
   function updateScheduleItem(id: string, field: 'label' | 'time', value: string) {
-    setForm((current) => ({
+    updateForm((current) => ({
       ...current,
       schedule_items: current.schedule_items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     }));
   }
 
   function addScheduleRow() {
-    setForm((current) => ({
+    updateForm((current) => ({
       ...current,
       schedule_items: [...current.schedule_items, { id: crypto.randomUUID(), label: '', time: '' }],
     }));
   }
 
   function removeScheduleRow(id: string) {
-    setForm((current) => ({
+    updateForm((current) => ({
       ...current,
       schedule_items: current.schedule_items.filter((item) => item.id !== id),
     }));
+  }
+
+  function setSectionExpanded(section: SectionKey, expanded: boolean) {
+    setExpandedSections((current) => ({ ...current, [section]: expanded }));
+  }
+
+  function expandAllSections() {
+    setExpandedSections({
+      basics: true,
+      venue: true,
+      parking: true,
+      schedule: true,
+      dos: true,
+      accommodation: true,
+      notes: true,
+      guestListNotes: true,
+    });
+  }
+
+  function collapseAllSections() {
+    setExpandedSections({
+      basics: false,
+      venue: false,
+      parking: false,
+      schedule: false,
+      dos: false,
+      accommodation: false,
+      notes: false,
+      guestListNotes: false,
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -182,7 +366,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       window.dispatchEvent(new Event('tourbook:shows-updated'));
 
       if (isEditing) {
+        setVisibilityModes(defaultVisibilityModes('manual'));
         setForm(show);
+        setExpandedSections(getExpandedSectionsForPopulatedForm(show));
         setMessage('Show updated.');
       } else {
         resetForm('Show created. Form cleared for the next date.');
@@ -202,7 +388,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       return;
     }
 
+    setVisibilityModes(defaultVisibilityModes('manual'));
     setForm(show);
+    setExpandedSections(getExpandedSectionsForPopulatedForm(show));
     setMessage('Loaded date into editor.');
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -215,13 +403,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       return;
     }
 
-    setForm({
+    const duplicated = {
       ...show,
       id: '',
       date: '',
       created_at: undefined,
       schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-    });
+    };
+
+    setVisibilityModes(defaultVisibilityModes('manual'));
+    setForm(duplicated);
+    setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
     setMessage('Date duplicated into a new draft. Pick the new date and save.');
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -252,6 +444,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
   }
 
+  const primaryActionLabel = saving ? 'Saving...' : isEditing ? 'Update' : 'Create';
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
@@ -265,29 +459,46 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold">New Date</h1>
-              <p className="text-sm text-zinc-400">Create a new tour date, then keep rolling into the next one.</p>
-            </div>
-            <button type="submit" form="admin-show-form" disabled={saving} className="rounded-2xl border border-white/10 px-3 py-2 text-sm disabled:opacity-60">
-              {saving ? 'Saving...' : isEditing ? 'Update show' : 'Create show'}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h1 className="text-xl font-semibold">New Date</h1>
+            <button type="submit" form="admin-show-form" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
+              {primaryActionLabel}
             </button>
           </div>
 
           {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
 
+          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+            <button type="button" onClick={expandAllSections} className="rounded-full border border-white/10 px-3 py-1.5 hover:border-white/20 hover:bg-white/5">
+              Expand all
+            </button>
+            <button type="button" onClick={collapseAllSections} className="rounded-full border border-white/10 px-3 py-1.5 hover:border-white/20 hover:bg-white/5">
+              Collapse all
+            </button>
+          </div>
+
           <form id="admin-show-form" onSubmit={handleSubmit} className="grid gap-3">
-            <div className={bubbleClassName()}>
-              <h2 className="text-base font-semibold">Basics</h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <CollapsibleSection
+              title="Basics"
+              expanded={expandedSections.basics}
+              onExpandedChange={(value) => setSectionExpanded('basics', value)}
+              hasContent={sectionHasContent('basics', form)}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
                 <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
                 <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
-            </div>
+            </CollapsibleSection>
 
-            <BubbleSection title="Venue" enabled={form.visibility.show_venue} onToggle={(value) => updateVisibility('show_venue', value)}>
+            <CollapsibleSection
+              title="Venue"
+              expanded={expandedSections.venue}
+              onExpandedChange={(value) => setSectionExpanded('venue', value)}
+              hasContent={sectionHasContent('venue', form)}
+              visibilityState={form.visibility.show_venue}
+              onVisibilityToggle={(value) => updateVisibility('show_venue', value)}
+            >
               <div className="grid gap-3">
                 <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
                 <AddressAutocompleteField
@@ -298,13 +509,27 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
                 />
               </div>
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="Load / parking info" enabled={form.visibility.show_parking_load_info} onToggle={(value) => updateVisibility('show_parking_load_info', value)}>
+            <CollapsibleSection
+              title="Load / parking info"
+              expanded={expandedSections.parking}
+              onExpandedChange={(value) => setSectionExpanded('parking', value)}
+              hasContent={sectionHasContent('parking', form)}
+              visibilityState={form.visibility.show_parking_load_info}
+              onVisibilityToggle={(value) => updateVisibility('show_parking_load_info', value)}
+            >
               <Textarea label="Details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="Schedule" enabled={form.visibility.show_schedule} onToggle={(value) => updateVisibility('show_schedule', value)}>
+            <CollapsibleSection
+              title="Schedule"
+              expanded={expandedSections.schedule}
+              onExpandedChange={(value) => setSectionExpanded('schedule', value)}
+              hasContent={sectionHasContent('schedule', form)}
+              visibilityState={form.visibility.show_schedule}
+              onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
+            >
               <div className="space-y-3">
                 {form.schedule_items.map((item, index) => (
                   <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -324,16 +549,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   Add line
                 </button>
               </div>
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="DOS contact" enabled={form.visibility.show_dos_contact} onToggle={(value) => updateVisibility('show_dos_contact', value)}>
+            <CollapsibleSection
+              title="DOS contact"
+              expanded={expandedSections.dos}
+              onExpandedChange={(value) => setSectionExpanded('dos', value)}
+              hasContent={sectionHasContent('dos', form)}
+              visibilityState={form.visibility.show_dos_contact}
+              onVisibilityToggle={(value) => updateVisibility('show_dos_contact', value)}
+            >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Name" value={form.dos_name} onChange={(value) => updateField('dos_name', value)} />
                 <Input label="Phone number" value={form.dos_phone} onChange={(value) => updateField('dos_phone', value)} />
               </div>
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="Accommodation" enabled={form.visibility.show_accommodation} onToggle={(value) => updateVisibility('show_accommodation', value)}>
+            <CollapsibleSection
+              title="Accommodation"
+              expanded={expandedSections.accommodation}
+              onExpandedChange={(value) => setSectionExpanded('accommodation', value)}
+              hasContent={sectionHasContent('accommodation', form)}
+              visibilityState={form.visibility.show_accommodation}
+              onVisibilityToggle={(value) => updateVisibility('show_accommodation', value)}
+            >
               <div className="grid gap-3">
                 <Input label="Hotel name" value={form.hotel_name} onChange={(value) => updateField('hotel_name', value)} />
                 <AddressAutocompleteField
@@ -345,28 +584,39 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                 />
                 <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
               </div>
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="Notes" enabled={form.visibility.show_notes} onToggle={(value) => updateVisibility('show_notes', value)}>
+            <CollapsibleSection
+              title="Notes"
+              expanded={expandedSections.notes}
+              onExpandedChange={(value) => setSectionExpanded('notes', value)}
+              hasContent={sectionHasContent('notes', form)}
+              visibilityState={form.visibility.show_notes}
+              onVisibilityToggle={(value) => updateVisibility('show_notes', value)}
+            >
               <Textarea value={form.notes} onChange={(value) => updateField('notes', value)} ariaLabel="Notes" />
-            </BubbleSection>
+            </CollapsibleSection>
 
-            <BubbleSection title="Guest List Notes" enabled={form.visibility.show_guest_list_notes} onToggle={(value) => updateVisibility('show_guest_list_notes', value)}>
+            <CollapsibleSection
+              title="Guest List Notes"
+              expanded={expandedSections.guestListNotes}
+              onExpandedChange={(value) => setSectionExpanded('guestListNotes', value)}
+              hasContent={sectionHasContent('guestListNotes', form)}
+              visibilityState={form.visibility.show_guest_list_notes}
+              onVisibilityToggle={(value) => updateVisibility('show_guest_list_notes', value)}
+            >
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
-            </BubbleSection>
+            </CollapsibleSection>
 
             <button type="submit" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
-              {saving ? 'Saving...' : isEditing ? 'Update show' : 'Create show'}
+              {primaryActionLabel}
             </button>
           </form>
         </section>
       ) : (
         <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold">Existing Dates</h1>
-              <p className="text-sm text-zinc-400">Filter your upcoming and past dates without crowding the new-date form.</p>
-            </div>
+            <h1 className="text-xl font-semibold">Existing Dates</h1>
             <div className="flex gap-2">
               <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
                 Upcoming
@@ -418,14 +668,48 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   );
 }
 
-function BubbleSection({ title, enabled, onToggle, children }: { title: string; enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
+function CollapsibleSection({
+  title,
+  expanded,
+  onExpandedChange,
+  hasContent,
+  visibilityState,
+  onVisibilityToggle,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onExpandedChange: (value: boolean) => void;
+  hasContent: boolean;
+  visibilityState?: boolean;
+  onVisibilityToggle?: (value: boolean) => void;
+  children: ReactNode;
+}) {
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <Toggle enabled={enabled} onToggle={onToggle} />
+        <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <h2 className="truncate text-base font-semibold">{title}</h2>
+          {!expanded && hasContent ? (
+            <>
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+              {typeof visibilityState === 'boolean' ? <span className="text-xs font-medium text-zinc-400">{visibilityState ? 'Visible' : 'Hidden'}</span> : null}
+            </>
+          ) : null}
+        </button>
+        <div className="flex items-center gap-2">
+          {expanded && typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} /> : null}
+          <button
+            type="button"
+            onClick={() => onExpandedChange(!expanded)}
+            className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300"
+            aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+          >
+            <span className={`inline-block transition-transform ${expanded ? 'rotate-90' : 'rotate-0'}`}>›</span>
+          </button>
+        </div>
       </div>
-      <div className="mt-3">{children}</div>
+      {expanded ? <div className="mt-3">{children}</div> : null}
     </section>
   );
 }
@@ -465,8 +749,8 @@ function ShowListSection({
         <div>
           <h2 className="text-base font-semibold">{title}</h2>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),180px]">
-          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search city, venue, or date" />
+        <div className="grid grid-cols-[minmax(0,1fr),132px] gap-2">
+          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" />
           <label className="block text-sm text-zinc-300">
             <span className="mb-1 block">Tour</span>
             <select value={selectedTour} onChange={(event) => onTourChange(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20">
@@ -493,7 +777,7 @@ function ShowListSection({
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
                     {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
                   </div>
-                  <div className="relative flex flex-wrap items-center gap-2">
+                  <div data-admin-menu-root="true" className="relative flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
                       Edit
                     </button>

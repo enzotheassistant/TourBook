@@ -1,12 +1,18 @@
+'use client';
+
 import Link from 'next/link';
 import { ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 
-function tabClassName() {
-  return 'rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/5';
+function tabClassName(active = false) {
+  return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const searchParams = useSearchParams();
+  const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
+
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/90 backdrop-blur">
@@ -20,7 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Link href="/admin" className={tabClassName()}>
+              <Link href="/admin" className={tabClassName(false)}>
                 Admin
               </Link>
               <LogoutButton />
@@ -28,10 +34,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Link href="/?tab=upcoming" className={tabClassName()}>
+            <Link href="/?tab=upcoming" className={tabClassName(tab === 'upcoming')}>
               Upcoming
             </Link>
-            <Link href="/?tab=past" className={tabClassName()}>
+            <Link href="/?tab=past" className={tabClassName(tab === 'past')}>
               Past
             </Link>
           </div>
