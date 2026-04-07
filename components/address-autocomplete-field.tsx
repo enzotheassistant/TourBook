@@ -18,9 +18,9 @@ export function AddressAutocompleteField({
 }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
-  const [manualMode, setManualMode] = useState(Boolean(mapsUrl));
+  const [manualMode, setManualMode] = useState(false);
+  const [lookupEnabled, setLookupEnabled] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const suppressNextLookupRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -38,9 +38,9 @@ export function AddressAutocompleteField({
   }, []);
 
   useEffect(() => {
-    if (suppressNextLookupRef.current) {
-      suppressNextLookupRef.current = false;
+    if (!lookupEnabled) {
       setSuggestions([]);
+      setOpen(false);
       return;
     }
 
@@ -73,20 +73,21 @@ export function AddressAutocompleteField({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [value]);
+  }, [lookupEnabled, value]);
 
   function selectSuggestion(suggestion: AddressSuggestion) {
-    suppressNextLookupRef.current = true;
     onAddressChange(suggestion.address);
     onMapsUrlChange(suggestion.maps_url);
     setSuggestions([]);
     setOpen(false);
+    setLookupEnabled(false);
     setManualMode(false);
   }
 
   function revealManualLink() {
     setManualMode(true);
     setOpen(false);
+    setLookupEnabled(false);
   }
 
   return (
@@ -96,12 +97,19 @@ export function AddressAutocompleteField({
         <input
           value={value}
           onChange={(event) => {
-            onAddressChange(event.target.value);
-            if (!event.target.value) {
+            const nextValue = event.target.value;
+            onAddressChange(nextValue);
+            setLookupEnabled(Boolean(nextValue));
+            if (!nextValue) {
               onMapsUrlChange('');
+              setManualMode(false);
             }
           }}
-          onFocus={() => value.trim().length >= 3 && suggestions.length > 0 && setOpen(true)}
+          onFocus={() => {
+            if (lookupEnabled && value.trim().length >= 3 && suggestions.length > 0) {
+              setOpen(true);
+            }
+          }}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
           placeholder="Start typing an address"
         />
@@ -145,6 +153,14 @@ export function AddressAutocompleteField({
             placeholder="https://maps.google.com/..."
           />
         </label>
+      ) : mapsUrl ? (
+        <button
+          type="button"
+          onClick={revealManualLink}
+          className="text-xs text-zinc-500 transition hover:text-zinc-300"
+        >
+          Edit map link
+        </button>
       ) : null}
 
       {!mapsUrl && value ? <p className="text-xs text-zinc-500">Address will stay plain text until you select a suggestion or add a manual link.</p> : null}

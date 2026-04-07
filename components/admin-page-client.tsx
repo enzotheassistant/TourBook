@@ -468,11 +468,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
           {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
 
-          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-            <button type="button" onClick={expandAllSections} className="rounded-full border border-white/10 px-3 py-1.5 hover:border-white/20 hover:bg-white/5">
+          <div className="mb-4 flex items-center justify-end gap-3 text-xs text-zinc-500">
+            <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
               Expand all
             </button>
-            <button type="button" onClick={collapseAllSections} className="rounded-full border border-white/10 px-3 py-1.5 hover:border-white/20 hover:bg-white/5">
+            <span className="text-zinc-700">•</span>
+            <button type="button" onClick={collapseAllSections} className="transition hover:text-zinc-300">
               Collapse all
             </button>
           </div>
@@ -749,9 +750,11 @@ function ShowListSection({
         <div>
           <h2 className="text-base font-semibold">{title}</h2>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr),132px] gap-2">
-          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" />
-          <label className="block text-sm text-zinc-300">
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" />
+          </div>
+          <label className="block w-[42%] min-w-[132px] text-sm text-zinc-300">
             <span className="mb-1 block">Tour</span>
             <select value={selectedTour} onChange={(event) => onTourChange(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20">
               {tours.map((tour) => (
@@ -770,18 +773,18 @@ function ShowListSection({
             const menuOpen = openMenuId === show.id;
             return (
               <div key={show.id} className="rounded-2xl bg-black/20 p-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
                     <p className="text-sm font-medium">{show.city}</p>
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
                     {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
                   </div>
-                  <div data-admin-menu-root="true" className="relative flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
+                  <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2">
+                    <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm leading-none">
                       Edit
                     </button>
-                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
+                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm leading-none">
                       …
                     </button>
                     {menuOpen ? (
