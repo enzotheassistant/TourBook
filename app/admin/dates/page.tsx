@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export default function AdminDatesPage() {
   return (
-    <AppShell mode="admin" title="Existing Dates" subtitle="Filter, edit, duplicate, and export">
+    <AppShell mode="admin" title="TourBook" showSubtitle={false}>
       <Suspense fallback={null}>
         <AdminPageClient mode="dates" />
       </Suspense>

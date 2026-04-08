@@ -14,12 +14,14 @@ export function AppShell({
   mode = 'crew',
   title = 'TourBook',
   subtitle = 'Touring crew dashboard',
+  showSubtitle = true,
 }: {
   children: ReactNode;
   activeTab?: 'upcoming' | 'past';
   mode?: 'crew' | 'admin';
   title?: string;
   subtitle?: string;
+  showSubtitle?: boolean;
 }) {
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
@@ -33,7 +35,7 @@ export function AppShell({
               <Link href={mode === 'admin' ? '/admin' : '/'} className="text-lg font-semibold tracking-tight">
                 {title}
               </Link>
-              <p className="text-xs text-zinc-400">{subtitle}</p>
+              {showSubtitle ? <p className="text-xs text-zinc-400">{subtitle}</p> : null}
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">

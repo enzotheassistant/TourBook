@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow } from '@/lib/date';
@@ -57,6 +57,10 @@ function adminTabClassName(active: boolean) {
 
 function fieldClassName() {
   return 'h-14 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20';
+}
+
+function filterFieldClassName() {
+  return 'h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20';
 }
 
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
@@ -168,8 +172,10 @@ function readExpandedSectionsPreference() {
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
+  const statusMessage = searchParams.get('message');
   const [shows, setShows] = useState<Show[]>([]);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
@@ -238,6 +244,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   useEffect(() => {
     if (!pastTours.includes(pastTour)) setPastTour('All');
   }, [pastTour, pastTours]);
+
+  useEffect(() => {
+    if (mode !== 'dates' || !statusMessage) return;
+    setMessage(statusMessage);
+  }, [mode, statusMessage]);
 
   useEffect(() => {
     if (mode !== 'new' || !shows.length) return;
@@ -371,10 +382,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       window.dispatchEvent(new Event('tourbook:shows-updated'));
 
       if (isEditing) {
-        setVisibilityModes(defaultVisibilityModes('manual'));
-        setForm(show);
-        setExpandedSections(getExpandedSectionsForPopulatedForm(show));
-        setMessage('Show updated.');
+        const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
+        window.dispatchEvent(new Event('tourbook:shows-updated'));
+        router.push(`/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`);
+        router.refresh();
+        return;
       } else {
         resetForm('Show created. Form cleared for the next date.');
       }
@@ -621,6 +633,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
         </section>
       ) : (
         <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-xl font-semibold">Existing Dates</h1>
             <div className="flex gap-2">
@@ -754,9 +767,13 @@ function ShowListSection({
     <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">{title}</h2>
-        <div className="grid grid-cols-[minmax(0,1fr),132px] gap-2 sm:grid-cols-[minmax(0,1fr),200px]">
-          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" compact />
-          <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" compact hideLabel inputClassName={filterFieldClassName()} />
+          </div>
+          <div className="w-[132px] shrink-0 sm:w-[180px]">
+            <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact hideLabel selectClassName={filterFieldClassName()} />
+          </div>
         </div>
       </div>
 
@@ -833,30 +850,68 @@ function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder, compact = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; compact?: boolean }) {
+function Input({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+  compact = false,
+  hideLabel = false,
+  inputClassName,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  compact?: boolean;
+  hideLabel?: boolean;
+  inputClassName?: string;
+}) {
   return (
     <label className="block text-sm text-zinc-300">
-      <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span>
+      {!hideLabel ? <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span> : null}
       <input
         type={type}
         value={value}
         placeholder={placeholder}
+        aria-label={label}
         onChange={(event) => onChange(event.target.value)}
-        className={fieldClassName()}
+        className={inputClassName ?? fieldClassName()}
       />
     </label>
   );
 }
 
-function SelectField({ label, value, onChange, options, compact = false, emptyLabel }: { label: string; value: string; onChange: (value: string) => void; options: string[]; compact?: boolean; emptyLabel?: string }) {
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  compact = false,
+  emptyLabel,
+  hideLabel = false,
+  selectClassName,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  compact?: boolean;
+  emptyLabel?: string;
+  hideLabel?: boolean;
+  selectClassName?: string;
+}) {
   return (
     <label className="block text-sm text-zinc-300">
-      <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span>
+      {!hideLabel ? <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span> : null}
       <div className="relative">
         <select
           value={value}
+          aria-label={label}
           onChange={(event) => onChange(event.target.value)}
-          className={`${fieldClassName()} appearance-none pr-11`}
+          className={`${selectClassName ?? fieldClassName()} appearance-none pr-11`}
         >
           {emptyLabel ? <option value="">{emptyLabel}</option> : null}
           {options.map((option) => (
@@ -866,7 +921,7 @@ function SelectField({ label, value, onChange, options, compact = false, emptyLa
           ))}
         </select>
         <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
-          <ChevronDownIcon />
+          <ChevronDownIcon className="h-4 w-4" />
         </span>
       </div>
     </label>

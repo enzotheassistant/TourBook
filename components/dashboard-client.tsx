@@ -43,6 +43,29 @@ function sortTourNamesForPast(shows: Show[]) {
     .map(([tour]) => tour);
 }
 
+
+function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel: string }) {
+  return (
+    <div className="relative w-[132px] shrink-0 sm:w-[180px]">
+      <select
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full appearance-none rounded-2xl border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none focus:border-white/20"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>{option === 'All' ? 'All' : option}</option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
+          <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
 export function DashboardClient() {
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,20 +143,12 @@ export function DashboardClient() {
         {tab === 'past' ? (
           <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:flex-row sm:items-center sm:justify-between">
             <span>Past Dates</span>
-            <select value={pastTour} onChange={(event) => setPastTour(event.target.value)} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none">
-              {pastTours.map((tour) => (
-                <option key={tour} value={tour}>{tour === 'All' ? 'All' : tour}</option>
-              ))}
-            </select>
+<FilterSelect value={pastTour} onChange={setPastTour} options={pastTours} ariaLabel="Past dates tour filter" />
           </label>
         ) : (
           <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:flex-row sm:items-center sm:justify-between">
             <span>Upcoming Dates</span>
-            <select value={upcomingTour} onChange={(event) => setUpcomingTour(event.target.value)} className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none">
-              {upcomingTours.map((tour) => (
-                <option key={tour} value={tour}>{tour === 'All' ? 'All' : tour}</option>
-              ))}
-            </select>
+<FilterSelect value={upcomingTour} onChange={setUpcomingTour} options={upcomingTours} ariaLabel="Upcoming dates tour filter" />
           </label>
         )}
       </div>
