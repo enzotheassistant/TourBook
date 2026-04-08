@@ -80,7 +80,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
         />
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-zinc-500">Paste multiple names on separate lines to add them all at once.</p>
-          <button type="submit" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
+          <button type="submit" disabled={saving} className="inline-flex h-12 items-center justify-center rounded-2xl bg-white px-5 text-sm font-medium leading-none text-zinc-900 disabled:opacity-60">
             {saving ? 'Adding...' : 'Add'}
           </button>
         </div>

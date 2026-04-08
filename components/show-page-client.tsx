@@ -74,13 +74,13 @@ export function ShowPageClient({ showId }: { showId: string }) {
 
   return (
     <>
-      <div className="grid grid-cols-[auto,1fr] items-start gap-3">
-        <Link href="/" className="rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200">
+      <div className="flex flex-col items-start gap-3 sm:gap-4">
+        <Link href="/" className="inline-flex w-auto items-center rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/5">
           Back
         </Link>
-        <div className="min-w-0 text-right sm:text-left">
+        <div className="min-w-0 text-left">
           <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
-          <h1 className="text-3xl font-semibold tracking-tight">{show.city}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{show.city}</h1>
           <p className="mt-1 break-words text-zinc-300">{show.venue_name}</p>
           {show.tour_name ? <p className="mt-2 text-sm text-emerald-300">{show.tour_name}</p> : null}
         </div>

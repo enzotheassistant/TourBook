@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export default function AdminPage() {
   return (
-    <AppShell mode="admin" title="New Date" subtitle="Create and manage tour dates">
+    <AppShell mode="admin" title="TourBook" subtitle="Touring crew dashboard">
       <Suspense fallback={null}>
         <AdminPageClient />
       </Suspense>

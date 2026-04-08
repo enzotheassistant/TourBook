@@ -54,6 +54,11 @@ function adminTabClassName(active: boolean) {
   return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
+
+function fieldClassName() {
+  return 'h-14 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20';
+}
+
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
 type VisibilityKey = keyof ShowFormValues['visibility'];
 type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
@@ -715,6 +720,7 @@ function CollapsibleSection({
   );
 }
 
+
 function ShowListSection({
   title,
   search,
@@ -746,22 +752,11 @@ function ShowListSection({
 }) {
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-      <div className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-base font-semibold">{title}</h2>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" />
-          </div>
-          <label className="block w-[42%] min-w-[132px] text-sm text-zinc-300">
-            <span className="mb-1 block">Tour</span>
-            <select value={selectedTour} onChange={(event) => onTourChange(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20">
-              {tours.map((tour) => (
-                <option key={tour} value={tour}>{tour}</option>
-              ))}
-            </select>
-          </label>
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <div className="grid grid-cols-[minmax(0,1fr),132px] gap-2 sm:grid-cols-[minmax(0,1fr),200px]">
+          <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" compact />
+          <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact />
         </div>
       </div>
 
@@ -780,7 +775,7 @@ function ShowListSection({
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
                     {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
                   </div>
-                  <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2">
+                  <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
                     <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm leading-none">
                       Edit
                     </button>
@@ -788,7 +783,7 @@ function ShowListSection({
                       …
                     </button>
                     {menuOpen ? (
-                      <div className="right-0 top-full z-10 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl sm:absolute">
+                      <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
                         <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
                         <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
                         <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
@@ -830,17 +825,50 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boo
   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string }) {
+function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Input({ label, value, onChange, type = 'text', placeholder, compact = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; compact?: boolean }) {
   return (
     <label className="block text-sm text-zinc-300">
-      <span className="mb-1 block">{label}</span>
+      <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+        className={fieldClassName()}
       />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, options, compact = false, emptyLabel }: { label: string; value: string; onChange: (value: string) => void; options: string[]; compact?: boolean; emptyLabel?: string }) {
+  return (
+    <label className="block text-sm text-zinc-300">
+      <span className={`block ${compact ? 'mb-1 text-sm' : 'mb-1'}`}>{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${fieldClassName()} appearance-none pr-11`}
+        >
+          {emptyLabel ? <option value="">{emptyLabel}</option> : null}
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+          <ChevronDownIcon />
+        </span>
+      </div>
     </label>
   );
 }
@@ -858,28 +886,33 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
     <div className="space-y-2 text-sm text-zinc-300">
       <label className="block">
         <span className="mb-1 block">Tour</span>
-        <select
-          value={selectedValue}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            if (nextValue === '__new__') {
-              setCreatingNew(true);
-              onChange('');
-              return;
-            }
-            setCreatingNew(false);
-            onChange(nextValue);
-          }}
-          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20"
-        >
-          <option value="">No tour assigned</option>
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-          <option value="__new__">Create new tour…</option>
-        </select>
+        <div className="relative">
+          <select
+            value={selectedValue}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (nextValue === '__new__') {
+                setCreatingNew(true);
+                onChange('');
+                return;
+              }
+              setCreatingNew(false);
+              onChange(nextValue);
+            }}
+            className={`${fieldClassName()} appearance-none pr-11`}
+          >
+            <option value="">No tour assigned</option>
+            {options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            <option value="__new__">Create new tour…</option>
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+            <ChevronDownIcon />
+          </span>
+        </div>
       </label>
 
       {creatingNew ? (
@@ -888,7 +921,7 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
           <input
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+            className={fieldClassName()}
             placeholder="Type a new tour name"
           />
         </label>
