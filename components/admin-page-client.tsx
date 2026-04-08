@@ -213,6 +213,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const [upcomingTour, setUpcomingTour] = useState('All');
   const [pastTour, setPastTour] = useState('All');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
 
@@ -281,7 +282,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
     const editId = searchParams.get('edit');
     const duplicateId = searchParams.get('duplicate');
+    const returnTo = searchParams.get('returnTo');
+    const returnTab = searchParams.get('returnTab') === 'past' ? 'past' : 'upcoming';
     const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
+
+    if (returnTo === 'show' && (editId || duplicateId)) {
+      const targetId = editId ?? duplicateId;
+      setReturnToUrl(`/shows/${encodeURIComponent(targetId ?? '')}?admin=1`);
+    } else {
+      setReturnToUrl(`/admin/dates?tab=${returnTab}`);
+    }
 
     if (!nextAction || handledLoadRef.current === nextAction) return;
 
@@ -414,9 +424,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
       if (isEditing) {
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
+        const target = returnToUrl.startsWith('/shows/') ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
         window.dispatchEvent(new Event('tourbook:shows-updated'));
-        router.push(`/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`);
-        router.refresh();
+        window.location.href = target;
         return;
       } else {
         resetForm('Show created. Form cleared for the next date.');
@@ -432,7 +442,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
 
     if (mode === 'dates') {
-      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}`;
+      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
       return;
     }
 
@@ -448,7 +458,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
 
     if (mode === 'dates') {
-      window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}`;
+      window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
       return;
     }
 
@@ -499,12 +509,39 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <Link href="/admin" className={adminTabClassName(mode === 'new')}>
+        <button
+          type="button"
+          onClick={() => {
+            if (isEditing) {
+              if (dirty && !window.confirm('Discard changes? You have unsaved edits. Start a new date instead?')) return;
+              resetForm('Ready to create a new date.');
+            }
+            if (mode !== 'new') {
+              window.location.href = '/admin';
+            }
+          }}
+          className={adminTabClassName(mode === 'new' && !isEditing)}
+        >
           New Date
-        </Link>
-        <Link href="/admin/dates" className={adminTabClassName(mode === 'dates')}>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (mode === 'new') {
+              if (isEditing || dirty) {
+                if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return to Existing Dates instead?')) return;
+                window.location.href = returnToUrl;
+                return;
+              }
+              window.location.href = '/admin/dates';
+              return;
+            }
+            window.location.href = '/admin/dates';
+          }}
+          className={adminTabClassName(mode === 'dates' || isEditing)}
+        >
           Existing Dates
-        </Link>
+        </button>
       </div>
 
       {mode === 'new' ? (
@@ -516,12 +553,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                 <button
                   type="button"
                   onClick={() => {
-                    if (dirty && !window.confirm('Discard changes? You have unsaved edits. Start a new date instead?')) return;
-                    resetForm('Ready to create a new date.');
+                    if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return instead?')) return;
+                    window.location.href = returnToUrl;
                   }}
                   className={secondaryButtonClassName()}
                 >
-                  New Date
+                  Cancel
                 </button>
               ) : null}
               <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
@@ -551,11 +588,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
             >
               <div className="grid gap-3">
                 <InlineInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),120px]">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px] lg:items-center">
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} placeholder="ON" />
                 </div>
-                <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
+                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
             </CollapsibleSection>
 
@@ -610,7 +647,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),140px]">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px] lg:items-center">
                       <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
                       <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
                     </div>
@@ -1010,6 +1047,64 @@ function SelectField({
         </span>
       </div>
     </label>
+  );
+}
+
+
+function InlineTourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+  const [creatingNew, setCreatingNew] = useState(!options.includes(value) && value.trim().length > 0);
+
+  useEffect(() => {
+    setCreatingNew(!options.includes(value) && value.trim().length > 0);
+  }, [options, value]);
+
+  const selectedValue = creatingNew ? '__new__' : value;
+
+  return (
+    <div className="space-y-2 text-sm text-zinc-300">
+      <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
+        <span className="text-zinc-300">Tour</span>
+        <div className="relative min-w-0">
+          <select
+            value={selectedValue}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (nextValue === '__new__') {
+                setCreatingNew(true);
+                onChange('');
+                return;
+              }
+              setCreatingNew(false);
+              onChange(nextValue);
+            }}
+            className={`${fieldClassName()} appearance-none pr-11`}
+          >
+            <option value="">No tour assigned</option>
+            {options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            <option value="__new__">Create new tour…</option>
+          </select>
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+            <ChevronDownIcon />
+          </span>
+        </div>
+      </label>
+
+      {creatingNew ? (
+        <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
+          <span className="text-zinc-300">New tour</span>
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className={fieldClassName()}
+            placeholder="Type a new tour name"
+          />
+        </label>
+      ) : null}
+    </div>
   );
 }
 

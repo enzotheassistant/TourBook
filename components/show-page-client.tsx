@@ -93,7 +93,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
           </Link>
           {adminMode ? (
             <div className="relative flex items-center gap-2">
-              <Link href={`/admin?edit=${show.id}`} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+              <Link href={`/admin?edit=${show.id}&returnTo=show`} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
                 ✎
               </Link>
               <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">
@@ -101,7 +101,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
               </button>
               {menuOpen ? (
                 <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                  <Link href={`/admin?duplicate=${show.id}`} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Duplicate date</Link>
+                  <Link href={`/admin?duplicate=${show.id}&returnTo=show`} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Duplicate date</Link>
                   <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
                 </div>
               ) : null}
