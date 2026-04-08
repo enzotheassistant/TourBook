@@ -1,27 +1,65 @@
+
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressSuggestion } from '@/lib/types';
+
+const DEFAULT_BIAS = 'CA,US';
+const STORAGE_KEY = 'tourbook_address_bias_v1';
+
+type BiasState = {
+  preferredCountry: string;
+  streakCountry: string | null;
+  streakCount: number;
+};
+
+function readBiasState(): BiasState {
+  if (typeof window === 'undefined') return { preferredCountry: DEFAULT_BIAS, streakCountry: null, streakCount: 0 };
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { preferredCountry: DEFAULT_BIAS, streakCountry: null, streakCount: 0 };
+    const parsed = JSON.parse(raw) as Partial<BiasState>;
+    return { preferredCountry: parsed.preferredCountry || DEFAULT_BIAS, streakCountry: parsed.streakCountry || null, streakCount: parsed.streakCount || 0 };
+  } catch {
+    return { preferredCountry: DEFAULT_BIAS, streakCountry: null, streakCount: 0 };
+  }
+}
+
+function writeBiasState(state: BiasState) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
 
 export function AddressAutocompleteField({
   label,
   value,
   mapsUrl,
+  city = '',
+  region = '',
   onAddressChange,
   onMapsUrlChange,
+  onRegionDetected,
 }: {
   label: string;
   value: string;
   mapsUrl: string;
+  city?: string;
+  region?: string;
   onAddressChange: (value: string) => void;
   onMapsUrlChange: (value: string) => void;
+  onRegionDetected?: (value: string) => void;
 }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [lookupEnabled, setLookupEnabled] = useState(false);
+  const [preferredCountry, setPreferredCountry] = useState(DEFAULT_BIAS);
   const abortRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPreferredCountry(readBiasState().preferredCountry || DEFAULT_BIAS);
+  }, []);
 
   useEffect(() => {
     const target = containerRef.current;
@@ -36,6 +74,8 @@ export function AddressAutocompleteField({
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
+
+  const cityQuery = useMemo(() => [city.trim(), region.trim()].filter(Boolean).join(', '), [city, region]);
 
   useEffect(() => {
     if (!lookupEnabled) {
@@ -56,7 +96,9 @@ export function AddressAutocompleteField({
 
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/address-search?q=${encodeURIComponent(value)}`, {
+        const params = new URLSearchParams({ q: value, preferredCountry });
+        if (cityQuery) params.set('city', cityQuery);
+        const response = await fetch(`/api/address-search?${params.toString()}`, {
           signal: controller.signal,
           cache: 'no-store',
         });
@@ -73,11 +115,33 @@ export function AddressAutocompleteField({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [lookupEnabled, value]);
+  }, [lookupEnabled, value, preferredCountry, cityQuery]);
+
+  function rememberSelection(suggestion: AddressSuggestion) {
+    const country = suggestion.country?.toUpperCase();
+    if (!country) return;
+    if (country === 'CA' || country === 'US') {
+      const nextState = { preferredCountry: DEFAULT_BIAS, streakCountry: null, streakCount: 0 };
+      writeBiasState(nextState);
+      setPreferredCountry(nextState.preferredCountry);
+      return;
+    }
+    const current = readBiasState();
+    const nextCount = current.streakCountry === country ? current.streakCount + 1 : 1;
+    const nextState = {
+      preferredCountry: nextCount >= 2 ? country : current.preferredCountry || DEFAULT_BIAS,
+      streakCountry: country,
+      streakCount: nextCount,
+    };
+    writeBiasState(nextState);
+    setPreferredCountry(nextState.preferredCountry);
+  }
 
   function selectSuggestion(suggestion: AddressSuggestion) {
     onAddressChange(suggestion.address);
     onMapsUrlChange(suggestion.maps_url);
+    if (suggestion.region && onRegionDetected && !region.trim()) onRegionDetected(suggestion.region);
+    rememberSelection(suggestion);
     setSuggestions([]);
     setOpen(false);
     setLookupEnabled(false);

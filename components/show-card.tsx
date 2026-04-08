@@ -17,7 +17,7 @@ export function ShowCard({ show }: { show: Show }) {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
-          <h2 className="mt-2 text-[2rem] font-semibold leading-none tracking-tight text-zinc-50 sm:text-[2.15rem]">{show.city}</h2>
+          <h2 className="mt-2 text-[2rem] font-semibold leading-none tracking-tight text-zinc-50 sm:text-[2.15rem]">{show.city}{show.region ? `, ${show.region}` : ''}</h2>
           <p className="mt-3 text-lg font-medium text-zinc-200">{show.venue_name}</p>
           {show.tour_name ? <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-emerald-300/90">{show.tour_name}</p> : null}
         </div>

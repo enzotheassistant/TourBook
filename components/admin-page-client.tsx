@@ -206,6 +206,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [upcomingSearch, setUpcomingSearch] = useState('');
   const [pastSearch, setPastSearch] = useState('');
@@ -298,6 +299,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
         setForm(duplicated);
         setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
         setMessage('Date duplicated into a new draft. Pick the new date and save.');
+        setDirty(false);
       }
     } else if (editId) {
       const source = shows.find((show) => show.id === editId);
@@ -306,6 +308,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
         setForm(source);
         setExpandedSections(getExpandedSectionsForPopulatedForm(source));
         setMessage('Loaded date into editor.');
+        setDirty(false);
       }
     }
 
@@ -321,6 +324,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }
 
   function updateForm(mutator: (current: ShowFormValues) => ShowFormValues) {
+    setDirty(true);
     setForm((current) => applyAutoVisibility(mutator(current), visibilityModes));
   }
 
@@ -343,6 +347,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       window.history.replaceState({}, '', '/admin');
     }
     setMessage(nextMessage);
+    setDirty(false);
   }
 
   function updateScheduleItem(id: string, field: 'label' | 'time', value: string) {
@@ -402,8 +407,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
     try {
       const generatedId = `${slugify(form.city || 'show')}-${slugify(form.venue_name || 'venue')}-${form.date || 'date'}`;
-      const show = await upsertShow({ ...form, id: form.id || generatedId, tour_name: form.tour_name.trim() });
+      const show = await upsertShow({ ...form, id: form.id || generatedId, tour_name: form.tour_name.trim(), region: form.region.trim().toUpperCase() });
       await loadShows();
+      setDirty(false);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
 
       if (isEditing) {
@@ -434,6 +440,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setForm(show);
     setExpandedSections(getExpandedSectionsForPopulatedForm(show));
     setMessage('Loaded date into editor.');
+    setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -457,6 +464,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setForm(duplicated);
     setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
     setMessage('Date duplicated into a new draft. Pick the new date and save.');
+    setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -486,7 +494,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
   }
 
-  const primaryActionLabel = saving ? 'Saving...' : isEditing ? 'Update' : 'Create';
+  const primaryActionLabel = saving ? 'Saving...' : isEditing ? 'Update' : 'Create Date';
 
   return (
     <div className="space-y-4">
@@ -502,10 +510,24 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h1 className="text-[2rem] font-semibold tracking-tight">New Date</h1>
-            <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-              {primaryActionLabel}
-            </button>
+            <h1 className="text-[2rem] font-semibold tracking-tight">{isEditing ? 'Edit Date' : 'New Date'}</h1>
+            <div className="flex items-center gap-2">
+              {isEditing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dirty && !window.confirm('Discard changes? You have unsaved edits. Start a new date instead?')) return;
+                    resetForm('Ready to create a new date.');
+                  }}
+                  className={secondaryButtonClassName()}
+                >
+                  New Date
+                </button>
+              ) : null}
+              <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
+                {primaryActionLabel}
+              </button>
+            </div>
           </div>
 
           {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
@@ -527,9 +549,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
               onExpandedChange={(value) => setSectionExpanded('basics', value)}
               hasContent={sectionHasContent('basics', form)}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
-                <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+              <div className="grid gap-3">
+                <InlineInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),120px]">
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} placeholder="ON" />
+                </div>
                 <TourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
             </CollapsibleSection>
@@ -548,8 +573,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   label="Venue address"
                   value={form.venue_address}
                   mapsUrl={form.venue_maps_url}
+                  city={form.city}
+                  region={form.region}
                   onAddressChange={(value) => updateField('venue_address', value)}
                   onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
+                  onRegionDetected={(value) => updateField('region', value.toUpperCase())}
                 />
               </div>
             </CollapsibleSection>
@@ -583,8 +611,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                       </button>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),140px]">
-                      <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                      <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
+                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
+                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
                     </div>
                   </div>
                 ))}
@@ -622,8 +650,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   label="Hotel address"
                   value={form.hotel_address}
                   mapsUrl={form.hotel_maps_url}
+                  city={form.city}
+                  region={form.region}
                   onAddressChange={(value) => updateField('hotel_address', value)}
                   onMapsUrlChange={(value) => updateField('hotel_maps_url', value)}
+                  onRegionDetected={(value) => updateField('region', value.toUpperCase())}
                 />
                 <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
               </div>
@@ -811,17 +842,17 @@ function ShowListSection({
             return (
               <div key={show.id} className="rounded-2xl bg-black/20 p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
+                  <Link href={`/shows/${show.id}?admin=1`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
                     <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
-                    <p className="text-sm font-medium">{show.city}</p>
+                    <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
                     {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
-                  </div>
+                  </Link>
                   <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
-                    <button type="button" onClick={() => onEdit(show)} className={secondaryButtonClassName()}>
-                      Edit
+                    <button type="button" onClick={() => onEdit(show)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+                      ✎
                     </button>
-                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className={secondaryButtonClassName()}>
+                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
                       …
                     </button>
                     {menuOpen ? (
@@ -904,6 +935,35 @@ function Input({
         aria-label={label}
         onChange={(event) => onChange(event.target.value)}
         className={inputClassName ?? fieldClassName()}
+      />
+    </label>
+  );
+}
+
+
+function InlineInput({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
+      <span className="text-zinc-300">{label}</span>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.value)}
+        className={fieldClassName()}
       />
     </label>
   );

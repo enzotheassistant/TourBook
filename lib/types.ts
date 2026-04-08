@@ -23,6 +23,7 @@ export type Show = {
   id: string;
   date: string;
   city: string;
+  region: string;
   venue_name: string;
   tour_name: string;
   venue_address: string;
@@ -57,4 +58,7 @@ export type AddressSuggestion = {
   label: string;
   address: string;
   maps_url: string;
+  country?: string;
+  region?: string;
+  city?: string;
 };
