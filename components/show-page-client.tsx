@@ -15,6 +15,15 @@ function hasAccommodation(show: Show) {
   return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
 }
 
+function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M12 20H21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L8 18L4 19L5 15L16.5 3.5Z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function viewButtonClassName(active: boolean) {
   return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
@@ -94,7 +103,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
           {adminMode ? (
             <div className="relative flex items-center gap-2">
               <Link href={`/admin?edit=${show.id}&returnTo=show`} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                ✎
+                <PencilIcon />
               </Link>
               <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">
                 …

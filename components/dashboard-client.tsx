@@ -142,12 +142,12 @@ export function DashboardClient() {
       <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-5 py-5">
         {tab === 'past' ? (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold uppercase tracking-[0.24em] text-zinc-300">Past Dates</span>
+            <span className="whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">Past Dates</span>
             <FilterSelect value={pastTour} onChange={setPastTour} options={pastTours} ariaLabel="Past dates tour filter" />
           </div>
         ) : (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold uppercase tracking-[0.24em] text-zinc-300">Upcoming Dates</span>
+            <span className="whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">Upcoming Dates</span>
             <FilterSelect value={upcomingTour} onChange={setUpcomingTour} options={upcomingTours} ariaLabel="Upcoming dates tour filter" />
           </div>
         )}

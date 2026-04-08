@@ -196,6 +196,35 @@ function readExpandedSectionsPreference() {
   }
 }
 
+
+function formatDateForStorage(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseFlexibleDateInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  const normalizedNumeric = trimmed.replace(/\//g, '-');
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalizedNumeric)) {
+    const [year, month, day] = normalizedNumeric.split('-').map(Number);
+    const candidate = new Date(year, month - 1, day);
+    if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+      return formatDateForStorage(candidate);
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatDateForStorage(new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+  }
+
+  return '';
+}
+
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -587,7 +616,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
-                <InlineInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} type="date" />
+                <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px] lg:items-center">
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} placeholder="ON" />
@@ -647,7 +676,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px] lg:items-center">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px]">
                       <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
                       <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
                     </div>
@@ -887,7 +916,7 @@ function ShowListSection({
                   </Link>
                   <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
                     <button type="button" onClick={() => onEdit(show)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                      ✎
+                      <PencilIcon />
                     </button>
                     <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
                       …
@@ -943,6 +972,26 @@ function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
+function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M12 20H21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L8 18L4 19L5 15L16.5 3.5Z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M8 2V5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M16 2V5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M3 9H21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 function Input({
   label,
   value,
@@ -992,17 +1041,72 @@ function InlineInput({
   placeholder?: string;
 }) {
   return (
-    <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
-      <span className="text-zinc-300">{label}</span>
+    <label className="flex items-center gap-3 text-sm text-zinc-300">
+      <span className="w-[72px] shrink-0 text-zinc-300">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         aria-label={label}
         onChange={(event) => onChange(event.target.value)}
-        className={fieldClassName()}
+        className={`${fieldClassName()} min-w-0 flex-1`}
       />
     </label>
+  );
+}
+
+function FlexibleDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const pickerId = `date-picker-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  function commitNextValue(rawValue: string) {
+    const normalized = parseFlexibleDateInput(rawValue);
+    onChange(normalized || rawValue);
+  }
+
+  return (
+    <div className="flex items-center gap-3 text-sm text-zinc-300">
+      <label htmlFor={pickerId} className="w-[72px] shrink-0 text-zinc-300">
+        {label}
+      </label>
+      <div className="relative min-w-0 flex-1">
+        <input
+          id={pickerId}
+          type="text"
+          value={value}
+          placeholder="Apr 22, 2026"
+          aria-label={label}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={(event) => commitNextValue(event.target.value)}
+          className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
+        />
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-0"
+          value={parseFlexibleDateInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          aria-label={`Open ${label.toLowerCase()} calendar`}
+          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+          onClick={(event) => {
+            const wrapper = event.currentTarget.parentElement;
+            const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
+            if (!dateInput) return;
+            if (typeof dateInput.showPicker === 'function') {
+              dateInput.showPicker();
+            } else {
+              dateInput.focus();
+              dateInput.click();
+            }
+          }}
+        >
+          <CalendarIcon />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1062,9 +1166,9 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
 
   return (
     <div className="space-y-2 text-sm text-zinc-300">
-      <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
-        <span className="text-zinc-300">Tour</span>
-        <div className="relative min-w-0">
+      <label className="flex items-center gap-3 text-sm text-zinc-300">
+        <span className="w-[72px] shrink-0 text-zinc-300">Tour</span>
+        <div className="relative min-w-0 flex-1">
           <select
             value={selectedValue}
             onChange={(event) => {
@@ -1077,7 +1181,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
               setCreatingNew(false);
               onChange(nextValue);
             }}
-            className={`${fieldClassName()} appearance-none pr-11`}
+            className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
           >
             <option value="">No tour assigned</option>
             {options.map((option) => (
@@ -1094,12 +1198,12 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
       </label>
 
       {creatingNew ? (
-        <label className="grid grid-cols-[88px,minmax(0,1fr)] items-center gap-3 text-sm text-zinc-300">
-          <span className="text-zinc-300">New tour</span>
+        <label className="flex items-center gap-3 text-sm text-zinc-300">
+          <span className="w-[72px] shrink-0 text-zinc-300">New tour</span>
           <input
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className={fieldClassName()}
+            className={`${fieldClassName()} min-w-0 flex-1`}
             placeholder="Type a new tour name"
           />
         </label>
@@ -1134,7 +1238,7 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
               setCreatingNew(false);
               onChange(nextValue);
             }}
-            className={`${fieldClassName()} appearance-none pr-11`}
+            className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
           >
             <option value="">No tour assigned</option>
             {options.map((option) => (
