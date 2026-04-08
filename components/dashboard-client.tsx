@@ -46,12 +46,12 @@ function sortTourNamesForPast(shows: Show[]) {
 
 function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel: string }) {
   return (
-    <div className="relative w-[132px] shrink-0 sm:w-[180px]">
+    <div className="relative w-[132px] shrink-0 sm:w-[176px]">
       <select
         value={value}
         aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full appearance-none rounded-2xl border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium normal-case tracking-normal text-zinc-100 outline-none focus:border-white/20"
+        className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/40 focus:bg-white/[0.03]"
       >
         {options.map((option) => (
           <option key={option} value={option}>{option === 'All' ? 'All' : option}</option>
@@ -139,17 +139,17 @@ export function DashboardClient() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+      <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-5 py-5">
         {tab === 'past' ? (
-          <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:flex-row sm:items-center sm:justify-between">
-            <span>Past Dates</span>
-<FilterSelect value={pastTour} onChange={setPastTour} options={pastTours} ariaLabel="Past dates tour filter" />
-          </label>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold uppercase tracking-[0.24em] text-zinc-300">Past Dates</span>
+            <FilterSelect value={pastTour} onChange={setPastTour} options={pastTours} ariaLabel="Past dates tour filter" />
+          </div>
         ) : (
-          <label className="flex flex-col gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:flex-row sm:items-center sm:justify-between">
-            <span>Upcoming Dates</span>
-<FilterSelect value={upcomingTour} onChange={setUpcomingTour} options={upcomingTours} ariaLabel="Upcoming dates tour filter" />
-          </label>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold uppercase tracking-[0.24em] text-zinc-300">Upcoming Dates</span>
+            <FilterSelect value={upcomingTour} onChange={setUpcomingTour} options={upcomingTours} ariaLabel="Upcoming dates tour filter" />
+          </div>
         )}
       </div>
 

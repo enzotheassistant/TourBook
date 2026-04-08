@@ -15,7 +15,7 @@ function hasAccommodation(show: Show) {
 }
 
 function viewButtonClassName(active: boolean) {
-  return `rounded-2xl border px-4 py-3 text-sm font-medium transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-transparent text-zinc-300'}`;
+  return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
 export function ShowPageClient({ showId }: { showId: string }) {
@@ -75,7 +75,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
   return (
     <>
       <div className="flex flex-col items-start gap-3 sm:gap-4">
-        <Link href="/" className="inline-flex w-auto items-center rounded-full border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/5">
+        <Link href="/" className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
           Back
         </Link>
         <div className="min-w-0 text-left">
@@ -86,7 +86,7 @@ export function ShowPageClient({ showId }: { showId: string }) {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-2">
+      <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>
             Day Sheet

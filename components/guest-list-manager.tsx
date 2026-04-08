@@ -11,12 +11,17 @@ function parseBulkInput(value: string) {
     .filter(Boolean);
 }
 
+function DotsIcon() {
+  return <span className="text-lg leading-none">…</span>;
+}
+
 export function GuestListManager({ showId, note, showNote }: { showId: string; note: string; showNote: boolean }) {
   const [value, setValue] = useState('');
   const [entries, setEntries] = useState<GuestListEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,14 +39,23 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     };
   }, [showId]);
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-guest-menu-root="true"]')) return;
+      setOpenMenuId(null);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     const lines = parseBulkInput(value);
     if (!lines.length || saving) return;
-
     setSaving(true);
     try {
       const createdEntries = await addGuestListEntries(showId, lines);
@@ -55,6 +69,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   async function handleDelete(entryId: string) {
     await deleteGuestListEntry(entryId);
     setEntries((current) => current.filter((entry) => entry.id !== entryId));
+    setOpenMenuId(null);
   }
 
   async function handleSaveEdit(entryId: string) {
@@ -64,23 +79,24 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     setEntries((current) => current.map((entry) => (entry.id === entryId ? updated : entry)));
     setEditingId(null);
     setEditingValue('');
+    setOpenMenuId(null);
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {showNote && note ? <p className="text-sm text-zinc-400">{note}</p> : null}
 
-      <form onSubmit={handleSubmit} className="space-y-2">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="John Doe +1"
           rows={3}
-          className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+          className="min-h-[104px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
         />
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-zinc-500">Paste multiple names on separate lines to add them all at once.</p>
-          <button type="submit" disabled={saving} className="inline-flex h-12 items-center justify-center rounded-2xl bg-white px-5 text-sm font-medium leading-none text-zinc-900 disabled:opacity-60">
+          <button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-medium text-zinc-950 disabled:opacity-60">
             {saving ? 'Adding...' : 'Add'}
           </button>
         </div>
@@ -92,34 +108,42 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
         ) : (
           sortedEntries.map((entry) => {
             const editing = editingId === entry.id;
+            const menuOpen = openMenuId === entry.id;
             return (
-              <div key={entry.id} className="rounded-2xl bg-black/20 px-4 py-3 text-sm">
+              <div key={entry.id} className="rounded-[24px] bg-black/20 px-4 py-3 text-sm">
                 {editing ? (
                   <div className="space-y-2">
                     <input
                       value={editingValue}
                       onChange={(event) => setEditingValue(event.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20"
+                      className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none focus:border-emerald-400/40"
                     />
                     <div className="flex justify-end gap-2">
-                      <button type="button" onClick={() => { setEditingId(null); setEditingValue(''); }} className="rounded-2xl border border-white/10 px-3 py-2 text-sm">
+                      <button type="button" onClick={() => { setEditingId(null); setEditingValue(''); }} className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm text-zinc-300">
                         Cancel
                       </button>
-                      <button type="button" onClick={() => handleSaveEdit(entry.id)} className="rounded-2xl bg-white px-3 py-2 text-sm font-medium text-zinc-900">
+                      <button type="button" onClick={() => handleSaveEdit(entry.id)} className="inline-flex h-10 items-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950">
                         Save
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-3">
-                    <span>{entry.name}</span>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setEditingId(entry.id); setEditingValue(entry.name); }} className="rounded-2xl border border-white/10 px-3 py-2 text-xs text-zinc-200">
-                        Edit
+                    <span className="font-medium text-zinc-100">{entry.name}</span>
+                    <div data-guest-menu-root="true" className="relative">
+                      <button type="button" onClick={() => setOpenMenuId(menuOpen ? null : entry.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]">
+                        <DotsIcon />
                       </button>
-                      <button type="button" onClick={() => handleDelete(entry.id)} className="rounded-2xl border border-red-500/30 px-3 py-2 text-xs text-red-200">
-                        Remove
-                      </button>
+                      {menuOpen ? (
+                        <div className="absolute right-0 top-full z-10 mt-2 min-w-[170px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                          <button type="button" onClick={() => { setEditingId(entry.id); setEditingValue(entry.name); setOpenMenuId(null); }} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => handleDelete(entry.id)} className="block w-full px-4 py-3 text-left text-sm text-red-200">
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 )}

@@ -8,9 +8,9 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-3">{children}</div>
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }

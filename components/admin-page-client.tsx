@@ -14,7 +14,19 @@ function slugify(value: string) {
 }
 
 function bubbleClassName() {
-  return 'rounded-3xl border border-white/10 bg-black/20 p-4';
+  return 'rounded-[28px] border border-white/10 bg-black/20 p-4';
+}
+
+function primaryButtonClassName() {
+  return 'inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-medium text-zinc-950 transition disabled:opacity-60';
+}
+
+function secondaryButtonClassName() {
+  return 'inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
+}
+
+function dangerButtonClassName() {
+  return 'inline-flex h-10 items-center justify-center rounded-full border border-red-500/30 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:bg-red-500/10';
 }
 
 function filterShows(shows: Show[], search: string, selectedTour: string) {
@@ -56,11 +68,11 @@ function adminTabClassName(active: boolean) {
 
 
 function fieldClassName() {
-  return 'h-14 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20';
+  return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 function filterFieldClassName() {
-  return 'h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20';
+  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
@@ -101,6 +113,19 @@ function defaultVisibilityModes(mode: 'auto' | 'manual' = 'auto'): VisibilityMod
     show_notes: mode,
     show_guest_list_notes: mode,
   };
+}
+
+function visibilityModesForLoadedForm(form: ShowFormValues): VisibilityModeMap {
+  const nextModes = defaultVisibilityModes('manual');
+
+  (Object.entries(visibilityKeyBySection) as Array<[SectionKey, VisibilityKey]>).forEach(([section, key]) => {
+    const hasContent = sectionHasContent(section, form);
+    if (!form.visibility[key] && !hasContent) {
+      nextModes[key] = 'auto';
+    }
+  });
+
+  return nextModes;
 }
 
 function hasScheduleContent(form: ShowFormValues) {
@@ -269,7 +294,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
           created_at: undefined,
           schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
         };
-        setVisibilityModes(defaultVisibilityModes('manual'));
+        setVisibilityModes(visibilityModesForLoadedForm(duplicated));
         setForm(duplicated);
         setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
         setMessage('Date duplicated into a new draft. Pick the new date and save.');
@@ -277,7 +302,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     } else if (editId) {
       const source = shows.find((show) => show.id === editId);
       if (source) {
-        setVisibilityModes(defaultVisibilityModes('manual'));
+        setVisibilityModes(visibilityModesForLoadedForm(source));
         setForm(source);
         setExpandedSections(getExpandedSectionsForPopulatedForm(source));
         setMessage('Loaded date into editor.');
@@ -405,7 +430,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       return;
     }
 
-    setVisibilityModes(defaultVisibilityModes('manual'));
+    setVisibilityModes(visibilityModesForLoadedForm(show));
     setForm(show);
     setExpandedSections(getExpandedSectionsForPopulatedForm(show));
     setMessage('Loaded date into editor.');
@@ -428,7 +453,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
     };
 
-    setVisibilityModes(defaultVisibilityModes('manual'));
+    setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);
     setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
     setMessage('Date duplicated into a new draft. Pick the new date and save.');
@@ -475,10 +500,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
       </div>
 
       {mode === 'new' ? (
-        <section ref={formRef} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold">New Date</h1>
-            <button type="submit" form="admin-show-form" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
+            <h1 className="text-[2rem] font-semibold tracking-tight">New Date</h1>
+            <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
               {primaryActionLabel}
             </button>
           </div>
@@ -553,7 +578,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                      <button type="button" onClick={() => removeScheduleRow(item.id)} className="rounded-full border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-200">
+                      <button type="button" onClick={() => removeScheduleRow(item.id)} className={dangerButtonClassName()}>
                         Delete
                       </button>
                     </div>
@@ -563,7 +588,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                     </div>
                   </div>
                 ))}
-                <button type="button" onClick={addScheduleRow} className="rounded-2xl border border-white/10 px-3 py-3 text-sm">
+                <button type="button" onClick={addScheduleRow} className={secondaryButtonClassName()}>
                   Add line
                 </button>
               </div>
@@ -626,16 +651,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
             </CollapsibleSection>
 
-            <button type="submit" disabled={saving} className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60">
+            <button type="submit" disabled={saving} className={primaryButtonClassName()}>
               {primaryActionLabel}
             </button>
           </form>
         </section>
       ) : (
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h1 className="text-xl font-semibold">Existing Dates</h1>
+            <h1 className="text-[2rem] font-semibold tracking-tight">Existing Dates</h1>
             <div className="flex gap-2">
               <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
                 Upcoming
@@ -764,7 +789,7 @@ function ShowListSection({
   onDuplicate: (show: Show) => void;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">{title}</h2>
         <div className="flex items-center gap-2">
@@ -793,10 +818,10 @@ function ShowListSection({
                     {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
                   </div>
                   <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
-                    <button type="button" onClick={() => onEdit(show)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm leading-none">
+                    <button type="button" onClick={() => onEdit(show)} className={secondaryButtonClassName()}>
                       Edit
                     </button>
-                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="rounded-2xl border border-white/10 px-3 py-2 text-sm leading-none">
+                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className={secondaryButtonClassName()}>
                       …
                     </button>
                     {menuOpen ? (
@@ -834,7 +859,7 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boo
     <button
       type="button"
       onClick={() => onToggle(!enabled)}
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${enabled ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-300'}`}
+      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium ${enabled ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-300'}`}
     >
       <span className={`h-2.5 w-2.5 rounded-full ${enabled ? 'bg-emerald-300' : 'bg-zinc-500'}`} />
       {enabled ? 'Show' : 'Hide'}
@@ -994,7 +1019,7 @@ function Textarea({ label, value, onChange, ariaLabel }: { label?: string; value
         value={value}
         onChange={(event) => onChange(event.target.value)}
         rows={4}
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+        className="w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
       />
     </label>
   );
