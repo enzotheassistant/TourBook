@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 
 function tabClassName(active = false) {
