@@ -62,18 +62,17 @@ function sortTourNamesForPast(shows: Show[]) {
   return Array.from(map.entries()).sort((a, b) => b[1].localeCompare(a[1]) || a[0].localeCompare(b[0])).map(([tour]) => tour);
 }
 
+function adminTabClassName(active: boolean) {
+  return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+}
+
 
 function fieldClassName() {
   return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 function filterFieldClassName() {
-  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
-}
-
-
-function adminTabClassName(active: boolean) {
-  return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
@@ -316,12 +315,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     const returnTab = searchParams.get('returnTab') === 'past' ? 'past' : 'upcoming';
     const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
 
-    if (returnTo === 'show' && (editId || duplicateId)) {
+    if (returnTo && returnTo !== 'dates' && (editId || duplicateId)) {
+      setReturnToUrl(returnTo);
+    } else if (returnTo === 'show' && (editId || duplicateId)) {
       const targetId = editId ?? duplicateId;
       setReturnToUrl(`/shows/${encodeURIComponent(targetId ?? '')}?admin=1`);
-    } else if (returnTo === 'admin-show' && (editId || duplicateId)) {
-      const targetId = editId ?? duplicateId;
-      setReturnToUrl(`/admin/shows/${encodeURIComponent(targetId ?? '')}?fromTab=${returnTab}`);
     } else {
       setReturnToUrl(`/admin/dates?tab=${returnTab}`);
     }
@@ -457,7 +455,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
       if (isEditing) {
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-        const target = returnToUrl.startsWith('/shows/') ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
+        const target = (returnToUrl.startsWith('/shows/') || returnToUrl.startsWith('/admin/dates/')) ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
         window.dispatchEvent(new Event('tourbook:shows-updated'));
         window.location.href = target;
         return;
@@ -475,7 +473,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
 
     if (mode === 'dates') {
-      window.location.href = `/admin/shows/${encodeURIComponent(show.id)}?fromTab=${datesTab}`;
+      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
       return;
     }
 
@@ -541,34 +539,58 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (isEditing) {
+              if (dirty && !window.confirm('Discard changes? You have unsaved edits. Start a new date instead?')) return;
+              resetForm('Ready to create a new date.');
+            }
+            if (mode !== 'new') {
+              window.location.href = '/admin';
+            }
+          }}
+          className={adminTabClassName(mode === 'new' && !isEditing)}
+        >
+          New Date
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (mode === 'new') {
+              if (isEditing || dirty) {
+                if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return to Existing Dates instead?')) return;
+                window.location.href = returnToUrl;
+                return;
+              }
+              window.location.href = '/admin/dates';
+              return;
+            }
+            window.location.href = '/admin/dates';
+          }}
+          className={adminTabClassName(mode === 'dates' || isEditing)}
+        >
+          Existing Dates
+        </button>
+      </div>
+
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h1 className="text-[2rem] font-semibold tracking-tight">{isEditing ? 'Edit Date' : 'New Date'}</h1>
             <div className="flex items-center gap-2">
               {isEditing ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (dirty && !window.confirm('Discard current edits and start a new date?')) return;
-                      resetForm('Ready to create a new date.');
-                    }}
-                    className={secondaryButtonClassName()}
-                  >
-                    New Date
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (dirty && !window.confirm('Discard changes and return to the previous view?')) return;
-                      window.location.href = returnToUrl;
-                    }}
-                    className={secondaryButtonClassName()}
-                  >
-                    Cancel
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return instead?')) return;
+                    window.location.href = returnToUrl;
+                  }}
+                  className={secondaryButtonClassName()}
+                >
+                  Cancel
+                </button>
               ) : null}
               <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
                 {primaryActionLabel}
@@ -597,7 +619,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
             >
               <div className="grid gap-3">
                 <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),200px] md:items-center">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px] lg:items-center">
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
                 </div>
@@ -656,7 +678,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),220px]">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px]">
                       <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
                       <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
                     </div>
@@ -871,7 +893,7 @@ function ShowListSection({
         <h2 className="text-base font-semibold">{title}</h2>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <SearchInput value={search} onChange={onSearchChange} label="Search" />
+            <SearchInput value={search} onChange={onSearchChange} />
           </div>
           <div className="w-[132px] shrink-0 sm:w-[180px]">
             <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact hideLabel selectClassName={filterFieldClassName()} />
@@ -888,7 +910,7 @@ function ShowListSection({
             return (
               <div key={show.id} className="rounded-2xl bg-black/20 p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <Link href={`/admin/shows/${show.id}?fromTab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
+                  <Link href={`/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
                     <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
                     <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
@@ -916,6 +938,25 @@ function ShowListSection({
         )}
       </div>
     </section>
+  );
+}
+
+
+function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="relative">
+      <Input label="Search" value={value} onChange={onChange} placeholder="Search" compact hideLabel inputClassName={filterFieldClassName()} />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
+          aria-label="Clear search"
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -969,28 +1010,6 @@ function CalendarIcon({ className = 'h-4 w-4' }: { className?: string }) {
       <path d="M3 9H21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
       <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.75" />
     </svg>
-  );
-}
-
-
-function SearchInput({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
-  return (
-    <div className="relative">
-      <Input label={label} value={value} onChange={onChange} placeholder="Search" compact hideLabel inputClassName={`${filterFieldClassName()} pr-11`} />
-      {value ? (
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
-          aria-label="Clear search"
-        >
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
-            <path d="M6 6L14 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-            <path d="M14 6L6 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          </svg>
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -1075,7 +1094,7 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           id={pickerId}
           type="text"
           value={value}
-                    aria-label={label}
+          aria-label={label}
           onChange={(event) => onChange(event.target.value)}
           onBlur={(event) => commitNextValue(event.target.value)}
           className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
@@ -1205,6 +1224,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
             value={value}
             onChange={(event) => onChange(event.target.value)}
             className={`${fieldClassName()} min-w-0 flex-1`}
+            placeholder="Type a new tour name"
           />
         </label>
       ) : null}
@@ -1261,6 +1281,7 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
             value={value}
             onChange={(event) => onChange(event.target.value)}
             className={fieldClassName()}
+            placeholder="Type a new tour name"
           />
         </label>
       ) : null}

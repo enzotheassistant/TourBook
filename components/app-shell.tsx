@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 
 function tabClassName(active = false) {
@@ -13,8 +13,39 @@ function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
-function menuButtonClassName() {
-  return 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
+function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handle(event: MouseEvent) {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-xl text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Open menu">
+        …
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+          <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+            {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
+          </Link>
+          <div className="border-b border-white/10" />
+          <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+            Admin
+          </Link>
+          <div className="px-2 py-2">
+            <LogoutButton compact />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function AppShell({
@@ -24,7 +55,6 @@ export function AppShell({
   title = 'TourBook',
   subtitle = 'Touring crew dashboard',
   showSubtitle = true,
-  adminSection,
 }: {
   children: ReactNode;
   activeTab?: 'upcoming' | 'past';
@@ -32,38 +62,12 @@ export function AppShell({
   title?: string;
   subtitle?: string;
   showSubtitle?: boolean;
-  adminSection?: 'new' | 'dates';
 }) {
-  const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-crew-menu-root="true"]')) return;
-      setMenuOpen(false);
-    }
-
-    function closeMenu() {
-      setMenuOpen(false);
-    }
-
-    document.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('scroll', closeMenu);
-    window.addEventListener('resize', closeMenu);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('scroll', closeMenu);
-      window.removeEventListener('resize', closeMenu);
-    };
-  }, []);
-
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-    router.refresh();
-  }
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const actionHref = mode === 'admin' ? '/' : '/admin';
+  const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
+  const isCrewList = mode === 'crew' && pathname === '/';
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -71,54 +75,25 @@ export function AppShell({
         <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pt-4 sm:px-6">
           <div className="flex items-start justify-between gap-3 pb-4">
             <div className="min-w-0">
-              <Link href={mode === 'admin' ? '/admin' : activeTab === 'past' ? '/?tab=past' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
+              <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
                 {title}
               </Link>
               {showSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
             </div>
 
-            {mode === 'crew' ? (
-              <div data-crew-menu-root="true" className="relative flex shrink-0 items-center">
-                <button type="button" onClick={() => setMenuOpen((current) => !current)} className={menuButtonClassName()} aria-label="Open crew menu">
-                  …
-                </button>
-                {menuOpen ? (
-                  <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                    <Link href={activeTab === 'past' ? '/' : '/?tab=past'} className="block px-4 py-3 text-sm text-zinc-200">
-                      {activeTab === 'past' ? 'Upcoming' : 'Past'}
-                    </Link>
-                    <div className="border-t border-white/10" />
-                    <Link href="/admin" className="block px-4 py-3 text-sm text-zinc-200">
-                      Admin
-                    </Link>
-                    <button type="button" onClick={handleLogout} className="block w-full px-4 py-3 text-left text-sm text-zinc-200">
-                      Logout
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+            {isCrewList ? (
+              <CrewMenu activeTab={activeTab} />
             ) : (
               <div className="flex items-center gap-2 self-start">
-                <Link href="/" className={ghostButtonClassName()}>
-                  Crew View
+                <Link href={actionHref} className={ghostButtonClassName()}>
+                  {actionLabel}
                 </Link>
                 <LogoutButton />
               </div>
             )}
           </div>
-          {mode === 'admin' ? (
-            <>
-              <div className="border-t border-white/10" />
-              <div className="flex flex-wrap gap-2 py-4">
-                <Link href="/admin" className={tabClassName(adminSection === 'new')}>
-                  New Date
-                </Link>
-                <Link href="/admin/dates" className={tabClassName(adminSection === 'dates')}>
-                  Existing Dates
-                </Link>
-              </div>
-            </>
-          ) : null}
+          {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
+          {mode === 'admin' ? <div className="py-4" /> : null}
         </div>
       </header>
 
