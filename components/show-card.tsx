@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { formatShowDate, isToday } from '@/lib/date';
 import { Show } from '@/lib/types';
 
-export function ShowCard({ show }: { show: Show }) {
+export function ShowCard({ show, href }: { show: Show; href?: string }) {
   const today = isToday(show.date);
 
   return (
     <Link
-      href={`/shows/${show.id}`}
+      href={href ?? `/shows/${show.id}`}
       className={`block rounded-[28px] border px-5 py-4 shadow-sm transition active:scale-[0.99] ${
         today
           ? 'border-emerald-400/40 bg-emerald-500/[0.12]'

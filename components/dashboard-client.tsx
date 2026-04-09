@@ -11,6 +11,20 @@ function normalizeTourName(value: string) {
   return value.trim() || 'All';
 }
 
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function filterShows(shows: Show[], search: string, selectedTour: string) {
+  const normalizedSearch = normalizeSearch(search);
+  return shows.filter((show) => {
+    const matchesTour = selectedTour === 'All' || normalizeTourName(show.tour_name) === selectedTour;
+    const haystack = [show.city, show.region, show.venue_name, show.date, show.tour_name].join(' ').toLowerCase();
+    const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
+    return matchesTour && matchesSearch;
+  });
+}
+
 function sortTourNamesForUpcoming(shows: Show[]) {
   const byTour = new Map<string, string>();
 
@@ -43,7 +57,6 @@ function sortTourNamesForPast(shows: Show[]) {
     .map(([tour]) => tour);
 }
 
-
 function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel: string }) {
   return (
     <div className="relative w-[132px] shrink-0 sm:w-[176px]">
@@ -66,11 +79,40 @@ function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; 
   );
 }
 
+function SearchField({ value, onChange, ariaLabel }: { value: string; onChange: (value: string) => void; ariaLabel: string }) {
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search"
+        className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:bg-white/[0.03]"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+          aria-label="Clear search"
+        >
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4">
+            <path d="M6 6L14 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            <path d="M14 6L6 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function DashboardClient() {
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingTour, setUpcomingTour] = useState('All');
   const [pastTour, setPastTour] = useState('All');
+  const [upcomingSearch, setUpcomingSearch] = useState('');
+  const [pastSearch, setPastSearch] = useState('');
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
 
@@ -114,15 +156,8 @@ export function DashboardClient() {
     }
   }, [pastTour, pastTours]);
 
-  const filteredUpcomingShows = useMemo(
-    () => upcomingShows.filter((show) => upcomingTour === 'All' || normalizeTourName(show.tour_name) === upcomingTour),
-    [upcomingShows, upcomingTour],
-  );
-
-  const filteredPastShows = useMemo(
-    () => pastShows.filter((show) => pastTour === 'All' || normalizeTourName(show.tour_name) === pastTour),
-    [pastShows, pastTour],
-  );
+  const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingShows, upcomingSearch, upcomingTour]);
+  const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastShows, pastSearch, pastTour]);
 
   const pastByYear = useMemo(() => {
     const groups = new Map<number, Show[]>();
@@ -140,17 +175,15 @@ export function DashboardClient() {
   return (
     <div className="space-y-3">
       <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-5 py-5">
-        {tab === 'past' ? (
-          <div className="flex items-center justify-between gap-3">
-            <span className="whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">Past Dates</span>
-            <FilterSelect value={pastTour} onChange={setPastTour} options={pastTours} ariaLabel="Past dates tour filter" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">
+            {tab === 'past' ? 'Past Dates' : 'Upcoming Dates'}
+          </span>
+          <div className="flex items-center gap-2">
+            <SearchField value={tab === 'past' ? pastSearch : upcomingSearch} onChange={tab === 'past' ? setPastSearch : setUpcomingSearch} ariaLabel={tab === 'past' ? 'Search past dates' : 'Search upcoming dates'} />
+            <FilterSelect value={tab === 'past' ? pastTour : upcomingTour} onChange={tab === 'past' ? setPastTour : setUpcomingTour} options={tab === 'past' ? pastTours : upcomingTours} ariaLabel={tab === 'past' ? 'Past dates tour filter' : 'Upcoming dates tour filter'} />
           </div>
-        ) : (
-          <div className="flex items-center justify-between gap-3">
-            <span className="whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">Upcoming Dates</span>
-            <FilterSelect value={upcomingTour} onChange={setUpcomingTour} options={upcomingTours} ariaLabel="Upcoming dates tour filter" />
-          </div>
-        )}
+        </div>
       </div>
 
       {tab === 'past' ? (
@@ -160,12 +193,12 @@ export function DashboardClient() {
           <div className="space-y-5">
             {pastByYear.map(([year, items]) => (
               <section key={year} className="space-y-3">
-                <div className="sticky top-[100px] z-10 border-b border-white/10 bg-zinc-950/95 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur">
+                <div className="sticky top-[84px] z-10 border-b border-white/10 bg-zinc-950/95 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur">
                   {year}
                 </div>
                 <div className="grid gap-3">
                   {items.map((show) => (
-                    <ShowCard key={show.id} show={show} />
+                    <ShowCard key={show.id} show={show} href={`/shows/${show.id}?fromTab=past`} />
                   ))}
                 </div>
               </section>
@@ -177,7 +210,7 @@ export function DashboardClient() {
       ) : (
         <div className="grid gap-3">
           {filteredUpcomingShows.map((show) => (
-            <ShowCard key={show.id} show={show} />
+            <ShowCard key={show.id} show={show} href={`/shows/${show.id}?fromTab=upcoming`} />
           ))}
         </div>
       )}

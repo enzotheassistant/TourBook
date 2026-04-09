@@ -4,11 +4,10 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { GuestListManager } from '@/components/guest-list-manager';
-import { deleteShow } from '@/lib/data-client';
+import { deleteShow, exportGuestListCsv, getShow } from '@/lib/data-client';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { formatShowDate } from '@/lib/date';
-import { getShow } from '@/lib/data-client';
 import { Show } from '@/lib/types';
 
 function hasAccommodation(show: Show) {
@@ -24,16 +23,36 @@ function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
+function ArrowLeftIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M15 6L9 12L15 18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function viewButtonClassName(active: boolean) {
   return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
-export function ShowPageClient({ showId }: { showId: string }) {
+function MenuButton({ label, onClick, destructive = false }: { label: string; onClick: () => void; destructive?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full border-b border-white/5 px-4 py-3 text-left text-sm last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-200'}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
-  const adminMode = searchParams.get('admin') === '1';
+  const fromTab = searchParams.get('fromTab') === 'past' ? 'past' : 'upcoming';
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -54,12 +73,28 @@ export function ShowPageClient({ showId }: { showId: string }) {
       }
     }
 
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-show-menu-root="true"]')) return;
+      setMenuOpen(false);
+    }
+
+    function closeMenu() {
+      setMenuOpen(false);
+    }
+
     load();
     window.addEventListener('tourbook:shows-updated', load);
+    document.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('scroll', closeMenu);
+    window.addEventListener('resize', closeMenu);
 
     return () => {
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
+      document.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('scroll', closeMenu);
+      window.removeEventListener('resize', closeMenu);
     };
   }, [showId]);
 
@@ -80,6 +115,19 @@ export function ShowPageClient({ showId }: { showId: string }) {
     window.location.href = '/admin/dates';
   }
 
+  async function handleExport() {
+    if (!show) return;
+    const csv = await exportGuestListCsv(show.id);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${show.id}-guest-list.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMenuOpen(false);
+  }
+
   if (!loaded) {
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   }
@@ -93,37 +141,43 @@ export function ShowPageClient({ showId }: { showId: string }) {
     );
   }
 
+  const backHref = adminMode ? `/admin/dates?tab=${fromTab}` : fromTab === 'past' ? '/?tab=past' : '/';
+  const editHref = adminMode ? `/admin?edit=${show.id}&returnTo=admin-show&returnTab=${fromTab}` : `/admin?edit=${show.id}&returnTo=show`;
+
   return (
     <>
-      <div className="flex flex-col items-start gap-3 sm:gap-4">
-        <div className="flex w-full items-start justify-between gap-3">
-          <Link href={adminMode ? '/admin/dates' : '/'} className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
-            Back
+      <div className="flex items-start justify-between gap-3 rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4 sm:px-5">
+        <div className="min-w-0 flex items-start gap-3">
+          <Link href={backHref} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Go back">
+            <ArrowLeftIcon />
           </Link>
-          {adminMode ? (
-            <div className="relative flex items-center gap-2">
-              <Link href={`/admin?edit=${show.id}&returnTo=show`} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                <PencilIcon />
-              </Link>
-              <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">
-                …
-              </button>
-              {menuOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                  <Link href={`/admin?duplicate=${show.id}&returnTo=show`} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Duplicate date</Link>
-                  <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <div className="min-w-0">
+            <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
+            <h1 className="mt-1 text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
+            <p className="mt-1 break-words text-sm text-zinc-300 sm:text-base">{show.venue_name}</p>
+          </div>
         </div>
-        <div className="min-w-0 text-left">
-          <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
-          <p className="mt-1 break-words text-zinc-300">{show.venue_name}</p>
-          {show.tour_name ? <p className="mt-2 text-sm text-emerald-300">{show.tour_name}</p> : null}
-        </div>
+
+        {adminMode ? (
+          <div data-show-menu-root="true" className="relative flex shrink-0 items-center gap-2">
+            <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+              <PencilIcon />
+            </Link>
+            <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">
+              …
+            </button>
+            {menuOpen ? (
+              <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                <MenuButton label="Duplicate date" onClick={() => { window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=admin-show&returnTab=${fromTab}`; }} />
+                <MenuButton label="Export guest list" onClick={handleExport} />
+                <MenuButton label="Delete" destructive onClick={handleDelete} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      {show.tour_name ? <p className="px-1 text-sm font-medium uppercase tracking-[0.16em] text-emerald-300">{show.tour_name}</p> : null}
 
       <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
         <div className="grid grid-cols-2 gap-2">
