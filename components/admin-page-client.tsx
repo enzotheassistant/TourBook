@@ -685,9 +685,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
             >
               <div className="grid gap-3">
                 <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px] md:w-[52px]" />
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="md:col-span-2">
+                    <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                  </div>
+                  <div>
+                    <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px] md:w-[52px]" />
+                  </div>
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -744,9 +748,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),200px] md:items-center">
-                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
-                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="md:col-span-2">
+                        <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                      </div>
+                      <div>
+                        <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1167,57 +1175,50 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
     onChange(normalized || rawValue);
   }
 
+  function openPicker(event: React.MouseEvent<HTMLButtonElement>) {
+    const wrapper = event.currentTarget.parentElement;
+    const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
+    if (!dateInput) return;
+    if (typeof dateInput.showPicker === 'function') {
+      dateInput.showPicker();
+    } else {
+      dateInput.focus();
+      dateInput.click();
+    }
+  }
+
   return (
     <div className="flex items-center gap-3 text-sm text-zinc-300">
       <label htmlFor={pickerId} className="w-[72px] shrink-0 text-zinc-300">
         {label}
       </label>
-      <div className="min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
         <input
-          id={`${pickerId}-mobile`}
-          type="date"
-          value={parseFlexibleDateInput(value)}
+          id={pickerId}
+          type="text"
+          value={value}
           aria-label={label}
+          inputMode="numeric"
           onChange={(event) => onChange(event.target.value)}
-          className={`${fieldClassName()} min-w-0 flex-1 md:hidden`}
+          onBlur={(event) => commitNextValue(event.target.value)}
+          className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
         />
-        <div className="relative hidden min-w-0 flex-1 md:block">
-          <input
-            id={pickerId}
-            type="text"
-            value={value}
-            aria-label={label}
-            onChange={(event) => onChange(event.target.value)}
-            onBlur={(event) => commitNextValue(event.target.value)}
-            className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
-          />
-          <input
-            type="date"
-            tabIndex={-1}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-0"
-            value={parseFlexibleDateInput(value)}
-            onChange={(event) => onChange(event.target.value)}
-          />
-          <button
-            type="button"
-            aria-label={`Open ${label.toLowerCase()} calendar`}
-            className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
-            onClick={(event) => {
-              const wrapper = event.currentTarget.parentElement;
-              const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
-              if (!dateInput) return;
-              if (typeof dateInput.showPicker === 'function') {
-                dateInput.showPicker();
-              } else {
-                dateInput.focus();
-                dateInput.click();
-              }
-            }}
-          >
-            <CalendarIcon />
-          </button>
-        </div>
+        <input
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-0"
+          value={parseFlexibleDateInput(value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          aria-label={`Open ${label.toLowerCase()} calendar`}
+          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+          onClick={openPicker}
+        >
+          <CalendarIcon />
+        </button>
       </div>
     </div>
   );
