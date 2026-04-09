@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
 import { deleteShowServer, getShowServer, upsertShowServer } from '@/lib/server-store';
+import { isValidStoredDate } from '@/lib/date';
 import { ShowFormValues } from '@/lib/types';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,6 +24,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
   const body = (await request.json()) as ShowFormValues;
+
+  if (!isValidStoredDate(body.date)) {
+    return NextResponse.json({ error: 'Please enter a valid date in YYYY-MM-DD format.' }, { status: 400 });
+  }
+
   const show = await upsertShowServer({ ...body, id });
   return NextResponse.json(show);
 }

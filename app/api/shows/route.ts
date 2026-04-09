@@ -3,6 +3,7 @@ import { requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
 import { emptyShowForm } from '@/lib/defaults';
 import { listShowsServer, upsertShowServer } from '@/lib/server-store';
 import { normalizeShow } from '@/lib/normalize';
+import { isValidStoredDate } from '@/lib/date';
 import { ShowFormValues } from '@/lib/types';
 
 function slugify(value: string) {
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
   const date = body.date ?? '';
   const city = body.city ?? '';
   const venueName = body.venue_name ?? '';
+  if (!isValidStoredDate(date)) {
+    return NextResponse.json({ error: 'Please enter a valid date in YYYY-MM-DD format.' }, { status: 400 });
+  }
+
   const generatedId = `${slugify(city || 'show')}-${slugify(venueName || 'venue')}-${date || 'date'}`;
 
   const show = await upsertShowServer(
