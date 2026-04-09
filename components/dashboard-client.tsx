@@ -127,12 +127,12 @@ export function DashboardClient() {
             {pastByYear.map(([year, items]) => (
               <section key={year} className="space-y-3">
                 <div className="sticky top-[100px] z-10 border-b border-white/10 bg-zinc-950/95 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur">{year}</div>
-                <div className="grid gap-3">{items.map((show) => <ShowCard key={show.id} show={show} />)}</div>
+                <div className="grid gap-3">{items.map((show) => <ShowCard key={show.id} show={show} tab="past" />)}</div>
               </section>
             ))}
           </div>
         )
-      ) : filteredUpcomingShows.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No upcoming dates yet.</div> : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} />)}</div>}
+      ) : filteredUpcomingShows.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No upcoming dates yet.</div> : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} tab="upcoming" />)}</div>}
     </div>
   );
 }

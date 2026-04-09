@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { deleteShow, exportGuestListCsv, getShow } from '@/lib/data-client';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
-import { formatShowDate } from '@/lib/date';
+import { parseStoredDate } from '@/lib/date';
 import { Show } from '@/lib/types';
 
 function hasAccommodation(show: Show) {
@@ -27,6 +28,20 @@ function viewButtonClassName(active: boolean) {
   return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
+
+function formatHeaderDate(date: string) {
+  const parsed = parseStoredDate(date);
+  if (!parsed) return 'Date TBD';
+
+  const weekdayMonthDay = new Intl.DateTimeFormat('en-CA', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(parsed);
+
+  return `${weekdayMonthDay} · ${parsed.getFullYear()}`;
+}
+
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,6 +50,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
+  const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -60,6 +77,19 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
 
+  function requestConfirmation(options: { title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }) {
+    return new Promise<boolean>((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmState({ open: true, ...options });
+    });
+  }
+
+  function closeConfirmation(result: boolean) {
+    confirmResolverRef.current?.(result);
+    confirmResolverRef.current = null;
+    setConfirmState((current) => ({ ...current, open: false }));
+  }
+
   function setView(nextView: 'day-sheet' | 'guest-list') {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set('view', nextView);
@@ -68,7 +98,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
   async function handleDelete() {
     if (!show) return;
-    if (!window.confirm('Delete this show and its guest list?')) return;
+    const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
+    if (!confirmed) return;
     await deleteShow(show.id);
     window.dispatchEvent(new Event('tourbook:shows-updated'));
     window.location.href = '/admin/dates';
@@ -96,14 +127,23 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        description={confirmState.description}
+        confirmLabel={confirmState.confirmLabel}
+        tone={confirmState.tone}
+        onConfirm={() => closeConfirmation(true)}
+        onCancel={() => closeConfirmation(false)}
+      />
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <Link href={backHref} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
-            <div className="min-w-0">
-              <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
-              <p className="mt-1 text-zinc-300">{show.venue_name}</p>
+          <div className="grid min-w-0 flex-1 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3">
+            <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
+            <div className="min-w-0 pt-1">
+              <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
+              <p className="mt-0.5 truncate text-base text-zinc-300">{show.venue_name}</p>
+              <p className="mt-3 text-sm text-zinc-400">{formatHeaderDate(show.date)}</p>
             </div>
           </div>
 

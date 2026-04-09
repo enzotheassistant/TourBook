@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 
 function tabClassName(active = false) {
@@ -11,6 +11,10 @@ function tabClassName(active = false) {
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
+}
+
+function iconButtonClassName() {
+  return 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
 function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
@@ -82,7 +86,14 @@ export function AppShell({
             </div>
 
             {isCrewList ? (
-              <CrewMenu activeTab={activeTab} />
+              <div className="flex items-center gap-2">
+                {activeTab === 'past' ? (
+                  <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
+                    ←
+                  </Link>
+                ) : null}
+                <CrewMenu activeTab={activeTab} />
+              </div>
             ) : (
               <div className="flex items-center gap-2 self-start">
                 <Link href={actionHref} className={ghostButtonClassName()}>

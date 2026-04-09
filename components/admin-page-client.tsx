@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
-import { formatShowDate, isPastShow, isValidStoredDate } from '@/lib/date';
+import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues } from '@/lib/types';
 
@@ -217,7 +218,18 @@ function parseFlexibleDateInput(value: string) {
     }
   }
 
-  const parsed = new Date(trimmed);
+  const currentYear = new Date().getFullYear();
+  if (/^\d{1,2}-\d{1,2}$/.test(normalizedNumeric)) {
+    const [month, day] = normalizedNumeric.split('-').map(Number);
+    const candidate = new Date(currentYear, month - 1, day);
+    if (candidate.getFullYear() === currentYear && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+      return formatDateForStorage(candidate);
+    }
+  }
+
+  const hasExplicitYear = /\d{4}/.test(trimmed);
+  const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${currentYear}`;
+  const parsed = new Date(parseTarget);
   if (!Number.isNaN(parsed.getTime())) {
     return formatDateForStorage(new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
   }
@@ -243,8 +255,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const [pastTour, setPastTour] = useState('All');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
+  const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
+  const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   useEffect(() => {
     loadShows();
@@ -292,6 +306,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingSearch, upcomingTour, upcomingShows]);
   const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastSearch, pastTour, pastShows]);
   const availableTours = useMemo(() => Array.from(new Set(shows.map((show) => show.tour_name.trim()).filter(Boolean))).sort(), [shows]);
+
+  const pastShowsByYear = useMemo(() => {
+    const groups = new Map<string, Show[]>();
+    for (const show of filteredPastShows) {
+      const year = String(yearFromDate(show.date) ?? 'Unknown');
+      groups.set(year, [...(groups.get(year) ?? []), show]);
+    }
+    return Array.from(groups.entries()).sort((a, b) => {
+      if (a[0] === 'Unknown') return 1;
+      if (b[0] === 'Unknown') return -1;
+      return Number(b[0]) - Number(a[0]);
+    });
+  }, [filteredPastShows]);
 
   useEffect(() => {
     if (!upcomingTours.includes(upcomingTour)) setUpcomingTour('All');
@@ -362,6 +389,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   async function loadShows() {
     const nextShows = await listShows();
     setShows(nextShows);
+  }
+
+  function requestConfirmation(options: { title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }) {
+    return new Promise<boolean>((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmState({ open: true, ...options });
+    });
+  }
+
+  function closeConfirmation(result: boolean) {
+    confirmResolverRef.current?.(result);
+    confirmResolverRef.current = null;
+    setConfirmState((current) => ({ ...current, open: false }));
   }
 
   function updateForm(mutator: (current: ShowFormValues) => ShowFormValues) {
@@ -517,7 +557,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }
 
   async function handleDelete(showId: string) {
-    const confirmed = window.confirm('Delete this show and its guest list?');
+    const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
     if (!confirmed) return;
 
     await deleteShow(showId);
@@ -546,17 +586,34 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
   return (
     <div className="space-y-4">
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        description={confirmState.description}
+        confirmLabel={confirmState.confirmLabel}
+        tone={confirmState.tone}
+        onConfirm={() => closeConfirmation(true)}
+        onCancel={() => closeConfirmation(false)}
+      />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => {
-            if (isEditing) {
-              if (dirty && !window.confirm('Discard changes? You have unsaved edits. Start a new date instead?')) return;
+          onClick={async () => {
+            if (mode === 'new') {
+              if (dirty || isEditing) {
+                const confirmed = await requestConfirmation({
+                  title: 'Discard edits?',
+                  description: isEditing
+                    ? 'You have unsaved edits. Start a new date instead?'
+                    : 'You have unsaved changes. Start a fresh new date?',
+                  confirmLabel: 'Discard',
+                });
+                if (!confirmed) return;
+              }
               resetForm('Ready to create a new date.');
+              return;
             }
-            if (mode !== 'new') {
-              window.location.href = '/admin';
-            }
+            window.location.href = '/admin';
           }}
           className={adminTabClassName(mode === 'new' && !isEditing)}
         >
@@ -564,10 +621,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
         </button>
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             if (mode === 'new') {
               if (isEditing || dirty) {
-                if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return to Existing Dates instead?')) return;
+                const confirmed = !dirty || await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
+                if (!confirmed) return;
                 window.location.href = returnToUrl;
                 return;
               }
@@ -590,8 +648,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
               {isEditing ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (dirty && !window.confirm('Discard changes? You have unsaved edits. Return instead?')) return;
+                  onClick={async () => {
+                    const confirmed = !dirty || await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return instead?', confirmLabel: 'Discard' });
+                    if (!confirmed) return;
                     window.location.href = returnToUrl;
                   }}
                   className={secondaryButtonClassName()}
@@ -626,9 +685,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
             >
               <div className="grid gap-3">
                 <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px] lg:items-center">
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px] md:w-[52px]" />
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -685,9 +744,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px]">
-                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),200px] md:items-center">
+                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
+                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
                     </div>
                   </div>
                 ))}
@@ -787,6 +846,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                 onTourChange={setPastTour}
                 tours={pastTours}
                 shows={filteredPastShows}
+                groupedShows={pastShowsByYear}
+                stickyYears
                 openMenuId={openMenuId}
                 onToggleMenu={setOpenMenuId}
                 onEdit={loadShow}
@@ -873,6 +934,8 @@ function ShowListSection({
   onTourChange,
   tours,
   shows,
+  groupedShows,
+  stickyYears = false,
   openMenuId,
   onToggleMenu,
   onEdit,
@@ -887,6 +950,8 @@ function ShowListSection({
   onTourChange: (value: string) => void;
   tours: string[];
   shows: Show[];
+  groupedShows?: Array<[string, Show[]]>;
+  stickyYears?: boolean;
   openMenuId: string | null;
   onToggleMenu: (value: string | null) => void;
   onEdit: (show: Show) => void;
@@ -894,6 +959,37 @@ function ShowListSection({
   onDelete: (showId: string) => void;
   onDuplicate: (show: Show) => void;
 }) {
+  function renderShowListItem(show: Show) {
+    const menuOpen = openMenuId === show.id;
+    return (
+      <div key={show.id} className="rounded-2xl bg-black/20 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <Link href={`/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
+            <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
+            <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
+            <p className="text-sm text-zinc-300">{show.venue_name}</p>
+            {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
+          </Link>
+          <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
+            <button type="button" onClick={() => onEdit(show)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+              <PencilIcon />
+            </button>
+            <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
+              …
+            </button>
+            {menuOpen ? (
+              <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
+                <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
+                <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
@@ -911,37 +1007,15 @@ function ShowListSection({
       <div className="mt-3 space-y-3">
         {shows.length === 0 ? (
           <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">No shows match this filter.</div>
+        ) : groupedShows && groupedShows.length > 0 ? (
+          groupedShows.map(([year, items]) => (
+            <section key={year} className="space-y-3">
+              <div className={`border-b border-white/10 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur ${stickyYears ? 'sticky top-[96px] z-10 bg-zinc-950/95' : ''}`}>{year}</div>
+              <div className="space-y-3">{items.map((show) => renderShowListItem(show))}</div>
+            </section>
+          ))
         ) : (
-          shows.map((show) => {
-            const menuOpen = openMenuId === show.id;
-            return (
-              <div key={show.id} className="rounded-2xl bg-black/20 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <Link href={`/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
-                    <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
-                    <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
-                    <p className="text-sm text-zinc-300">{show.venue_name}</p>
-                    {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
-                  </Link>
-                  <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
-                    <button type="button" onClick={() => onEdit(show)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                      <PencilIcon />
-                    </button>
-                    <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
-                      …
-                    </button>
-                    {menuOpen ? (
-                      <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                        <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
-                        <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
-                        <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+          shows.map((show) => renderShowListItem(show))
         )}
       </div>
     </section>
@@ -1061,16 +1135,18 @@ function InlineInput({
   onChange,
   type = 'text',
   placeholder,
+  labelWidthClassName,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  labelWidthClassName?: string;
 }) {
   return (
     <label className="flex items-center gap-3 text-sm text-zinc-300">
-      <span className="w-[72px] shrink-0 text-zinc-300">{label}</span>
+      <span className={`${labelWidthClassName ?? 'w-[72px]'} shrink-0 text-zinc-300`}>{label}</span>
       <input
         type={type}
         value={value}
@@ -1084,7 +1160,7 @@ function InlineInput({
 }
 
 function FlexibleDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const pickerId = `date-picker-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const pickerId = useId();
 
   function commitNextValue(rawValue: string) {
     const normalized = parseFlexibleDateInput(rawValue);
@@ -1096,42 +1172,52 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
       <label htmlFor={pickerId} className="w-[72px] shrink-0 text-zinc-300">
         {label}
       </label>
-      <div className="relative min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
         <input
-          id={pickerId}
-          type="text"
-          value={value}
+          id={`${pickerId}-mobile`}
+          type="date"
+          value={parseFlexibleDateInput(value)}
           aria-label={label}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={(event) => commitNextValue(event.target.value)}
-          className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
+          className={`${fieldClassName()} min-w-0 flex-1 md:hidden`}
         />
-        <input
-          type="date"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-0"
-          value={parseFlexibleDateInput(value)}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <button
-          type="button"
-          aria-label={`Open ${label.toLowerCase()} calendar`}
-          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
-          onClick={(event) => {
-            const wrapper = event.currentTarget.parentElement;
-            const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
-            if (!dateInput) return;
-            if (typeof dateInput.showPicker === 'function') {
-              dateInput.showPicker();
-            } else {
-              dateInput.focus();
-              dateInput.click();
-            }
-          }}
-        >
-          <CalendarIcon />
-        </button>
+        <div className="relative hidden min-w-0 flex-1 md:block">
+          <input
+            id={pickerId}
+            type="text"
+            value={value}
+            aria-label={label}
+            onChange={(event) => onChange(event.target.value)}
+            onBlur={(event) => commitNextValue(event.target.value)}
+            className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
+          />
+          <input
+            type="date"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-0"
+            value={parseFlexibleDateInput(value)}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <button
+            type="button"
+            aria-label={`Open ${label.toLowerCase()} calendar`}
+            className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
+            onClick={(event) => {
+              const wrapper = event.currentTarget.parentElement;
+              const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
+              if (!dateInput) return;
+              if (typeof dateInput.showPicker === 'function') {
+                dateInput.showPicker();
+              } else {
+                dateInput.focus();
+                dateInput.click();
+              }
+            }}
+          >
+            <CalendarIcon />
+          </button>
+        </div>
       </div>
     </div>
   );
