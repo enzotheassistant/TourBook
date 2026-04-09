@@ -717,7 +717,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {isEditing && form.status !== 'draft' ? (
+              {isEditing ? (
                 <button
                   type="button"
                   onClick={async () => {
@@ -729,7 +729,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   }}
                   className={secondaryButtonClassName()}
                 >
-                  Cancel
+                  Back
                 </button>
               ) : null}
               {isEditingDraft ? (
@@ -786,9 +786,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px]" />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
                 </div>
-                <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-                  <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
-                  <Input label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
+                <div className="hidden items-center gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -1088,7 +1088,11 @@ function ShowListSection({
 }) {
   function renderShowListItem(show: Show) {
     const menuOpen = openMenuId === show.id;
-    const href = mode === 'drafts' ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}` : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
+    const href = mode === 'drafts'
+      ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`
+      : show.status === 'draft'
+        ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent(`/admin/dates?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`)}`
+        : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
     return (
       <div key={show.id} className={`rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between gap-3">
@@ -1301,10 +1305,23 @@ function InlineInput({
 
 function FlexibleDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const pickerId = useId();
+  const pickerInputRef = useRef<HTMLInputElement | null>(null);
 
   function commitNextValue(rawValue: string) {
     const normalized = parseFlexibleDateInput(rawValue);
     onChange(normalized || rawValue);
+  }
+
+  function openPicker() {
+    const picker = pickerInputRef.current;
+    if (!picker) return;
+    const pickerWithShow = picker as HTMLInputElement & { showPicker?: () => void };
+    if (typeof pickerWithShow.showPicker === 'function') {
+      pickerWithShow.showPicker();
+      return;
+    }
+    picker.focus();
+    picker.click();
   }
 
   return (
@@ -1323,13 +1340,20 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           onBlur={(event) => commitNextValue(event.target.value)}
           className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
         />
-        <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition">
-          <CalendarIcon />
-        </span>
-        <input
-          type="date"
+        <button
+          type="button"
           aria-label={`Choose ${label.toLowerCase()}`}
-          className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 cursor-pointer opacity-0"
+          onClick={openPicker}
+          className="absolute inset-y-0 right-2 inline-flex w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.05] hover:text-zinc-200"
+        >
+          <CalendarIcon />
+        </button>
+        <input
+          ref={pickerInputRef}
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="absolute right-3 top-1/2 h-8 w-8 -translate-y-1/2 opacity-0 pointer-events-none"
           value={parseFlexibleDateInput(value)}
           onChange={(event) => onChange(event.target.value)}
         />
