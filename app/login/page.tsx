@@ -38,8 +38,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl">
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Crew login</h1>
-        <p className="mt-2 text-sm text-zinc-300">Enter the shared crew password to open the tour dashboard.</p>
-
+        
         <form onSubmit={handleSubmit} className="mt-6 space-y-3">
           <label className="grid gap-2">
             <span className="text-sm text-zinc-300">Password</span>

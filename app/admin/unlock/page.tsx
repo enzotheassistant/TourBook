@@ -45,8 +45,7 @@ export default function AdminUnlockPage() {
         <div className="flex items-start justify-between gap-3 pb-4">
           <div>
             <Link href="/" className="text-2xl font-semibold tracking-tight">TourBook</Link>
-            <p className="mt-1 text-xs text-zinc-500 sm:text-sm">Admin tools are locked.</p>
-          </div>
+                      </div>
           <Link href="/" className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
             Back to crew view
           </Link>
@@ -57,10 +56,9 @@ export default function AdminUnlockPage() {
         <div className="w-full rounded-[28px] border border-white/10 bg-white/[0.045] p-6 shadow-2xl">
           <p className="text-xs uppercase tracking-[0.22em] text-zinc-500">Protected area</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Admin unlock</h1>
-          <p className="mt-2 text-sm text-zinc-300">Enter the admin password to open editing tools.</p>
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                    <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <label className="grid gap-2">
-              <span className="text-sm text-zinc-300">Admin password</span>
+              <span className="text-sm text-zinc-300">Enter admin password</span>
               <input
                 type="password"
                 value={password}

@@ -137,31 +137,30 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         onCancel={() => closeConfirmation(false)}
       />
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="grid min-w-0 flex-1 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3">
-            <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
-            <div className="min-w-0 pt-1">
-              <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
-              <p className="mt-0.5 truncate text-base text-zinc-300">{show.venue_name}</p>
-              <p className="mt-3 text-sm text-zinc-400">{formatHeaderDate(show.date)}</p>
-            </div>
-          </div>
-
-          {adminMode ? (
-            <div className="relative flex items-center gap-2">
-              <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                <PencilIcon />
-              </Link>
-              <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
-              {menuOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                  <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
-                  <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
-                  <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
+        <div className="grid min-w-0 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
+          <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
+            <p className="mt-0.5 truncate text-base text-zinc-300">{show.venue_name}</p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="min-w-0 text-sm text-zinc-400">{formatHeaderDate(show.date)}</p>
+              {adminMode ? (
+                <div className="relative flex shrink-0 items-center gap-2">
+                  <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+                    <PencilIcon />
+                  </Link>
+                  <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
+                  {menuOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
+                      <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
+                      <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
+                      <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
 
         {show.tour_name ? <p className="text-sm text-emerald-300">{show.tour_name}</p> : null}

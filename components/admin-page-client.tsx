@@ -20,7 +20,7 @@ function bubbleClassName() {
 }
 
 function primaryButtonClassName() {
-  return 'inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-medium text-zinc-950 transition disabled:opacity-60';
+  return 'inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60';
 }
 
 function secondaryButtonClassName() {
@@ -28,7 +28,7 @@ function secondaryButtonClassName() {
 }
 
 function dangerButtonClassName() {
-  return 'inline-flex h-10 items-center justify-center rounded-full border border-red-500/30 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:bg-red-500/10';
+  return 'inline-flex h-10 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
 }
 
 function filterShows(shows: Show[], search: string, selectedTour: string) {
@@ -210,22 +210,32 @@ function parseFlexibleDateInput(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return '';
 
-  const normalizedNumeric = trimmed.replace(/\//g, '-');
-  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalizedNumeric)) {
-    const [year, month, day] = normalizedNumeric.split('-').map(Number);
+  const normalized = trimmed.replace(/[./]/g, '-').replace(/\s+/g, ' ');
+
+  const tryParts = (year: number, month: number, day: number) => {
     const candidate = new Date(year, month - 1, day);
     if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
       return formatDateForStorage(candidate);
     }
+    return '';
+  };
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split('-').map(Number);
+    return tryParts(year, month, day);
   }
 
   const currentYear = new Date().getFullYear();
-  if (/^\d{1,2}-\d{1,2}$/.test(normalizedNumeric)) {
-    const [month, day] = normalizedNumeric.split('-').map(Number);
-    const candidate = new Date(currentYear, month - 1, day);
-    if (candidate.getFullYear() === currentYear && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
-      return formatDateForStorage(candidate);
-    }
+
+  if (/^\d{1,2}-\d{1,2}$/.test(normalized)) {
+    const [month, day] = normalized.split('-').map(Number);
+    return tryParts(currentYear, month, day);
+  }
+
+  if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(normalized)) {
+    let [month, day, year] = normalized.split('-').map(Number);
+    if (year < 100) year += 2000;
+    return tryParts(year, month, day);
   }
 
   const hasExplicitYear = /\b\d{4}\b/.test(trimmed);
@@ -258,6 +268,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [draftSearch, setDraftSearch] = useState('');
   const [draftTour, setDraftTour] = useState('All');
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
+  const [returnLabel, setReturnLabel] = useState('Existing Dates');
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
@@ -355,11 +366,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     if (returnTo && returnTo !== 'dates' && (editId || duplicateId)) {
       setReturnToUrl(returnTo);
+      setReturnLabel(returnTo === '/admin/drafts' ? 'Drafts' : 'Existing Dates');
     } else if (returnTo === 'show' && (editId || duplicateId)) {
       const targetId = editId ?? duplicateId;
       setReturnToUrl(`/shows/${encodeURIComponent(targetId ?? '')}?admin=1`);
+      setReturnLabel('Date');
     } else {
       setReturnToUrl(`/admin/dates?tab=${returnTab}`);
+      setReturnLabel('Existing Dates');
     }
 
     if (!nextAction || handledLoadRef.current === nextAction) return;
@@ -377,7 +391,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setVisibilityModes(visibilityModesForLoadedForm(duplicated));
         setForm(duplicated);
         setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
-        setMessage('Date duplicated into a new draft. Pick the new date and save.');
+        setMessage('Date duplicated');
         setDirty(false);
       }
     } else if (editId) {
@@ -386,7 +400,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setVisibilityModes(visibilityModesForLoadedForm(source));
         setForm(source);
         setExpandedSections(getExpandedSectionsForPopulatedForm(source));
-        setMessage('Loaded date into editor.');
+        setMessage('Loaded into editor');
         setDirty(false);
       }
     }
@@ -429,7 +443,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
   }
 
-  function resetForm(nextMessage = 'Ready to create a new date.') {
+  function resetForm(nextMessage = 'Ready to create') {
     const nextModes = defaultVisibilityModes();
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
@@ -564,7 +578,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(show));
     setForm(show);
     setExpandedSections(getExpandedSectionsForPopulatedForm(show));
-    setMessage('Loaded date into editor.');
+    setMessage('Loaded into editor');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -588,7 +602,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);
     setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
-    setMessage('Date duplicated into a new draft. Pick the new date and save.');
+    setMessage('Date duplicated');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -665,7 +679,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 });
                 if (!confirmed) return;
               }
-              resetForm('Ready to create a new date.');
+              resetForm('Ready to create');
               return;
             }
             window.location.href = '/admin';
@@ -713,25 +727,28 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="min-h-[2rem]">
-              {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex min-h-[2.5rem] items-start gap-3">
               {isEditing ? (
                 <button
                   type="button"
                   onClick={async () => {
                     if (dirty) {
-                      const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return instead?', confirmLabel: 'Discard' });
+                      const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
                       if (!confirmed) return;
                     }
                     window.location.href = returnToUrl;
                   }}
-                  className={secondaryButtonClassName()}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                  aria-label={`Back to ${returnLabel}`}
                 >
-                  Back
+                  ←
                 </button>
               ) : null}
+              <div className="pt-1">
+                {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {isEditingDraft ? (
                 <>
                   <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
@@ -761,16 +778,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </div>
           </div>
 
-          {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
-
-          <div className="mb-4 flex items-center justify-end gap-3 text-xs text-zinc-500">
-            <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
-              Expand all
-            </button>
-            <span className="text-zinc-700">•</span>
-            <button type="button" onClick={collapseAllSections} className="transition hover:text-zinc-300">
-              Collapse all
-            </button>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+            <div className="min-h-[1rem] text-emerald-300/90">{message || ''}</div>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
+                Expand all
+              </button>
+              <span className="text-zinc-700">•</span>
+              <button type="button" onClick={collapseAllSections} className="transition hover:text-zinc-300">
+                Collapse all
+              </button>
+            </div>
           </div>
 
           <form id="admin-show-form" onSubmit={handleSubmit} className="grid gap-3">
@@ -925,7 +943,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </section>
       ) : (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
-          {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
+          <div className="mb-4 min-h-[1rem] text-xs text-emerald-300/90">{message || ''}</div>
           {isDraftsMode ? (
             <ShowListSection
               title="Drafts"
@@ -1093,6 +1111,7 @@ function ShowListSection({
       : show.status === 'draft'
         ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent(`/admin/dates?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`)}`
         : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
+
     return (
       <div key={show.id} className={`rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between gap-3">
@@ -1105,18 +1124,35 @@ function ShowListSection({
             <p className="text-sm text-zinc-300">{show.venue_name}</p>
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
+
           <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
-            <button type="button" onClick={() => onEdit(show)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+            <button
+              type="button"
+              onClick={() => onEdit(show)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              aria-label="Edit date"
+            >
               <PencilIcon />
             </button>
-            <button type="button" onClick={() => onToggleMenu(menuOpen ? null : show.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">
+            <button
+              type="button"
+              onClick={() => onToggleMenu(menuOpen ? null : show.id)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              aria-label="More actions"
+            >
               …
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+              <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
                 {mode === 'drafts' ? (
                   <>
                     <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
+                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+                  </>
+                ) : show.status === 'draft' ? (
+                  <>
+                    <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
+                    <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
                     <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
                   </>
                 ) : (
@@ -1309,12 +1345,16 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
 
   function commitNextValue(rawValue: string) {
     const normalized = parseFlexibleDateInput(rawValue);
-    onChange(normalized || rawValue);
+    onChange(normalized || rawValue.trim());
   }
 
   function openPicker() {
     const picker = pickerInputRef.current;
     if (!picker) return;
+    const normalizedValue = parseFlexibleDateInput(value);
+    if (normalizedValue) {
+      picker.value = normalizedValue;
+    }
     const pickerWithShow = picker as HTMLInputElement & { showPicker?: () => void };
     if (typeof pickerWithShow.showPicker === 'function') {
       pickerWithShow.showPicker();
@@ -1336,8 +1376,15 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           value={value}
           aria-label={label}
           inputMode="numeric"
+          placeholder="YYYY-MM-DD"
           onChange={(event) => onChange(event.target.value)}
           onBlur={(event) => commitNextValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              commitNextValue((event.target as HTMLInputElement).value);
+            }
+          }}
           className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
         />
         <button
@@ -1353,7 +1400,7 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           type="date"
           tabIndex={-1}
           aria-hidden="true"
-          className="absolute right-3 top-1/2 h-8 w-8 -translate-y-1/2 opacity-0 pointer-events-none"
+          className="pointer-events-none absolute right-3 top-1/2 h-8 w-8 -translate-y-1/2 opacity-0"
           value={parseFlexibleDateInput(value)}
           onChange={(event) => onChange(event.target.value)}
         />
