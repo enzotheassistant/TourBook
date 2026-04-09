@@ -72,7 +72,7 @@ function fieldClassName() {
 }
 
 function filterFieldClassName() {
-  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
+  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
@@ -315,9 +315,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     const returnTab = searchParams.get('returnTab') === 'past' ? 'past' : 'upcoming';
     const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
 
-    if (returnTo && returnTo !== 'dates' && (editId || duplicateId)) {
-      setReturnToUrl(returnTo);
-    } else if (returnTo === 'show' && (editId || duplicateId)) {
+    if (returnTo === 'show' && (editId || duplicateId)) {
       const targetId = editId ?? duplicateId;
       setReturnToUrl(`/shows/${encodeURIComponent(targetId ?? '')}?admin=1`);
     } else {
@@ -455,7 +453,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
 
       if (isEditing) {
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-        const target = (returnToUrl.startsWith('/shows/') || returnToUrl.startsWith('/admin/dates/')) ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
+        const target = returnToUrl.startsWith('/shows/') ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
         window.dispatchEvent(new Event('tourbook:shows-updated'));
         window.location.href = target;
         return;
@@ -621,7 +619,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                 <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px] lg:items-center">
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} placeholder="ON" />
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -680,7 +678,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                     </div>
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px]">
                       <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
+                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} placeholder="7:30 PM or TBD" />
                     </div>
                   </div>
                 ))}
@@ -893,7 +891,7 @@ function ShowListSection({
         <h2 className="text-base font-semibold">{title}</h2>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <SearchInput value={search} onChange={onSearchChange} />
+            <Input label="Search" value={search} onChange={onSearchChange} placeholder="Search" compact hideLabel inputClassName={filterFieldClassName()} />
           </div>
           <div className="w-[132px] shrink-0 sm:w-[180px]">
             <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact hideLabel selectClassName={filterFieldClassName()} />
@@ -910,7 +908,7 @@ function ShowListSection({
             return (
               <div key={show.id} className="rounded-2xl bg-black/20 p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <Link href={`/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
+                  <Link href={`/shows/${show.id}?admin=1`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
                     <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
                     <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
                     <p className="text-sm text-zinc-300">{show.venue_name}</p>
@@ -938,25 +936,6 @@ function ShowListSection({
         )}
       </div>
     </section>
-  );
-}
-
-
-function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <div className="relative">
-      <Input label="Search" value={value} onChange={onChange} placeholder="Search" compact hideLabel inputClassName={filterFieldClassName()} />
-      {value ? (
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
-          aria-label="Clear search"
-        >
-          ×
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -1094,6 +1073,7 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           id={pickerId}
           type="text"
           value={value}
+          placeholder="Apr 22, 2026"
           aria-label={label}
           onChange={(event) => onChange(event.target.value)}
           onBlur={(event) => commitNextValue(event.target.value)}

@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ReactNode } from 'react';
 import { LogoutButton } from '@/components/logout-button';
 
 function tabClassName(active = false) {
@@ -11,41 +10,6 @@ function tabClassName(active = false) {
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
-}
-
-function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handle(event: MouseEvent) {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-xl text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Open menu">
-        …
-      </button>
-      {open ? (
-        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-          <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-            {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
-          </Link>
-          <div className="border-b border-white/10" />
-          <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-            Admin
-          </Link>
-          <div className="px-2 py-2">
-            <LogoutButton compact />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export function AppShell({
@@ -63,11 +27,8 @@ export function AppShell({
   subtitle?: string;
   showSubtitle?: boolean;
 }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
-  const isCrewList = mode === 'crew' && pathname === '/';
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -81,18 +42,24 @@ export function AppShell({
               {showSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
             </div>
 
-            {isCrewList ? (
-              <CrewMenu activeTab={activeTab} />
-            ) : (
-              <div className="flex items-center gap-2 self-start">
-                <Link href={actionHref} className={ghostButtonClassName()}>
-                  {actionLabel}
-                </Link>
-                <LogoutButton />
-              </div>
-            )}
+            <div className="flex items-center gap-2 self-start">
+              <Link href={actionHref} className={ghostButtonClassName()}>
+                {actionLabel}
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
-          {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
+          <div className="border-t border-white/10" />
+          {mode === 'crew' ? (
+            <div className="flex items-center gap-2 py-4 text-sm">
+              <Link href="/?tab=upcoming" className={tabClassName(activeTab === 'upcoming')}>
+                Upcoming
+              </Link>
+              <Link href="/?tab=past" className={tabClassName(activeTab === 'past')}>
+                Past
+              </Link>
+            </div>
+          ) : null}
           {mode === 'admin' ? <div className="py-4" /> : null}
         </div>
       </header>
