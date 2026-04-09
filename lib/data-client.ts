@@ -20,8 +20,9 @@ async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise
   return response.json() as Promise<T>;
 }
 
-export function listShows() {
-  return request<Show[]>('/api/shows');
+export function listShows(includeDrafts = false) {
+  const query = includeDrafts ? '?includeDrafts=1' : '';
+  return request<Show[]>(`/api/shows${query}`);
 }
 
 export function getShow(id: string) {

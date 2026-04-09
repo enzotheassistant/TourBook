@@ -1,4 +1,5 @@
 import { createEmptyScheduleItems } from '@/lib/defaults';
+import { deriveShowStatus } from '@/lib/drafts';
 import { GuestListEntry, ScheduleItem, Show, ShowFormValues } from '@/lib/types';
 
 function makeScheduleId() {
@@ -38,6 +39,7 @@ export function normalizeShow(show: Partial<ShowFormValues> & { id?: string }): 
     notes: show.notes ?? '',
     guest_list_notes: show.guest_list_notes ?? '',
     created_at: show.created_at ?? new Date().toISOString(),
+    status: deriveShowStatus(show.id, show.status),
     visibility: {
       show_venue: show.visibility?.show_venue ?? true,
       show_parking_load_info: show.visibility?.show_parking_load_info ?? true,

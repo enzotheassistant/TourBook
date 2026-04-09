@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
+import { createPublishedId } from '@/lib/drafts';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
-import { Show, ShowFormValues } from '@/lib/types';
+import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -227,7 +228,7 @@ function parseFlexibleDateInput(value: string) {
     }
   }
 
-  const hasExplicitYear = /\d{4}/.test(trimmed);
+  const hasExplicitYear = /\b\d{4}\b/.test(trimmed);
   const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${currentYear}`;
   const parsed = new Date(parseTarget);
   if (!Number.isNaN(parsed.getTime())) {
@@ -237,10 +238,10 @@ function parseFlexibleDateInput(value: string) {
   return '';
 }
 
-export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
-  const router = useRouter();
+export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
+  const isDraftsMode = mode === 'drafts';
   const statusMessage = searchParams.get('message');
   const [shows, setShows] = useState<Show[]>([]);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
@@ -254,6 +255,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   const [upcomingTour, setUpcomingTour] = useState('All');
   const [pastTour, setPastTour] = useState('All');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [draftSearch, setDraftSearch] = useState('');
+  const [draftTour, setDraftTour] = useState('All');
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const formRef = useRef<HTMLDivElement | null>(null);
@@ -299,13 +302,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }, []);
 
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
-  const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
+  const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
+  const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)).sort((a,b)=>a.date.localeCompare(b.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
   const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows)], [upcomingShows]);
   const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows)], [pastShows]);
   const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingSearch, upcomingTour, upcomingShows]);
   const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastSearch, pastTour, pastShows]);
   const availableTours = useMemo(() => Array.from(new Set(shows.map((show) => show.tour_name.trim()).filter(Boolean))).sort(), [shows]);
+  const draftTours = useMemo(() => ['All', ...Array.from(new Set(draftShows.map((show) => show.tour_name.trim()).filter(Boolean))).sort()], [draftShows]);
+
+  const filteredDraftShows = useMemo(() => filterShows(draftShows, draftSearch, draftTour), [draftSearch, draftTour, draftShows]);
 
   const pastShowsByYear = useMemo(() => {
     const groups = new Map<string, Show[]>();
@@ -329,7 +336,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }, [pastTour, pastTours]);
 
   useEffect(() => {
-    if (mode !== 'dates' || !statusMessage) return;
+    if (!draftTours.includes(draftTour)) setDraftTour('All');
+  }, [draftTour, draftTours]);
+
+  useEffect(() => {
+    if ((mode !== 'dates' && mode !== 'drafts') || !statusMessage) return;
     setMessage(statusMessage);
   }, [mode, statusMessage]);
 
@@ -387,7 +398,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
   }, [mode, searchParams, shows]);
 
   async function loadShows() {
-    const nextShows = await listShows();
+    const nextShows = await listShows(true);
     setShows(nextShows);
   }
 
@@ -482,33 +493,49 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     });
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!isValidStoredDate(form.date)) {
-      setMessage('Enter a valid date before saving. Use the date picker or YYYY-MM-DD.');
-      setSaving(false);
+  async function saveShow(requestedStatus: ShowStatus) {
+    if (requestedStatus === 'published' && !isValidStoredDate(form.date)) {
+      setMessage('Enter a valid date before publishing. Use the date picker or YYYY-MM-DD.');
       return;
     }
 
     setSaving(true);
 
     try {
-      const generatedId = `${slugify(form.city || 'show')}-${slugify(form.venue_name || 'venue')}-${form.date || 'date'}`;
-      const show = await upsertShow({ ...form, id: form.id || generatedId, tour_name: form.tour_name.trim(), region: form.region.trim().toUpperCase() });
+      const publishedId = createPublishedId(form.city, form.venue_name, form.date);
+      const show = await upsertShow({
+        ...form,
+        id: requestedStatus === 'draft' ? form.id : (form.id && form.status === 'draft' ? form.id : (form.id || publishedId)),
+        status: requestedStatus,
+        tour_name: form.tour_name.trim(),
+        region: form.region.trim().toUpperCase(),
+      });
       await loadShows();
       setDirty(false);
+      setForm(show);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
 
+      if (requestedStatus === 'draft') {
+        if (isEditing) {
+          setMessage('Draft saved.');
+        } else {
+          resetForm('Draft saved. Form cleared for the next date.');
+        }
+        return;
+      }
+
       if (isEditing) {
+        if (form.status === 'draft') {
+          window.location.href = `/admin/dates/${encodeURIComponent(show.id)}?tab=${isPastShow(show.date) ? 'past' : 'upcoming'}&message=${encodeURIComponent('Draft published.')}`;
+          return;
+        }
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
         const target = (returnToUrl.startsWith('/shows/') || returnToUrl.startsWith('/admin/dates/')) ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
-        window.dispatchEvent(new Event('tourbook:shows-updated'));
         window.location.href = target;
         return;
-      } else {
-        resetForm('Show created. Form cleared for the next date.');
       }
+
+      resetForm('Show created. Form cleared for the next date.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to save show.');
     } finally {
@@ -516,11 +543,21 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveShow(form.status === 'draft' ? 'draft' : 'published');
+  }
+
   function loadShow(show: Show) {
     setOpenMenuId(null);
 
     if (mode === 'dates') {
       window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
+      return;
+    }
+
+    if (mode === 'drafts') {
+      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`;
       return;
     }
 
@@ -570,6 +607,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     window.dispatchEvent(new Event('tourbook:shows-updated'));
   }
 
+
+  async function publishShow(show: Show) {
+    setOpenMenuId(null);
+    try {
+      if (!isValidStoredDate(show.date)) {
+        setMessage('Draft needs a valid date before it can be published.');
+        return;
+      }
+      await upsertShow({ ...show, status: 'published', region: show.region.trim().toUpperCase(), tour_name: show.tour_name.trim() });
+      await loadShows();
+      setMessage('Draft published.');
+      window.dispatchEvent(new Event('tourbook:shows-updated'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to publish draft.');
+    }
+  }
+
   async function exportGuestList(showId: string) {
     const csv = await exportGuestListCsv(showId);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -582,7 +636,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
     setOpenMenuId(null);
   }
 
-  const primaryActionLabel = saving ? 'Saving...' : isEditing ? 'Update' : 'Create Date';
+  const isEditingDraft = isEditing && form.status === 'draft';
+  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create Date';
 
   return (
     <div className="space-y-4">
@@ -600,7 +655,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
           type="button"
           onClick={async () => {
             if (mode === 'new') {
-              if (dirty || isEditing) {
+              if (dirty) {
                 const confirmed = await requestConfirmation({
                   title: 'Discard edits?',
                   description: isEditing
@@ -623,34 +678,53 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
           type="button"
           onClick={async () => {
             if (mode === 'new') {
-              if (isEditing || dirty) {
-                const confirmed = !dirty || await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
+              if (dirty) {
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
                 if (!confirmed) return;
-                window.location.href = returnToUrl;
-                return;
               }
               window.location.href = '/admin/dates';
               return;
             }
             window.location.href = '/admin/dates';
           }}
-          className={adminTabClassName(mode === 'dates' || isEditing)}
+          className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
         >
           Existing Dates
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (mode === 'new') {
+              if (dirty) {
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
+                if (!confirmed) return;
+              }
+              window.location.href = '/admin/drafts';
+              return;
+            }
+            window.location.href = '/admin/drafts';
+          }}
+          className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
+        >
+          Drafts
         </button>
       </div>
 
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h1 className="text-[2rem] font-semibold tracking-tight">{isEditing ? 'Edit Date' : 'New Date'}</h1>
-            <div className="flex items-center gap-2">
-              {isEditing ? (
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-h-[2rem]">
+              {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {isEditing && form.status !== 'draft' ? (
                 <button
                   type="button"
                   onClick={async () => {
-                    const confirmed = !dirty || await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return instead?', confirmLabel: 'Discard' });
-                    if (!confirmed) return;
+                    if (dirty) {
+                      const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return instead?', confirmLabel: 'Discard' });
+                      if (!confirmed) return;
+                    }
                     window.location.href = returnToUrl;
                   }}
                   className={secondaryButtonClassName()}
@@ -658,9 +732,32 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                   Cancel
                 </button>
               ) : null}
-              <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-                {primaryActionLabel}
-              </button>
+              {isEditingDraft ? (
+                <>
+                  <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
+                    Delete
+                  </button>
+                  <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
+                    {saving ? 'Publishing...' : 'Publish'}
+                  </button>
+                </>
+              ) : isEditing ? (
+                <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
+                  {primaryActionLabel}
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                    {saving ? 'Saving...' : 'Save Draft'}
+                  </button>
+                  <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
+                    {saving ? 'Saving...' : 'Create Date'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -685,13 +782,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
             >
               <div className="grid gap-3">
                 <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="md:col-span-2">
-                    <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
-                  </div>
-                  <div>
-                    <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px] md:w-[52px]" />
-                  </div>
+                <div className="grid gap-3 md:hidden">
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px]" />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
+                </div>
+                <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
+                  <Input label="City" value={form.city} onChange={(value) => updateField('city', value)} />
+                  <Input label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -748,13 +845,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
                         Delete
                       </button>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="md:col-span-2">
-                        <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
-                      </div>
-                      <div>
-                        <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px] md:w-[52px]" />
-                      </div>
+                    <div className="grid gap-3 md:hidden">
+                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px]" />
+                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px]" />
+                    </div>
+                    <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
+                      <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
+                      <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
                     </div>
                   </div>
                 ))}
@@ -824,63 +921,81 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' }) {
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
             </CollapsibleSection>
 
-            <button type="submit" disabled={saving} className={primaryButtonClassName()}>
-              {primaryActionLabel}
-            </button>
           </form>
         </section>
       ) : (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           {message ? <p className="mb-4 text-sm text-emerald-300">{message}</p> : null}
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h1 className="text-[2rem] font-semibold tracking-tight">Existing Dates</h1>
-            <div className="flex gap-2">
-              <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
-                Upcoming
-              </Link>
-              <Link href="/admin/dates?tab=past" className={adminTabClassName(datesTab === 'past')}>
-                Past
-              </Link>
-            </div>
-          </div>
+          {isDraftsMode ? (
+            <ShowListSection
+              title="Drafts"
+              search={draftSearch}
+              onSearchChange={setDraftSearch}
+              selectedTour={draftTour}
+              onTourChange={setDraftTour}
+              tours={draftTours}
+              shows={filteredDraftShows}
+              openMenuId={openMenuId}
+              onToggleMenu={setOpenMenuId}
+              onEdit={loadShow}
+              onExport={exportGuestList}
+              onDelete={handleDelete}
+              onDuplicate={duplicateShow}
+              mode="drafts"
+              onPublish={publishShow}
+            />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-start justify-end gap-3">
+                <div className="flex gap-2">
+                  <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
+                    Upcoming
+                  </Link>
+                  <Link href="/admin/dates?tab=past" className={adminTabClassName(datesTab === 'past')}>
+                    Past
+                  </Link>
+                </div>
+              </div>
 
-          <div className="mt-4">
-            {datesTab === 'past' ? (
-              <ShowListSection
-                title="Past dates"
-                search={pastSearch}
-                onSearchChange={setPastSearch}
-                selectedTour={pastTour}
-                onTourChange={setPastTour}
-                tours={pastTours}
-                shows={filteredPastShows}
-                groupedShows={pastShowsByYear}
-                stickyYears
-                openMenuId={openMenuId}
-                onToggleMenu={setOpenMenuId}
-                onEdit={loadShow}
-                onExport={exportGuestList}
-                onDelete={handleDelete}
-                onDuplicate={duplicateShow}
-              />
-            ) : (
-              <ShowListSection
-                title="Upcoming dates"
-                search={upcomingSearch}
-                onSearchChange={setUpcomingSearch}
-                selectedTour={upcomingTour}
-                onTourChange={setUpcomingTour}
-                tours={upcomingTours}
-                shows={filteredUpcomingShows}
-                openMenuId={openMenuId}
-                onToggleMenu={setOpenMenuId}
-                onEdit={loadShow}
-                onExport={exportGuestList}
-                onDelete={handleDelete}
-                onDuplicate={duplicateShow}
-              />
-            )}
-          </div>
+              <div className="mt-4">
+                {datesTab === 'past' ? (
+                  <ShowListSection
+                    title="Past dates"
+                    search={pastSearch}
+                    onSearchChange={setPastSearch}
+                    selectedTour={pastTour}
+                    onTourChange={setPastTour}
+                    tours={pastTours}
+                    shows={filteredPastShows}
+                    groupedShows={pastShowsByYear}
+                    stickyYears
+                    openMenuId={openMenuId}
+                    onToggleMenu={setOpenMenuId}
+                    onEdit={loadShow}
+                    onExport={exportGuestList}
+                    onDelete={handleDelete}
+                    onDuplicate={duplicateShow}
+                  />
+                ) : (
+                  <ShowListSection
+                    title="Upcoming dates"
+                    search={upcomingSearch}
+                    onSearchChange={setUpcomingSearch}
+                    selectedTour={upcomingTour}
+                    onTourChange={setUpcomingTour}
+                    tours={upcomingTours}
+                    shows={filteredUpcomingShows}
+                    openMenuId={openMenuId}
+                    onToggleMenu={setOpenMenuId}
+                    onEdit={loadShow}
+                    onExport={exportGuestList}
+                    onDelete={handleDelete}
+                    onDuplicate={duplicateShow}
+                  />
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
     </div>
@@ -950,6 +1065,8 @@ function ShowListSection({
   onExport,
   onDelete,
   onDuplicate,
+  mode = 'dates',
+  onPublish,
 }: {
   title: string;
   search: string;
@@ -966,15 +1083,21 @@ function ShowListSection({
   onExport: (showId: string) => void;
   onDelete: (showId: string) => void;
   onDuplicate: (show: Show) => void;
+  mode?: 'dates' | 'drafts';
+  onPublish?: (show: Show) => void;
 }) {
   function renderShowListItem(show: Show) {
     const menuOpen = openMenuId === show.id;
+    const href = mode === 'drafts' ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}` : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
     return (
-      <div key={show.id} className="rounded-2xl bg-black/20 p-3">
+      <div key={show.id} className={`rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between gap-3">
-          <Link href={`/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
+          <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
             <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
-            <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
+              {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}
+            </div>
             <p className="text-sm text-zinc-300">{show.venue_name}</p>
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
@@ -987,9 +1110,18 @@ function ShowListSection({
             </button>
             {menuOpen ? (
               <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
-                <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
-                <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+                {mode === 'drafts' ? (
+                  <>
+                    <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
+                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+                  </>
+                ) : (
+                  <>
+                    <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
+                    <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
+                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
+                  </>
+                )}
               </div>
             ) : null}
           </div>
@@ -1175,18 +1307,6 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
     onChange(normalized || rawValue);
   }
 
-  function openPicker(event: React.MouseEvent<HTMLButtonElement>) {
-    const wrapper = event.currentTarget.parentElement;
-    const dateInput = wrapper?.querySelector('input[type="date"]') as HTMLInputElement | null;
-    if (!dateInput) return;
-    if (typeof dateInput.showPicker === 'function') {
-      dateInput.showPicker();
-    } else {
-      dateInput.focus();
-      dateInput.click();
-    }
-  }
-
   return (
     <div className="flex items-center gap-3 text-sm text-zinc-300">
       <label htmlFor={pickerId} className="w-[72px] shrink-0 text-zinc-300">
@@ -1203,22 +1323,16 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           onBlur={(event) => commitNextValue(event.target.value)}
           className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
         />
+        <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition">
+          <CalendarIcon />
+        </span>
         <input
           type="date"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-0"
+          aria-label={`Choose ${label.toLowerCase()}`}
+          className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 cursor-pointer opacity-0"
           value={parseFlexibleDateInput(value)}
           onChange={(event) => onChange(event.target.value)}
         />
-        <button
-          type="button"
-          aria-label={`Open ${label.toLowerCase()} calendar`}
-          className="absolute inset-y-0 right-3 inline-flex items-center justify-center text-zinc-400 transition hover:text-zinc-200"
-          onClick={openPicker}
-        >
-          <CalendarIcon />
-        </button>
       </div>
     </div>
   );

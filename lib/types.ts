@@ -19,6 +19,8 @@ export type ShowVisibility = {
   show_guest_list_notes: boolean;
 };
 
+export type ShowStatus = 'draft' | 'published';
+
 export type Show = {
   id: string;
   date: string;
@@ -40,6 +42,7 @@ export type Show = {
   guest_list_notes: string;
   created_at: string;
   visibility: ShowVisibility;
+  status: ShowStatus;
 };
 
 export type GuestListEntry = {

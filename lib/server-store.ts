@@ -54,6 +54,7 @@ export async function getShowServer(id: string): Promise<Show | null> {
 
 export async function upsertShowServer(values: ShowFormValues): Promise<Show> {
   const normalized = normalizeShow(values);
+  const { status: _status, ...persistedShow } = normalized;
 
   if (!isSupabaseConfigured()) {
     const index = memory.shows.findIndex((show) => show.id === normalized.id);
@@ -71,7 +72,7 @@ export async function upsertShowServer(values: ShowFormValues): Promise<Show> {
     return normalized;
   }
 
-  const { data, error } = await supabase.from('shows').upsert(normalized).select().single();
+  const { data, error } = await supabase.from('shows').upsert(persistedShow).select().single();
   if (error || !data) {
     throw new Error(error?.message ?? 'Unable to save show');
   }

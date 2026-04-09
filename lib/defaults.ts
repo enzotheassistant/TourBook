@@ -10,7 +10,7 @@ export const defaultVisibility: ShowVisibility = {
   show_guest_list_notes: false,
 };
 
-export function createEmptyScheduleItems(count = 5): ScheduleItem[] {
+export function createEmptyScheduleItems(count = 3): ScheduleItem[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `schedule-${index + 1}`,
     label: '',
@@ -38,4 +38,5 @@ export const emptyShowForm: ShowFormValues = {
   notes: '',
   guest_list_notes: '',
   visibility: defaultVisibility,
+  status: 'published',
 };

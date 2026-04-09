@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
+import { createDraftId, createPublishedId, isDraftId } from '@/lib/drafts';
 import { deleteShowServer, getShowServer, upsertShowServer } from '@/lib/server-store';
 import { isValidStoredDate } from '@/lib/date';
-import { ShowFormValues } from '@/lib/types';
+import { normalizeShow } from '@/lib/normalize';
+import { ShowFormValues, ShowStatus } from '@/lib/types';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authResponse = await requireApiAuth();
@@ -23,13 +25,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (authResponse) return authResponse;
 
   const { id } = await params;
-  const body = (await request.json()) as ShowFormValues;
+  const body = (await request.json()) as ShowFormValues & { status?: ShowStatus };
+  const requestedStatus = body.status === 'draft' ? 'draft' : 'published';
 
-  if (!isValidStoredDate(body.date)) {
+  if (requestedStatus === 'published' && !isValidStoredDate(body.date)) {
     return NextResponse.json({ error: 'Please enter a valid date in YYYY-MM-DD format.' }, { status: 400 });
   }
 
-  const show = await upsertShowServer({ ...body, id });
+  const nextId = requestedStatus === 'draft'
+    ? (isDraftId(id) ? id : createDraftId(`${body.city}-${body.venue_name}-${body.date || 'draft'}`))
+    : createPublishedId(body.city, body.venue_name, body.date);
+
+  const normalized = normalizeShow({ ...body, id: nextId, status: requestedStatus });
+  const show = await upsertShowServer(normalized);
+
+  if (nextId !== id && isDraftId(id)) {
+    await deleteShowServer(id);
+  }
+
   return NextResponse.json(show);
 }
 
