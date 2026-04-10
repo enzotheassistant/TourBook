@@ -20,15 +20,15 @@ function bubbleClassName() {
 }
 
 function primaryButtonClassName() {
-  return 'inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60';
+  return 'inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60';
 }
 
 function secondaryButtonClassName() {
-  return 'inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
+  return 'inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
 function dangerButtonClassName() {
-  return 'inline-flex h-10 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
+  return 'inline-flex h-11 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
 }
 
 function filterShows(shows: Show[], search: string, selectedTour: string) {
@@ -248,6 +248,117 @@ function parseFlexibleDateInput(value: string) {
   return '';
 }
 
+type ParsedImportRow = {
+  id: string;
+  date: string;
+  city: string;
+  region: string;
+  venue_name: string;
+  notes: string;
+  include: boolean;
+  warning?: string;
+  possibleDuplicateId?: string;
+};
+
+const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const regionPattern = /^[A-Z]{2,3}$/;
+
+function splitImportLine(line: string) {
+  return line
+    .split(/\s(?:-|–|—|\|)\s|\s*•\s*|\s*\/\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function splitCityRegion(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return { city: '', region: '' };
+
+  const commaMatch = trimmed.match(/^(.*?),(?:\s*)([A-Za-z]{2,3})$/);
+  if (commaMatch) {
+    return { city: commaMatch[1].trim(), region: commaMatch[2].trim().toUpperCase() };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  const maybeRegion = parts[parts.length - 1] ?? '';
+  if (regionPattern.test(maybeRegion)) {
+    return { city: parts.slice(0, -1).join(' ').trim(), region: maybeRegion.toUpperCase() };
+  }
+
+  return { city: trimmed, region: '' };
+}
+
+function lineLooksLikeDate(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(normalized)) return true;
+  if (/^\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?$/.test(normalized)) return true;
+  return monthNames.some((month) => normalized.includes(month) || normalized.includes(month.slice(0, 3)));
+}
+
+function inferImportRow(line: string, shows: Show[]): ParsedImportRow | null {
+  const cleaned = line.replace(/	+/g, ' ').trim();
+  if (!cleaned) return null;
+
+  const parts = splitImportLine(cleaned);
+  let dateToken = '';
+  let remainingParts = parts;
+
+  if (parts.length > 1 && lineLooksLikeDate(parts[0])) {
+    dateToken = parts[0];
+    remainingParts = parts.slice(1);
+  }
+
+  if (!dateToken) {
+    const firstSeparator = cleaned.search(/\s(?:-|–|—|\|)\s/);
+    if (firstSeparator > 0) {
+      const candidateDate = cleaned.slice(0, firstSeparator).trim();
+      if (lineLooksLikeDate(candidateDate)) {
+        dateToken = candidateDate;
+        remainingParts = splitImportLine(cleaned.slice(firstSeparator));
+      }
+    }
+  }
+
+  const normalizedDate = parseFlexibleDateInput(dateToken);
+  const locationToken = remainingParts[0] ?? '';
+  const venueToken = remainingParts[1] ?? '';
+  const notesToken = remainingParts.slice(2).join(' · ');
+  const location = splitCityRegion(locationToken);
+
+  const warnings: string[] = [];
+  if (!normalizedDate) warnings.push('Check date');
+  if (!location.city) warnings.push('Check city');
+  if (!venueToken) warnings.push('Check venue');
+  if (!location.region) warnings.push('Region missing');
+
+  const duplicate = shows.find((show) => {
+    const sameDate = Boolean(normalizedDate) && show.date === normalizedDate;
+    const sameCity = Boolean(location.city) && show.city.trim().toLowerCase() === location.city.trim().toLowerCase();
+    const sameVenue = Boolean(venueToken) && show.venue_name.trim().toLowerCase() === venueToken.trim().toLowerCase();
+    return sameDate && (sameCity || sameVenue);
+  });
+
+  return {
+    id: crypto.randomUUID(),
+    date: normalizedDate || dateToken.trim(),
+    city: location.city,
+    region: location.region,
+    venue_name: venueToken,
+    notes: notesToken,
+    include: true,
+    warning: warnings.length ? warnings.join(' • ') : (duplicate ? 'Possible duplicate' : ''),
+    possibleDuplicateId: duplicate?.id,
+  };
+}
+
+function parseImportRows(rawInput: string, shows: Show[]) {
+  return rawInput
+    .split(/\r?\n/)
+    .map((line) => inferImportRow(line, shows))
+    .filter((row): row is ParsedImportRow => Boolean(row && (row.date || row.city || row.venue_name)));
+}
+
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
@@ -270,6 +381,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
   const [returnLabel, setReturnLabel] = useState('Existing Dates');
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSourceText, setImportSourceText] = useState('');
+  const [importRows, setImportRows] = useState<ParsedImportRow[]>([]);
+  const [importing, setImporting] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -324,6 +439,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const draftTours = useMemo(() => ['All', ...Array.from(new Set(draftShows.map((show) => show.tour_name.trim()).filter(Boolean))).sort()], [draftShows]);
 
   const filteredDraftShows = useMemo(() => filterShows(draftShows, draftSearch, draftTour), [draftSearch, draftTour, draftShows]);
+  const includedImportCount = useMemo(() => importRows.filter((row) => row.include).length, [importRows]);
 
   const pastShowsByYear = useMemo(() => {
     const groups = new Map<string, Show[]>();
@@ -650,6 +766,63 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setOpenMenuId(null);
   }
 
+  function openImportModal() {
+    setImportOpen(true);
+    setImportRows([]);
+    setImportSourceText('');
+    setOpenMenuId(null);
+  }
+
+  function closeImportModal() {
+    if (importing) return;
+    setImportOpen(false);
+    setImportRows([]);
+    setImportSourceText('');
+  }
+
+  function runImportParser() {
+    const nextRows = parseImportRows(importSourceText, shows);
+    setImportRows(nextRows);
+  }
+
+  function updateImportRow(rowId: string, patch: Partial<ParsedImportRow>) {
+    setImportRows((current) => current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
+  }
+
+  async function confirmImportRows() {
+    const selectedRows = importRows.filter((row) => row.include);
+    if (!selectedRows.length) {
+      setMessage('Select at least one imported row.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      for (const row of selectedRows) {
+        await upsertShow({
+          ...emptyShowForm,
+          date: parseFlexibleDateInput(row.date) || row.date.trim(),
+          city: row.city.trim(),
+          region: row.region.trim().toUpperCase(),
+          venue_name: row.venue_name.trim(),
+          notes: row.notes.trim(),
+          schedule_items: createEmptyScheduleItems(),
+          status: 'draft',
+        });
+      }
+      await loadShows();
+      setImportOpen(false);
+      setImportRows([]);
+      setImportSourceText('');
+      setMessage(`${selectedRows.length} date${selectedRows.length === 1 ? '' : 's'} imported to Drafts.`);
+      window.dispatchEvent(new Event('tourbook:shows-updated'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to import dates.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const isEditingDraft = isEditing && form.status === 'draft';
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create Date';
 
@@ -664,6 +837,85 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onConfirm={() => closeConfirmation(true)}
         onCancel={() => closeConfirmation(false)}
       />
+      {importOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-4xl rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/70">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Import</p>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-100">Paste routing text</h2>
+                <p className="mt-1 text-sm text-zinc-400">Text import is live now. Image import is queued next. Imported rows stay reviewable before anything is created.</p>
+              </div>
+              <button type="button" onClick={closeImportModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+              <div className="space-y-3">
+                <label className="block text-sm text-zinc-300">
+                  <span className="mb-2 block">Source text</span>
+                  <textarea
+                    value={importSourceText}
+                    onChange={(event) => setImportSourceText(event.target.value)}
+                    placeholder={`May 3 - Toronto, ON - Danforth Music Hall\nMay 4 - Montreal, QC - Beanfield Theatre\nMay 6 - Boston, MA - Paradise Rock Club`}
+                    className="min-h-[260px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={runImportParser} className={primaryButtonClassName()}>
+                    Review rows
+                  </button>
+                  <p className="text-xs text-zinc-500">One date per line works best. Messy routing text is okay.</p>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-zinc-200">Review</h3>
+                    <p className="text-xs text-zinc-500">Edit rows, skip anything uncertain, then create drafts.</p>
+                  </div>
+                  <p className="text-xs text-zinc-400">{includedImportCount} selected</p>
+                </div>
+                <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                  {importRows.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">Parsed rows will appear here for review. Possible duplicates and incomplete rows get flagged instead of auto-created.</div>
+                  ) : (
+                    importRows.map((row, index) => (
+                      <div key={row.id} className="rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Row {index + 1}</p>
+                          <label className="inline-flex items-center gap-2 text-xs text-zinc-300">
+                            <input type="checkbox" checked={row.include} onChange={(event) => updateImportRow(row.id, { include: event.target.checked })} className="h-4 w-4 rounded border-white/10 bg-black/20" />
+                            Include
+                          </label>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <Input label="Date" value={row.date} onChange={(value) => updateImportRow(row.id, { date: value })} inputClassName={fieldClassName()} />
+                          <Input label="Venue" value={row.venue_name} onChange={(value) => updateImportRow(row.id, { venue_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="City" value={row.city} onChange={(value) => updateImportRow(row.id, { city: value })} inputClassName={fieldClassName()} />
+                          <Input label="Region" value={row.region} onChange={(value) => updateImportRow(row.id, { region: value.toUpperCase() })} inputClassName={fieldClassName()} />
+                        </div>
+                        <div className="mt-2">
+                          <Textarea value={row.notes} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" placeholder="Optional notes" />
+                        </div>
+                        {row.warning ? <p className="mt-2 text-xs text-amber-300">{row.warning}</p> : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  <button type="button" onClick={closeImportModal} className={secondaryButtonClassName()}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={confirmImportRows} disabled={importing || includedImportCount === 0} className={primaryButtonClassName()}>
+                    {importing ? 'Importing...' : 'Create draft dates'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -726,55 +978,63 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       {mode === 'new' ? (
         <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex min-h-[2.5rem] items-start gap-3">
-              {isEditing ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (dirty) {
-                      const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
-                      if (!confirmed) return;
-                    }
-                    window.location.href = returnToUrl;
-                  }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
-                  aria-label={`Back to ${returnLabel}`}
-                >
-                  ←
-                </button>
-              ) : null}
-              <div className="pt-1">
-                {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
-              </div>
+          {isEditing ? (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (dirty) {
+                    const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
+                    if (!confirmed) return;
+                  }
+                  window.location.href = returnToUrl;
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                aria-label={`Back to ${returnLabel}`}
+              >
+                ←
+              </button>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {isEditingDraft ? (
-                <>
-                  <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
-                    Delete
-                  </button>
-                  <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
-                    {saving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
-                    {saving ? 'Publishing...' : 'Publish'}
-                  </button>
-                </>
-              ) : isEditing ? (
-                <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-                  {primaryActionLabel}
+          ) : null}
+
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-h-[2.5rem] pt-1">
+              {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
+            </div>
+            <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
+              {!isEditing ? (
+                <button type="button" onClick={openImportModal} className={secondaryButtonClassName()}>
+                  Import
                 </button>
-              ) : (
-                <>
-                  <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
-                    {saving ? 'Saving...' : 'Save Draft'}
-                  </button>
+              ) : <span />}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {isEditingDraft ? (
+                  <>
+                    <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
+                      Delete
+                    </button>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
+                      {saving ? 'Publishing...' : 'Publish'}
+                    </button>
+                  </>
+                ) : isEditing ? (
                   <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-                    {saving ? 'Saving...' : 'Create Date'}
+                    {primaryActionLabel}
                   </button>
-                </>
-              )}
+                ) : (
+                  <>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                      {saving ? 'Saving...' : 'Save Draft'}
+                    </button>
+                    <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
+                      {saving ? 'Saving...' : 'Create Date'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -799,7 +1059,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
-                <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} />
+                <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[56px]" />
                 <div className="grid gap-3 md:hidden">
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px]" />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
@@ -993,6 +1253,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onExport={exportGuestList}
                     onDelete={handleDelete}
                     onDuplicate={duplicateShow}
+                    onPublish={publishShow}
                   />
                 ) : (
                   <ShowListSection
@@ -1009,6 +1270,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onExport={exportGuestList}
                     onDelete={handleDelete}
                     onDuplicate={duplicateShow}
+                    onPublish={publishShow}
                   />
                 )}
               </div>
@@ -1113,7 +1375,7 @@ function ShowListSection({
         : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
 
     return (
-      <div key={show.id} className={`rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
+      <div key={show.id} className={`relative rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
         <div className="flex items-start justify-between gap-3">
           <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
             <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
@@ -1125,7 +1387,7 @@ function ShowListSection({
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 
-          <div data-admin-menu-root="true" className="relative flex shrink-0 items-center gap-2 self-start">
+          <div data-admin-menu-root="true" className="relative z-20 flex shrink-0 items-center gap-2 self-start">
             <button
               type="button"
               onClick={() => onEdit(show)}
@@ -1143,7 +1405,7 @@ function ShowListSection({
               …
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-full z-10 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
+              <div className="absolute right-0 top-full z-30 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/70 ring-1 ring-black/50">
                 {mode === 'drafts' ? (
                   <>
                     <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
@@ -1190,7 +1452,7 @@ function ShowListSection({
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (
             <section key={year} className="space-y-3">
-              <div className={`border-b border-white/10 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur ${stickyYears ? 'sticky top-[96px] z-10 bg-zinc-950/95' : ''}`}>{year}</div>
+              <div className={`border-b border-white/10 px-4 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur ${stickyYears ? 'sticky top-[96px] z-10 bg-zinc-950/95' : ''}`}>{year}</div>
               <div className="space-y-3">{items.map((show) => renderShowListItem(show))}</div>
             </section>
           ))
@@ -1339,8 +1601,19 @@ function InlineInput({
   );
 }
 
-function FlexibleDateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const pickerId = useId();
+function FlexibleDateInput({
+  label,
+  value,
+  onChange,
+  labelWidthClassName,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  labelWidthClassName?: string;
+}) {
+  const textInputId = useId();
+  const textInputRef = useRef<HTMLInputElement | null>(null);
   const pickerInputRef = useRef<HTMLInputElement | null>(null);
 
   function commitNextValue(rawValue: string) {
@@ -1366,12 +1639,13 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
 
   return (
     <div className="flex items-center gap-3 text-sm text-zinc-300">
-      <label htmlFor={pickerId} className="w-[72px] shrink-0 text-zinc-300">
+      <label htmlFor={textInputId} className={`${labelWidthClassName ?? 'w-[72px]'} shrink-0 text-zinc-300`}>
         {label}
       </label>
       <div className="relative min-w-0 flex-1">
         <input
-          id={pickerId}
+          ref={textInputRef}
+          id={textInputId}
           type="text"
           value={value}
           aria-label={label}
@@ -1387,23 +1661,25 @@ function FlexibleDateInput({ label, value, onChange }: { label: string; value: s
           }}
           className={`${fieldClassName()} min-w-0 flex-1 pr-12`}
         />
-        <button
-          type="button"
-          aria-label={`Choose ${label.toLowerCase()}`}
-          onClick={openPicker}
-          className="absolute inset-y-0 right-2 inline-flex w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.05] hover:text-zinc-200"
-        >
-          <CalendarIcon />
-        </button>
-        <input
-          ref={pickerInputRef}
-          type="date"
-          tabIndex={-1}
-          aria-hidden="true"
-          className="pointer-events-none absolute right-3 top-1/2 h-8 w-8 -translate-y-1/2 opacity-0"
-          value={parseFlexibleDateInput(value)}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        <div className="absolute inset-y-0 right-2 flex items-center">
+          <button
+            type="button"
+            aria-label={`Choose ${label.toLowerCase()}`}
+            onClick={openPicker}
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.05] hover:text-zinc-200"
+          >
+            <CalendarIcon />
+            <input
+              ref={pickerInputRef}
+              type="date"
+              aria-label={`${label} picker`}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              value={parseFlexibleDateInput(value)}
+              onChange={(event) => onChange(event.target.value)}
+              onFocus={() => textInputRef.current?.blur()}
+            />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1466,7 +1742,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
   return (
     <div className="space-y-2 text-sm text-zinc-300">
       <label className="flex items-center gap-3 text-sm text-zinc-300">
-        <span className="w-[72px] shrink-0 text-zinc-300">Tour</span>
+        <span className="w-[56px] shrink-0 text-zinc-300">Tour</span>
         <div className="relative min-w-0 flex-1">
           <select
             value={selectedValue}
@@ -1498,7 +1774,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
 
       {creatingNew ? (
         <label className="flex items-center gap-3 text-sm text-zinc-300">
-          <span className="w-[72px] shrink-0 text-zinc-300">New tour</span>
+          <span className="w-[56px] shrink-0 text-zinc-300">New tour</span>
           <input
             value={value}
             onChange={(event) => onChange(event.target.value)}
@@ -1568,7 +1844,7 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
   );
 }
 
-function Textarea({ label, value, onChange, ariaLabel }: { label?: string; value: string; onChange: (value: string) => void; ariaLabel?: string }) {
+function Textarea({ label, value, onChange, ariaLabel, placeholder }: { label?: string; value: string; onChange: (value: string) => void; ariaLabel?: string; placeholder?: string }) {
   return (
     <label className="block text-sm text-zinc-300">
       {label ? <span className="mb-1 block">{label}</span> : null}
@@ -1576,6 +1852,7 @@ function Textarea({ label, value, onChange, ariaLabel }: { label?: string; value
         aria-label={ariaLabel ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         rows={4}
         className="w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
       />

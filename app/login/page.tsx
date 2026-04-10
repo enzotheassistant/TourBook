@@ -41,7 +41,6 @@ export default function LoginPage() {
         
         <form onSubmit={handleSubmit} className="mt-6 space-y-3">
           <label className="grid gap-2">
-            <span className="text-sm text-zinc-300">Password</span>
             <input
               type="password"
               value={password}

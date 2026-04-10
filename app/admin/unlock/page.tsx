@@ -58,7 +58,6 @@ export default function AdminUnlockPage() {
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Admin unlock</h1>
                     <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <label className="grid gap-2">
-              <span className="text-sm text-zinc-300">Enter admin password</span>
               <input
                 type="password"
                 value={password}
