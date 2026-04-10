@@ -1,6 +1,6 @@
 {
   "name": "tourbook",
-  "version": "4.8.1",
+  "version": "5.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

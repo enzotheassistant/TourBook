@@ -1,6 +1,6 @@
 'use client';
 
-import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import { AiIntakeImageInput, AiIntakeResponse, GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 
 async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -79,4 +79,12 @@ export async function exportGuestListCsv(showId: string) {
     throw new Error('Unable to export guest list');
   }
   return response.text();
+}
+
+
+export function requestAiIntake(payload: { source_text: string; images: AiIntakeImageInput[] }) {
+  return request<AiIntakeResponse>('/api/ai-intake', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
