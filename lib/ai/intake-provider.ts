@@ -1,231 +1,402 @@
-import { AiIntakeImageInput, AiIntakeResponse, AiIntakeRow } from '@/lib/types';
+import { IntakeImageInput, IntakeRequest, IntakeResult, IntakeRow } from '@/lib/ai/intake-types';
 
-export type IntakeRequestPayload = {
-  source_text: string;
-  images: AiIntakeImageInput[];
-};
+const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
-type GeminiPart =
-  | { text: string }
-  | { inline_data: { mime_type: string; data: string } };
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-type GeminiGenerateContentResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-  }>;
-};
-
-function getProvider() {
+function getPrimaryProvider() {
   return (process.env.AI_INTAKE_PROVIDER || 'gemini').trim().toLowerCase();
 }
 
-function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+function getTextModel() {
+  return process.env.AI_INTAKE_TEXT_MODEL?.trim() || 'gemini-2.5-flash-lite';
 }
 
-function getGeminiModel() {
-  return process.env.AI_INTAKE_MODEL || 'gemini-2.5-flash';
+function getImageModel() {
+  return process.env.AI_INTAKE_IMAGE_MODEL?.trim() || 'gemini-2.5-flash';
 }
 
-function stripCodeFence(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('```')) return trimmed;
-  return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+function getFallbackProvider() {
+  return (process.env.AI_INTAKE_FALLBACK_PROVIDER || 'none').trim().toLowerCase();
 }
 
-function asText(value: unknown) {
+function getOpenRouterModel() {
+  return process.env.OPENROUTER_MODEL?.trim() || 'openrouter/free';
+}
+
+function getOpenRouterSiteUrl() {
+  return process.env.OPENROUTER_SITE_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || 'https://tourbook.local';
+}
+
+function getOpenRouterSiteName() {
+  return process.env.OPENROUTER_SITE_NAME?.trim() || 'TourBook';
+}
+
+function buildSystemPrompt(existingShows: IntakeRequest['existingShows']) {
+  const duplicatesContext = (existingShows || [])
+    .slice(0, 200)
+    .map((show) => `${show.date} | ${show.city} | ${show.venue_name} | ${show.status || 'published'}`)
+    .join('\n');
+
+  return [
+    'You are TourBook AI Intake. Extract only show-related data and return strict JSON.',
+    'Map unstructured routing lists, promoter emails, screenshots, posters, and spreadsheet-like text into TourBook draft rows.',
+    'Never invent facts. If uncertain, leave the field blank or move details into notes. Use flags for uncertainty.',
+    'Keep dates in YYYY-MM-DD when possible. If year is omitted, infer the most likely year only when the sequence is clear; otherwise flag the row.',
+    'Schedule items must be an array of objects with label and time. Only include meaningful schedule data.',
+    'Potential duplicate warnings should go in flags, not by altering other fields.',
+    'If the input is a routing list, create one row per date.',
+    duplicatesContext ? `Existing shows for duplicate awareness:\n${duplicatesContext}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function responseSchema() {
+  return {
+    type: 'OBJECT',
+    properties: {
+      rows: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            date: { type: 'STRING' },
+            city: { type: 'STRING' },
+            region: { type: 'STRING' },
+            venue_name: { type: 'STRING' },
+            tour_name: { type: 'STRING' },
+            venue_address: { type: 'STRING' },
+            dos_name: { type: 'STRING' },
+            dos_phone: { type: 'STRING' },
+            parking_load_info: { type: 'STRING' },
+            schedule_items: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  label: { type: 'STRING' },
+                  time: { type: 'STRING' },
+                },
+              },
+            },
+            hotel_name: { type: 'STRING' },
+            hotel_address: { type: 'STRING' },
+            hotel_notes: { type: 'STRING' },
+            notes: { type: 'STRING' },
+            confidence: { type: 'NUMBER' },
+            flags: { type: 'ARRAY', items: { type: 'STRING' } },
+          },
+          propertyOrdering: [
+            'date',
+            'city',
+            'region',
+            'venue_name',
+            'tour_name',
+            'venue_address',
+            'dos_name',
+            'dos_phone',
+            'parking_load_info',
+            'schedule_items',
+            'hotel_name',
+            'hotel_address',
+            'hotel_notes',
+            'notes',
+            'confidence',
+            'flags',
+          ],
+        },
+      },
+      warnings: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    propertyOrdering: ['rows', 'warnings'],
+  };
+}
+
+function extractGeminiText(payload: any) {
+  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((part: any) => part?.text || '').join('');
+  return text.trim();
+}
+
+function safeParseJson(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error('AI returned an empty response.');
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) {
+      return JSON.parse(fenced[1]);
+    }
+
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+    }
+
+    throw new Error('AI returned invalid JSON.');
+  }
+}
+
+function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function asConfidence(value: unknown) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.max(0, Math.min(1, value));
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(0, Math.min(1, parsed));
-    }
-  }
-  return 0;
-}
+function normalizeRow(row: any): IntakeRow {
+  const schedule = Array.isArray(row?.schedule_items)
+    ? row.schedule_items
+        .map((item: any) => ({ label: normalizeString(item?.label), time: normalizeString(item?.time) }))
+        .filter((item) => item.label || item.time)
+    : [];
 
-function asStringArray(value: unknown) {
-  if (!Array.isArray(value)) return [] as string[];
-  return value.map((item) => asText(item)).filter(Boolean);
-}
-
-function normalizeScheduleItems(value: unknown) {
-  if (!Array.isArray(value)) return [] as { label: string; time: string }[];
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      const label = asText(record.label);
-      const time = asText(record.time);
-      if (!label && !time) return null;
-      return { label, time };
-    })
-    .filter((item): item is { label: string; time: string } => Boolean(item))
-    .slice(0, 8);
-}
-
-function normalizeRow(row: unknown): AiIntakeRow | null {
-  if (!row || typeof row !== 'object') return null;
-  const record = row as Record<string, unknown>;
-  const scheduleItems = normalizeScheduleItems(record.schedule_items);
-  const normalized: AiIntakeRow = {
-    id: crypto.randomUUID(),
-    date: asText(record.date),
-    city: asText(record.city),
-    region: asText(record.region).toUpperCase(),
-    venue_name: asText(record.venue_name),
-    tour_name: asText(record.tour_name),
-    venue_address: asText(record.venue_address),
-    dos_name: asText(record.dos_name),
-    dos_phone: asText(record.dos_phone),
-    parking_load_info: asText(record.parking_load_info),
-    hotel_name: asText(record.hotel_name),
-    hotel_address: asText(record.hotel_address),
-    hotel_notes: asText(record.hotel_notes),
-    notes: asText(record.notes),
-    schedule_items: scheduleItems,
-    include: true,
-    confidence: asConfidence(record.confidence),
-    flags: asStringArray(record.flags),
-  };
-
-  const hasUsefulContent = Boolean(
-    normalized.date ||
-      normalized.city ||
-      normalized.region ||
-      normalized.venue_name ||
-      normalized.notes ||
-      normalized.schedule_items.length,
-  );
-
-  return hasUsefulContent ? normalized : null;
-}
-
-function normalizeResponse(payload: unknown, model: string): AiIntakeResponse {
-  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
-  const rows = Array.isArray(record.rows) ? record.rows.map(normalizeRow).filter((row): row is AiIntakeRow => Boolean(row)) : [];
   return {
-    provider: getProvider(),
-    model,
-    rows,
+    date: normalizeString(row?.date),
+    city: normalizeString(row?.city),
+    region: normalizeString(row?.region).toUpperCase(),
+    venue_name: normalizeString(row?.venue_name),
+    tour_name: normalizeString(row?.tour_name),
+    venue_address: normalizeString(row?.venue_address),
+    dos_name: normalizeString(row?.dos_name),
+    dos_phone: normalizeString(row?.dos_phone),
+    parking_load_info: normalizeString(row?.parking_load_info),
+    schedule_items: schedule,
+    hotel_name: normalizeString(row?.hotel_name),
+    hotel_address: normalizeString(row?.hotel_address),
+    hotel_notes: normalizeString(row?.hotel_notes),
+    notes: normalizeString(row?.notes),
+    confidence: typeof row?.confidence === 'number' ? Math.max(0, Math.min(1, row.confidence)) : undefined,
+    flags: Array.isArray(row?.flags) ? row.flags.map((flag: unknown) => normalizeString(flag)).filter(Boolean) : [],
   };
 }
 
-function buildPrompt(sourceText: string, imageCount: number) {
-  return [
-    'You are TourBook intake AI.',
-    'Your job is to extract touring/show information from messy source material and map it to TourBook draft fields.',
-    'Return strict JSON only. No markdown. No prose.',
-    'If there are multiple dates, return multiple rows.',
-    'Only populate fields that are present or strongly implied. Do not hallucinate.',
-    'If a field is uncertain, leave it blank when needed and add a short reason to flags.',
-    'Move leftover logistical or deal details into notes instead of polluting city or venue.',
-    'Expected schema:',
-    JSON.stringify({
-      rows: [
-        {
-          date: 'YYYY-MM-DD or best available raw date string',
-          city: '',
-          region: '',
-          venue_name: '',
-          tour_name: '',
-          venue_address: '',
-          dos_name: '',
-          dos_phone: '',
-          parking_load_info: '',
-          hotel_name: '',
-          hotel_address: '',
-          hotel_notes: '',
-          notes: '',
-          schedule_items: [{ label: '', time: '' }],
-          confidence: 0.0,
-          flags: ['short warning'],
-        },
-      ],
-    }),
-    'Schedule lines should map items like Load in, Soundcheck, Doors, Set time, Curfew, etc.',
-    'For routing lists, split city and venue like a human tour manager would.',
-    `The request may include ${imageCount} image(s). Use them along with text if present.`,
-    sourceText ? `Source text:\n${sourceText}` : 'No source text was provided.',
-  ].join('\n\n');
+function normalizeResult(payload: any, provider: string, model: string, attempts = 1): IntakeResult {
+  const rows = Array.isArray(payload?.rows)
+    ? payload.rows.map(normalizeRow).filter((row) => row.date || row.city || row.venue_name || row.notes)
+    : [];
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings.map((item: unknown) => normalizeString(item)).filter(Boolean) : [];
+
+  return {
+    rows,
+    warnings,
+    provider,
+    model,
+    attempts,
+  };
 }
 
-async function callGemini(payload: IntakeRequestPayload): Promise<AiIntakeResponse> {
-  const apiKey = getGeminiApiKey();
+function buildUserParts(request: IntakeRequest) {
+  const parts: Array<Record<string, unknown>> = [];
+  const text = request.text?.trim();
+
+  if (text) {
+    parts.push({ text: `Source text:\n${text}` });
+  }
+
+  (request.images || []).forEach((image, index) => {
+    parts.push({ text: `Image ${index + 1}${image.name ? ` (${image.name})` : ''}` });
+    parts.push({ inline_data: { mime_type: image.mimeType, data: image.dataBase64 } });
+  });
+
+  if (!parts.length) {
+    parts.push({ text: 'No usable source material was provided.' });
+  }
+
+  return parts;
+}
+
+async function callGemini(request: IntakeRequest, model: string): Promise<IntakeResult> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    throw new Error('Gemini API key is missing. Set GEMINI_API_KEY in your environment.');
+    throw new Error('GEMINI_API_KEY is not configured.');
   }
 
-  const model = getGeminiModel();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const parts: GeminiPart[] = [{ text: buildPrompt(payload.source_text, payload.images.length) }];
-
-  for (const image of payload.images) {
-    parts.push({
-      inline_data: {
-        mime_type: image.mime_type,
-        data: image.data_base64,
+  const endpoint = `${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`;
+  const body = {
+    systemInstruction: {
+      parts: [{ text: buildSystemPrompt(request.existingShows) }],
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: buildUserParts(request),
       },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+      responseSchema: responseSchema(),
+    },
+  };
+
+  const maxAttempts = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
     });
+
+    if (response.ok) {
+      const payload = await response.json();
+      const text = extractGeminiText(payload);
+      const parsed = safeParseJson(text);
+      return normalizeResult(parsed, 'gemini', model, attempt);
+    }
+
+    const errorPayload = await response.json().catch(() => ({}));
+    const providerMessage = errorPayload?.error?.message || `Gemini request failed (${response.status}).`;
+    const isRetryable = response.status === 429 || response.status === 503 || /high demand|overloaded|resource exhausted|try again later/i.test(providerMessage);
+
+    if (!isRetryable || attempt === maxAttempts) {
+      throw new Error(providerMessage);
+    }
+
+    lastError = new Error(providerMessage);
+    await sleep(600 * 2 ** (attempt - 1));
   }
 
-  const response = await fetch(endpoint, {
+  throw lastError || new Error('Gemini request failed.');
+}
+
+function buildOpenRouterMessages(request: IntakeRequest) {
+  const userContent: Array<Record<string, unknown>> = [];
+  const text = request.text?.trim();
+
+  if (text) {
+    userContent.push({ type: 'text', text: `Source text:\n${text}` });
+  }
+
+  (request.images || []).forEach((image: IntakeImageInput, index) => {
+    userContent.push({ type: 'text', text: `Image ${index + 1}${image.name ? ` (${image.name})` : ''}` });
+    userContent.push({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.dataBase64}` } });
+  });
+
+  if (!userContent.length) {
+    userContent.push({ type: 'text', text: 'No usable source material was provided.' });
+  }
+
+  return [
+    { role: 'system', content: buildSystemPrompt(request.existingShows) },
+    { role: 'user', content: userContent },
+  ];
+}
+
+async function callOpenRouter(request: IntakeRequest, model: string): Promise<IntakeResult> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured.');
+  }
+
+  const response = await fetch(OPENROUTER_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': getOpenRouterSiteUrl(),
+      'X-Title': getOpenRouterSiteName(),
     },
     body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
+      model,
+      messages: buildOpenRouterMessages(request),
+      temperature: 0.1,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'tourbook_ai_intake',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              rows: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    date: { type: 'string' },
+                    city: { type: 'string' },
+                    region: { type: 'string' },
+                    venue_name: { type: 'string' },
+                    tour_name: { type: 'string' },
+                    venue_address: { type: 'string' },
+                    dos_name: { type: 'string' },
+                    dos_phone: { type: 'string' },
+                    parking_load_info: { type: 'string' },
+                    schedule_items: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          label: { type: 'string' },
+                          time: { type: 'string' },
+                        },
+                        additionalProperties: false,
+                      },
+                    },
+                    hotel_name: { type: 'string' },
+                    hotel_address: { type: 'string' },
+                    hotel_notes: { type: 'string' },
+                    notes: { type: 'string' },
+                    confidence: { type: 'number' },
+                    flags: { type: 'array', items: { type: 'string' } },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              warnings: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['rows'],
+            additionalProperties: false,
+          },
+        },
       },
     }),
     cache: 'no-store',
   });
 
-  const json = (await response.json().catch(() => ({}))) as GeminiGenerateContentResponse & { error?: { message?: string } };
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(json.error?.message || 'Gemini request failed.');
+    const message = payload?.error?.message || payload?.message || `OpenRouter request failed (${response.status}).`;
+    throw new Error(message);
   }
 
-  const text = stripCodeFence(
-    json.candidates
-      ?.flatMap((candidate) => candidate.content?.parts ?? [])
-      .map((part) => part.text || '')
-      .join('') || '',
-  );
-
-  if (!text) {
-    throw new Error('Gemini returned an empty response.');
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error('Gemini returned invalid JSON.');
-  }
-
-  return normalizeResponse(parsed, model);
+  const text = payload?.choices?.[0]?.message?.content;
+  const parsed = safeParseJson(typeof text === 'string' ? text : JSON.stringify(text ?? {}));
+  return normalizeResult(parsed, 'openrouter', payload?.model || model, 1);
 }
 
-export async function runAiIntake(payload: IntakeRequestPayload): Promise<AiIntakeResponse> {
-  const provider = getProvider();
-  if (provider !== 'gemini') {
-    throw new Error(`Unsupported AI provider: ${provider}`);
-  }
+export async function runIntake(request: IntakeRequest): Promise<IntakeResult> {
+  const hasImages = Boolean(request.images?.length);
+  const primaryProvider = getPrimaryProvider();
+  const fallbackProvider = getFallbackProvider();
+  const primaryModel = hasImages ? getImageModel() : getTextModel();
 
-  return callGemini(payload);
+  try {
+    if (primaryProvider === 'openrouter') {
+      return await callOpenRouter(request, getOpenRouterModel());
+    }
+
+    return await callGemini(request, primaryModel);
+  } catch (primaryError) {
+    if (fallbackProvider === 'openrouter' && primaryProvider !== 'openrouter' && process.env.OPENROUTER_API_KEY) {
+      const fallback = await callOpenRouter(request, getOpenRouterModel());
+      return {
+        ...fallback,
+        warnings: [...(fallback.warnings || []), `Primary ${primaryProvider} request failed and fallback ${fallback.provider} was used.`],
+      };
+    }
+
+    throw primaryError;
+  }
 }

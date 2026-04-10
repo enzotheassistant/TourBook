@@ -1,15 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { deleteShow, exportGuestListCsv, listShows, requestAiIntake, upsertShow } from '@/lib/data-client';
+import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
 import { createPublishedId } from '@/lib/drafts';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
-import { AiIntakeImageInput, AiIntakeRow, Show, ShowFormValues, ShowStatus } from '@/lib/types';
+import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
+import type { IntakeRow } from '@/lib/ai/intake-types';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -248,47 +249,48 @@ function parseFlexibleDateInput(value: string) {
   return '';
 }
 
-function buildImportWarnings(row: AiIntakeRow, shows: Show[]) {
-  const warnings = [...row.flags];
-  const normalizedDate = parseFlexibleDateInput(row.date);
-  const normalizedRow = normalizedDate && row.date ? { ...row, date: normalizedDate } : row;
+type ParsedImportRow = IntakeRow & {
+  id: string;
+  include: boolean;
+  warning?: string;
+};
 
-  if (!normalizedRow.date) warnings.push('Check date');
-  if (!normalizedRow.city) warnings.push('Check city');
-  if (!normalizedRow.venue_name) warnings.push('Check venue');
-  if (!normalizedRow.region) warnings.push('Region missing');
-
-  const duplicate = shows.find((show) => {
-    const sameDate = Boolean(normalizedDate) && show.date === normalizedDate;
-    const sameCity = Boolean(normalizedRow.city) && show.city.trim().toLowerCase() === normalizedRow.city.trim().toLowerCase();
-    const sameVenue = Boolean(normalizedRow.venue_name) && show.venue_name.trim().toLowerCase() === normalizedRow.venue_name.trim().toLowerCase();
-    return sameDate && (sameCity || sameVenue);
-  });
-
-  if (duplicate) warnings.push('Possible duplicate');
-
-  return {
-    ...normalizedRow,
-    flags: Array.from(new Set(warnings.filter(Boolean))),
-    possibleDuplicateId: duplicate?.id,
-  };
+function buildImportRowWarning(row: IntakeRow) {
+  const flags = Array.isArray(row.flags) ? row.flags.filter(Boolean) : [];
+  const normalizedDate = parseFlexibleDateInput(row.date || '');
+  const warnings: string[] = [...flags];
+  if (!row.date || (!normalizedDate && row.date.trim())) warnings.push('Check date');
+  if (!row.city.trim()) warnings.push('Check city');
+  if (!row.venue_name.trim()) warnings.push('Check venue');
+  return Array.from(new Set(warnings)).join(' • ');
 }
 
-async function fileToAiImageInput(file: File): Promise<AiIntakeImageInput> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-    reader.onerror = () => reject(new Error(`Unable to read ${file.name}`));
-    reader.readAsDataURL(file);
-  });
+function buildImportRows(rows: IntakeRow[]) {
+  return rows.map((row) => ({
+    id: crypto.randomUUID(),
+    date: row.date ?? '',
+    city: row.city ?? '',
+    region: row.region ?? '',
+    venue_name: row.venue_name ?? '',
+    tour_name: row.tour_name ?? '',
+    venue_address: row.venue_address ?? '',
+    dos_name: row.dos_name ?? '',
+    dos_phone: row.dos_phone ?? '',
+    parking_load_info: row.parking_load_info ?? '',
+    schedule_items: Array.isArray(row.schedule_items) && row.schedule_items.length ? row.schedule_items.map((item) => ({ id: crypto.randomUUID(), label: item.label ?? '', time: item.time ?? '' })) : createEmptyScheduleItems(),
+    hotel_name: row.hotel_name ?? '',
+    hotel_address: row.hotel_address ?? '',
+    hotel_notes: row.hotel_notes ?? '',
+    notes: row.notes ?? '',
+    confidence: typeof row.confidence === 'number' ? row.confidence : undefined,
+    flags: Array.isArray(row.flags) ? row.flags : [],
+    include: true,
+    warning: buildImportRowWarning(row),
+  }));
+}
 
-  const [, dataBase64 = ''] = dataUrl.split(',', 2);
-
-  return {
-    name: file.name,
-    mime_type: file.type || 'image/png',
-    data_base64: dataBase64,
-  };
+function readFilesFromInput(event: ChangeEvent<HTMLInputElement>) {
+  return Array.from(event.target.files || []).filter((file) => file.size > 0);
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
@@ -315,10 +317,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
   const [importSourceText, setImportSourceText] = useState('');
-  const [importRows, setImportRows] = useState<AiIntakeRow[]>([]);
-  const [importImages, setImportImages] = useState<File[]>([]);
+  const [importRows, setImportRows] = useState<ParsedImportRow[]>([]);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importReviewing, setImportReviewing] = useState(false);
+  const [reviewingImport, setReviewingImport] = useState(false);
+  const [importProviderLabel, setImportProviderLabel] = useState('');
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -704,54 +708,86 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportOpen(true);
     setImportRows([]);
     setImportSourceText('');
-    setImportImages([]);
+    setImportFiles([]);
+    setImportProviderLabel('');
+    setImportWarnings([]);
     setOpenMenuId(null);
   }
 
   function closeImportModal() {
-    if (importing || importReviewing) return;
+    if (importing || reviewingImport) return;
     setImportOpen(false);
     setImportRows([]);
     setImportSourceText('');
-    setImportImages([]);
+    setImportFiles([]);
+    setImportProviderLabel('');
+    setImportWarnings([]);
   }
 
-  async function runImportParser() {
-    if (!importSourceText.trim() && importImages.length === 0) {
-      setMessage('Add pasted text or at least one image to run AI Intake.');
+  async function reviewImportWithAi() {
+    if (!importSourceText.trim() && importFiles.length === 0) {
+      setMessage('Add text or at least one image to review.');
       return;
     }
 
-    setImportReviewing(true);
+    setReviewingImport(true);
     try {
-      const images = await Promise.all(importImages.map((file) => fileToAiImageInput(file)));
-      const result = await requestAiIntake({ source_text: importSourceText, images });
-      const nextRows = result.rows.map((row) => buildImportWarnings(row, shows));
-      setImportRows(nextRows);
-      if (nextRows.length === 0) {
-        setMessage('AI Intake did not find any draftable dates. Try adding more context.');
+      const body = new FormData();
+      body.append('text', importSourceText);
+      importFiles.forEach((file) => body.append('images', file));
+
+      const response = await fetch('/api/ai-intake', {
+        method: 'POST',
+        body,
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to review AI intake.');
+      }
+
+      const rows = Array.isArray(payload?.rows) ? buildImportRows(payload.rows as IntakeRow[]) : [];
+      setImportRows(rows);
+      setImportWarnings(Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : []);
+      setImportProviderLabel(payload?.provider && payload?.model ? `${payload.provider} · ${payload.model}` : payload?.provider || '');
+      if (!rows.length) {
+        setMessage('AI Intake did not find any usable show rows.');
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to run AI Intake.');
+      setMessage(error instanceof Error ? error.message : 'Unable to review AI intake.');
     } finally {
-      setImportReviewing(false);
+      setReviewingImport(false);
     }
   }
 
-  function updateImportRow(rowId: string, patch: Partial<AiIntakeRow>) {
-    setImportRows((current) => current.map((row) => (row.id === rowId ? buildImportWarnings({ ...row, ...patch }, shows) : row)));
+  function updateImportRow(rowId: string, patch: Partial<ParsedImportRow>) {
+    setImportRows((current) =>
+      current.map((row) => {
+        if (row.id !== rowId) return row;
+        const next = { ...row, ...patch };
+        return { ...next, warning: buildImportRowWarning(next) };
+      }),
+    );
   }
 
-  function updateImportScheduleRow(rowId: string, index: number, key: 'label' | 'time', value: string) {
-    setImportRows((current) => current.map((row) => {
-      if (row.id !== rowId) return row;
-      const schedule_items = row.schedule_items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item);
-      return buildImportWarnings({ ...row, schedule_items }, shows);
-    }));
+  function updateImportScheduleItem(rowId: string, itemId: string, patch: { label?: string; time?: string }) {
+    setImportRows((current) =>
+      current.map((row) => {
+        if (row.id !== rowId) return row;
+        const nextItems = row.schedule_items.map((item) => (item.id === itemId ? { ...item, ...patch } : item));
+        const next = { ...row, schedule_items: nextItems };
+        return { ...next, warning: buildImportRowWarning(next) };
+      }),
+    );
   }
 
-  function addImportScheduleRow(rowId: string) {
-    setImportRows((current) => current.map((row) => row.id === rowId ? { ...row, schedule_items: [...row.schedule_items, { label: '', time: '' }] } : row));
+  function addImportScheduleItem(rowId: string) {
+    setImportRows((current) =>
+      current.map((row) => {
+        if (row.id !== rowId) return row;
+        return { ...row, schedule_items: [...row.schedule_items, { id: crypto.randomUUID(), label: '', time: '' }] };
+      }),
+    );
   }
 
   async function confirmImportRows() {
@@ -770,18 +806,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           city: row.city.trim(),
           region: row.region.trim().toUpperCase(),
           venue_name: row.venue_name.trim(),
-          tour_name: row.tour_name.trim(),
-          venue_address: row.venue_address.trim(),
-          dos_name: row.dos_name.trim(),
-          dos_phone: row.dos_phone.trim(),
-          parking_load_info: row.parking_load_info.trim(),
-          hotel_name: row.hotel_name.trim(),
-          hotel_address: row.hotel_address.trim(),
-          hotel_notes: row.hotel_notes.trim(),
-          notes: row.notes.trim(),
-          schedule_items: row.schedule_items.filter((item) => item.label.trim() || item.time.trim()).length
-            ? row.schedule_items.map((item) => ({ id: crypto.randomUUID(), label: item.label.trim(), time: item.time.trim() }))
-            : createEmptyScheduleItems(),
+          tour_name: row.tour_name?.trim() || '',
+          venue_address: row.venue_address?.trim() || '',
+          dos_name: row.dos_name?.trim() || '',
+          dos_phone: row.dos_phone?.trim() || '',
+          parking_load_info: row.parking_load_info?.trim() || '',
+          schedule_items: row.schedule_items.filter((item) => item.label.trim() || item.time.trim()),
+          hotel_name: row.hotel_name?.trim() || '',
+          hotel_address: row.hotel_address?.trim() || '',
+          hotel_notes: row.hotel_notes?.trim() || '',
+          notes: row.notes?.trim() || '',
           status: 'draft',
         });
       }
@@ -789,8 +823,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setImportOpen(false);
       setImportRows([]);
       setImportSourceText('');
-      setImportImages([]);
-      setMessage(`${selectedRows.length} date${selectedRows.length === 1 ? '' : 's'} imported to Drafts.`);
+      setImportFiles([]);
+      setImportWarnings([]);
+      setImportProviderLabel('');
+      setMessage(`${selectedRows.length} draft date${selectedRows.length === 1 ? '' : 's'} created.`);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to import dates.');
@@ -819,72 +855,86 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">AI Intake</p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-100">Paste text, emails, spreadsheets, or posters</h2>
-                <p className="mt-1 max-w-2xl text-sm text-zinc-400">AI proposes TourBook drafts from pasted text and images, then you review and edit everything before anything gets created.</p>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-100">Review text, emails, spreadsheets, or posters</h2>
+                <p className="mt-1 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
               </div>
               <button type="button" onClick={closeImportModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
               <div className="space-y-3">
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block">Source text</span>
                   <textarea
                     value={importSourceText}
                     onChange={(event) => setImportSourceText(event.target.value)}
-                    placeholder={`Paste routing text, promoter emails, or spreadsheet-like rows here.
+                    placeholder={`April 30 - St. Cath - Warehouse $500 each band
+May 1 - Mills Hardware $750 each band
+May 2 - Guelph Sonic Hall $750 each band
 
-April 30 - St. Cath - Warehouse $500 each band
-May 8 - Toronto Rivoli $1000 each band`}
+Or paste a promoter email here.`}
                     className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
                   />
                 </label>
 
-                <label className="block rounded-[24px] border border-dashed border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
-                  <span className="mb-2 block">Images</span>
+                <label className="block text-sm text-zinc-300">
+                  <span className="mb-2 block">Images / posters</span>
                   <input
                     type="file"
                     accept="image/*"
                     multiple
-                    onChange={(event) => setImportImages(Array.from(event.target.files ?? []))}
-                    className="block w-full text-sm text-zinc-400 file:mr-3 file:rounded-full file:border file:border-white/10 file:bg-white/[0.04] file:px-3 file:py-2 file:text-sm file:text-zinc-200"
+                    onChange={(event) => setImportFiles(readFilesFromInput(event))}
+                    className="block w-full text-sm text-zinc-300 file:mr-3 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-100 hover:file:bg-white/15"
                   />
-                  <p className="mt-2 text-xs text-zinc-500">Upload posters, screenshots, routing graphics, or email screenshots. AI will read images together with pasted text.</p>
-                  {importImages.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {importImages.map((file) => (
-                        <span key={`${file.name}-${file.size}`} className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-zinc-300">{file.name}</span>
-                      ))}
-                    </div>
-                  ) : null}
                 </label>
 
+                {importFiles.length ? (
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
+                    <p className="font-medium text-zinc-200">Attached</p>
+                    <div className="mt-2 space-y-1">
+                      {importFiles.map((file) => (
+                        <p key={`${file.name}-${file.size}`}>{file.name}</p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => void runImportParser()} disabled={importReviewing} className={primaryButtonClassName()}>
-                    {importReviewing ? 'Reading with AI…' : 'Review AI draft'}
+                  <button type="button" onClick={reviewImportWithAi} disabled={reviewingImport || importing} className={primaryButtonClassName()}>
+                    {reviewingImport ? 'Reviewing…' : 'Review AI draft'}
                   </button>
-                  <p className="text-xs text-zinc-500">Nothing is auto-saved. AI output always stays editable.</p>
+                  <p className="text-xs text-zinc-500">Use pasted text, images, or both. Smaller inputs stay more reliable on free tiers.</p>
                 </div>
               </div>
 
               <div className="rounded-[24px] border border-white/10 bg-black/20 p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-medium text-zinc-200">Review</h3>
-                    <p className="text-xs text-zinc-500">Edit rows, skip anything uncertain, then create draft dates.</p>
+                    <p className="text-xs text-zinc-500">Edit anything, skip weak rows, then create drafts.</p>
+                    {importProviderLabel ? <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-zinc-500">{importProviderLabel}</p> : null}
                   </div>
                   <p className="text-xs text-zinc-400">{includedImportCount} selected</p>
                 </div>
-                <div className="max-h-[480px] space-y-3 overflow-y-auto pr-1">
+
+                {importWarnings.length ? (
+                  <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    {importWarnings.map((warning, index) => (
+                      <p key={`${warning}-${index}`}>{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
                   {importRows.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">AI-generated draft rows will appear here. Use pasted text, images, or both.</div>
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">AI-reviewed rows will appear here. The importer creates drafts only after you confirm.</div>
                   ) : (
                     importRows.map((row, index) => (
                       <div key={row.id} className="rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Row {index + 1}</p>
-                            <p className="mt-1 text-xs text-zinc-500">Confidence {Math.round((row.confidence || 0) * 100)}%</p>
+                            {typeof row.confidence === 'number' ? <p className="mt-1 text-[11px] text-zinc-500">Confidence {Math.round(row.confidence * 100)}%</p> : null}
                           </div>
                           <label className="inline-flex items-center gap-2 text-xs text-zinc-300">
                             <input type="checkbox" checked={row.include} onChange={(event) => updateImportRow(row.id, { include: event.target.checked })} className="h-4 w-4 rounded border-white/10 bg-black/20" />
@@ -892,52 +942,61 @@ May 8 - Toronto Rivoli $1000 each band`}
                           </label>
                         </div>
 
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                           <Input label="Date" value={row.date} onChange={(value) => updateImportRow(row.id, { date: value })} inputClassName={fieldClassName()} />
-                          <Input label="Venue" value={row.venue_name} onChange={(value) => updateImportRow(row.id, { venue_name: value })} inputClassName={fieldClassName()} />
                           <Input label="City" value={row.city} onChange={(value) => updateImportRow(row.id, { city: value })} inputClassName={fieldClassName()} />
                           <Input label="Region" value={row.region} onChange={(value) => updateImportRow(row.id, { region: value.toUpperCase() })} inputClassName={fieldClassName()} />
-                          <Input label="Tour" value={row.tour_name} onChange={(value) => updateImportRow(row.id, { tour_name: value })} inputClassName={fieldClassName()} />
-                          <Input label="Venue address" value={row.venue_address} onChange={(value) => updateImportRow(row.id, { venue_address: value })} inputClassName={fieldClassName()} />
-                          <Input label="DOS contact" value={row.dos_name} onChange={(value) => updateImportRow(row.id, { dos_name: value })} inputClassName={fieldClassName()} />
-                          <Input label="DOS phone" value={row.dos_phone} onChange={(value) => updateImportRow(row.id, { dos_phone: value })} inputClassName={fieldClassName()} />
-                          <Input label="Hotel" value={row.hotel_name} onChange={(value) => updateImportRow(row.id, { hotel_name: value })} inputClassName={fieldClassName()} />
-                          <Input label="Hotel address" value={row.hotel_address} onChange={(value) => updateImportRow(row.id, { hotel_address: value })} inputClassName={fieldClassName()} />
+                          <Input label="Venue" value={row.venue_name} onChange={(value) => updateImportRow(row.id, { venue_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="Tour" value={row.tour_name || ''} onChange={(value) => updateImportRow(row.id, { tour_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="Venue address" value={row.venue_address || ''} onChange={(value) => updateImportRow(row.id, { venue_address: value })} inputClassName={fieldClassName()} />
+                          <Input label="DOS contact" value={row.dos_name || ''} onChange={(value) => updateImportRow(row.id, { dos_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="DOS phone" value={row.dos_phone || ''} onChange={(value) => updateImportRow(row.id, { dos_phone: value })} inputClassName={fieldClassName()} />
+                          <Input label="Hotel" value={row.hotel_name || ''} onChange={(value) => updateImportRow(row.id, { hotel_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="Hotel address" value={row.hotel_address || ''} onChange={(value) => updateImportRow(row.id, { hotel_address: value })} inputClassName={fieldClassName()} />
                         </div>
 
-                        <div className="mt-2 space-y-2">
-                          <Textarea label="Load / parking info" value={row.parking_load_info} onChange={(value) => updateImportRow(row.id, { parking_load_info: value })} />
-                          <Textarea label="Hotel notes" value={row.hotel_notes} onChange={(value) => updateImportRow(row.id, { hotel_notes: value })} />
-                          <Textarea label="Notes" value={row.notes} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" placeholder="Optional notes" />
+                        <div className="mt-2 grid gap-2">
+                          <Textarea label="Parking / load" value={row.parking_load_info || ''} onChange={(value) => updateImportRow(row.id, { parking_load_info: value })} ariaLabel="Parking or load info" placeholder="Parking / load details" />
+                          <Textarea label="Hotel notes" value={row.hotel_notes || ''} onChange={(value) => updateImportRow(row.id, { hotel_notes: value })} ariaLabel="Hotel notes" placeholder="Hotel notes" />
+                          <Textarea label="Notes" value={row.notes || ''} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" placeholder="Notes" />
                         </div>
 
                         <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Schedule</p>
-                            <button type="button" onClick={() => addImportScheduleRow(row.id)} className="text-xs text-zinc-400 transition hover:text-zinc-200">Add line</button>
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Schedule</p>
+                            <button type="button" onClick={() => addImportScheduleItem(row.id)} className="text-xs text-zinc-300 transition hover:text-zinc-100">+ Add line</button>
                           </div>
                           <div className="space-y-2">
-                            {row.schedule_items.length === 0 ? (
-                              <p className="text-xs text-zinc-500">No schedule lines extracted.</p>
-                            ) : row.schedule_items.map((item, itemIndex) => (
-                              <div key={`${row.id}-schedule-${itemIndex}`} className="grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(160px,0.8fr)]">
-                                <Input label={`Schedule label ${itemIndex + 1}`} value={item.label} onChange={(value) => updateImportScheduleRow(row.id, itemIndex, 'label', value)} hideLabel inputClassName={fieldClassName()} placeholder="Label" />
-                                <Input label={`Schedule time ${itemIndex + 1}`} value={item.time} onChange={(value) => updateImportScheduleRow(row.id, itemIndex, 'time', value)} hideLabel inputClassName={fieldClassName()} placeholder="Time" />
+                            {row.schedule_items.map((item) => (
+                              <div key={item.id} className="flex flex-col gap-2 sm:flex-row">
+                                <input
+                                  value={item.label}
+                                  onChange={(event) => updateImportScheduleItem(row.id, item.id, { label: event.target.value })}
+                                  placeholder="Label"
+                                  className={`${fieldClassName()} min-w-0 flex-1`}
+                                />
+                                <input
+                                  value={item.time}
+                                  onChange={(event) => updateImportScheduleItem(row.id, item.id, { time: event.target.value })}
+                                  placeholder="Time"
+                                  className="h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40 sm:w-44"
+                                />
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        {row.flags.length > 0 ? <p className="mt-2 text-xs text-amber-300">{row.flags.join(' • ')}</p> : null}
+                        {row.warning ? <p className="mt-2 text-xs text-amber-300">{row.warning}</p> : null}
                       </div>
                     ))
                   )}
                 </div>
+
                 <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                   <button type="button" onClick={closeImportModal} className={secondaryButtonClassName()}>
                     Cancel
                   </button>
-                  <button type="button" onClick={() => void confirmImportRows()} disabled={importing || includedImportCount === 0} className={primaryButtonClassName()}>
+                  <button type="button" onClick={confirmImportRows} disabled={importing || reviewingImport || includedImportCount === 0} className={primaryButtonClassName()}>
                     {importing ? 'Creating drafts…' : 'Create draft dates'}
                   </button>
                 </div>

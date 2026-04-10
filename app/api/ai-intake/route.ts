@@ -1,23 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminApiAuth } from '@/lib/auth';
-import { runAiIntake } from '@/lib/ai/intake-provider';
-import { AiIntakeImageInput } from '@/lib/types';
+import { runIntake } from '@/lib/ai/intake-provider';
+import { listShowsServer } from '@/lib/server-store';
+import { IntakeImageInput } from '@/lib/ai/intake-types';
 
-function normalizeImageInputs(value: unknown) {
-  if (!Array.isArray(value)) return [] as AiIntakeImageInput[];
+export const runtime = 'nodejs';
 
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      const name = typeof record.name === 'string' ? record.name.trim() : 'upload';
-      const mime_type = typeof record.mime_type === 'string' ? record.mime_type.trim() : '';
-      const data_base64 = typeof record.data_base64 === 'string' ? record.data_base64.trim() : '';
-      if (!mime_type || !data_base64) return null;
-      return { name, mime_type, data_base64 } satisfies AiIntakeImageInput;
-    })
-    .filter((item): item is AiIntakeImageInput => Boolean(item))
-    .slice(0, 4);
+function normalizeText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseBodyAsJson(payload: unknown) {
+  const body = (payload ?? {}) as { text?: string };
+  return {
+    text: normalizeText(body.text),
+    images: [] as IntakeImageInput[],
+  };
+}
+
+async function parseBodyAsFormData(request: NextRequest) {
+  const formData = await request.formData();
+  const text = normalizeText(formData.get('text'));
+  const files = formData.getAll('images').filter((value): value is File => value instanceof File);
+
+  const images = await Promise.all(
+    files
+      .filter((file) => file.size > 0)
+      .slice(0, 4)
+      .map(async (file) => ({
+        mimeType: file.type || 'image/jpeg',
+        dataBase64: Buffer.from(await file.arrayBuffer()).toString('base64'),
+        name: file.name,
+      })),
+  );
+
+  return { text, images };
 }
 
 export async function POST(request: NextRequest) {
@@ -25,20 +42,32 @@ export async function POST(request: NextRequest) {
   if (authResponse) return authResponse;
 
   try {
-    const body = (await request.json()) as { source_text?: unknown; images?: unknown };
-    const source_text = typeof body.source_text === 'string' ? body.source_text : '';
-    const images = normalizeImageInputs(body.images);
+    const contentType = request.headers.get('content-type') || '';
+    const parsed = contentType.includes('multipart/form-data')
+      ? await parseBodyAsFormData(request)
+      : parseBodyAsJson(await request.json().catch(() => ({})));
 
-    if (!source_text.trim() && images.length === 0) {
-      return NextResponse.json({ error: 'Provide pasted text or at least one image.' }, { status: 400 });
+    if (!parsed.text && parsed.images.length === 0) {
+      return NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 });
     }
 
-    const payload = await runAiIntake({ source_text, images });
-    return NextResponse.json(payload);
+    const existingShows = (await listShowsServer()).map((show) => ({
+      id: show.id,
+      date: show.date,
+      city: show.city,
+      venue_name: show.venue_name,
+      status: show.status,
+    }));
+
+    const result = await runIntake({
+      text: parsed.text,
+      images: parsed.images,
+      existingShows,
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to run AI intake.' },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : 'Unable to review AI intake.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
