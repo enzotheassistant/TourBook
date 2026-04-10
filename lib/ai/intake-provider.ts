@@ -152,7 +152,7 @@ function normalizeRow(row: any): IntakeRow {
   const schedule = Array.isArray(row?.schedule_items)
     ? row.schedule_items
         .map((item: any) => ({ label: normalizeString(item?.label), time: normalizeString(item?.time) }))
-        .filter((item) => item.label || item.time)
+        .filter((item: { label: string; time: string }) => item.label || item.time)
     : [];
 
   return {
@@ -177,7 +177,9 @@ function normalizeRow(row: any): IntakeRow {
 
 function normalizeResult(payload: any, provider: string, model: string, attempts = 1): IntakeResult {
   const rows = Array.isArray(payload?.rows)
-    ? payload.rows.map(normalizeRow).filter((row) => row.date || row.city || row.venue_name || row.notes)
+    ? payload.rows
+        .map(normalizeRow)
+        .filter((row: IntakeRow) => row.date || row.city || row.venue_name || row.notes)
     : [];
   const warnings = Array.isArray(payload?.warnings) ? payload.warnings.map((item: unknown) => normalizeString(item)).filter(Boolean) : [];
 
