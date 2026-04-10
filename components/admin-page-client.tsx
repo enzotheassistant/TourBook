@@ -249,10 +249,11 @@ function parseFlexibleDateInput(value: string) {
   return '';
 }
 
-type ParsedImportRow = IntakeRow & {
+type ParsedImportRow = Omit<IntakeRow, 'schedule_items'> & {
   id: string;
   include: boolean;
   warning?: string;
+  schedule_items: Array<{ id: string; label: string; time: string }>;
 };
 
 function buildImportRowWarning(row: IntakeRow) {
