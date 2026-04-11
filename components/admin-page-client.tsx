@@ -811,18 +811,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
-  function handleImportDragOver(event: DragEvent<HTMLLabelElement>) {
+  function handleImportDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) return;
     setIsDraggingImportFiles(true);
   }
 
-  function handleImportDragLeave(event: DragEvent<HTMLLabelElement>) {
+  function handleImportDragLeave(event: DragEvent<HTMLDivElement>) {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
     setIsDraggingImportFiles(false);
   }
 
-  function handleImportDrop(event: DragEvent<HTMLLabelElement>) {
+  function handleImportDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingImportFiles(false);
