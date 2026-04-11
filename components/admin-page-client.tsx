@@ -913,7 +913,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create Date';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ConfirmDialog
         open={confirmState.open}
         title={confirmState.title}
@@ -1114,7 +1114,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : null}
       {mode === 'new' && isEditing ? (
-        <div className="mb-3">
+        <div className="mb-2">
           <button
             type="button"
             onClick={async () => {
@@ -1193,20 +1193,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       </div>
 
       {mode === 'new' ? (
-        <div ref={formRef} className="space-y-4">
+        <div ref={formRef} className="space-y-3">
 
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-h-[2.5rem] pt-1">
-              {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
-            </div>
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            {isEditing ? (
+              <div className="pt-1">
+                <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1>
+              </div>
+            ) : <div />}
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              {!isEditing ? (
-                <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
-                  Import
-                </button>
-              ) : <span />}
-              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+              <div className="flex w-full items-center justify-end gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {isEditingDraft ? (
                   <>
                     <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
@@ -1225,10 +1222,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   </button>
                 ) : (
                   <>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                      Import
+                    </button>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Create Date'}
                     </button>
                   </>
@@ -1237,7 +1237,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </div>
           </div>
 
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
             <div className="min-h-[1rem] text-emerald-300/90">{message || ''}</div>
             <div className="flex items-center gap-3">
               <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
@@ -1402,7 +1402,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </section>
         </div>
       ) : (
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           {message ? <div className="mb-3 text-xs text-emerald-300/90">{message}</div> : null}
           {isDraftsMode ? (
             <ShowListSection
@@ -1585,9 +1585,12 @@ function ShowListSection({
   function openMenuForShow(show: Show, trigger: HTMLButtonElement) {
     const rect = trigger.getBoundingClientRect();
     const menuWidth = 220;
+    const menuHeight = mode === 'drafts' ? 116 : show.status === 'draft' ? 168 : 168;
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right;
-    const left = Math.max(16, Math.min(rect.right - menuWidth, viewportWidth - menuWidth - 16));
-    setMenuState({ show, top: rect.bottom + 8, left });
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : rect.bottom;
+    const left = Math.max(16, Math.min(rect.left, viewportWidth - menuWidth - 16));
+    const top = Math.max(16, Math.min(rect.bottom + 8, viewportHeight - menuHeight - 16));
+    setMenuState({ show, top, left });
   }
 
   function runMenuAction(action: () => void) {

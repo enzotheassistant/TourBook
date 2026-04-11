@@ -76,8 +76,8 @@ export function AppShell({
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
       <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pt-4 sm:px-6">
-          <div className="flex items-start justify-between gap-3 pb-4">
+        <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-4'} sm:px-6`}>
+          <div className={`flex items-start justify-between gap-3 ${mode === 'admin' ? 'pb-3' : 'pb-4'}`}>
             <div className="min-w-0">
               <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
                 {title}
@@ -104,11 +104,11 @@ export function AppShell({
             )}
           </div>
           {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
-          {mode === 'admin' ? <div className="py-4" /> : null}
+          {mode === 'admin' ? <div className="py-2" /> : null}
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">{children}</main>
+      <main className={`mx-auto flex w-full max-w-5xl flex-col ${mode === 'admin' ? 'gap-3 py-3' : 'gap-4 py-4'} px-4 sm:px-6`}>{children}</main>
     </div>
   );
 }
