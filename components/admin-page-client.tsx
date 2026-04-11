@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -36,10 +36,11 @@ function filterShows(shows: Show[], search: string, selectedTour: string) {
   const normalizedSearch = search.trim().toLowerCase();
   return shows.filter((show) => {
     const normalizedTour = show.tour_name.trim();
-    const matchesTour = selectedTour === 'All' || normalizedTour === selectedTour;
+    const matchesTour = selectedTour === 'All' || selectedTour === 'Hide drafts' || normalizedTour === selectedTour;
+    const matchesStatus = selectedTour !== 'Hide drafts' || show.status !== 'draft';
     const haystack = [show.city, show.venue_name, formatShowDate(show.date), show.date, show.tour_name].join(' ').toLowerCase();
     const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
-    return matchesTour && matchesSearch;
+    return matchesTour && matchesStatus && matchesSearch;
   });
 }
 
@@ -212,11 +213,22 @@ function parseFlexibleDateInput(value: string) {
   if (!trimmed) return '';
 
   const normalized = trimmed.replace(/[./]/g, '-').replace(/\s+/g, ' ');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const tryParts = (year: number, month: number, day: number) => {
+  const finalizeCandidate = (candidate: Date, inferredYear: boolean) => {
+    if (Number.isNaN(candidate.getTime())) return '';
+    const normalizedCandidate = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate());
+    if (inferredYear && normalizedCandidate < today) {
+      normalizedCandidate.setFullYear(normalizedCandidate.getFullYear() + 1);
+    }
+    return formatDateForStorage(normalizedCandidate);
+  };
+
+  const tryParts = (year: number, month: number, day: number, inferredYear = false) => {
     const candidate = new Date(year, month - 1, day);
     if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
-      return formatDateForStorage(candidate);
+      return finalizeCandidate(candidate, inferredYear);
     }
     return '';
   };
@@ -226,11 +238,11 @@ function parseFlexibleDateInput(value: string) {
     return tryParts(year, month, day);
   }
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = today.getFullYear();
 
   if (/^\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [month, day] = normalized.split('-').map(Number);
-    return tryParts(currentYear, month, day);
+    return tryParts(currentYear, month, day, true);
   }
 
   if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(normalized)) {
@@ -243,7 +255,7 @@ function parseFlexibleDateInput(value: string) {
   const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${currentYear}`;
   const parsed = new Date(parseTarget);
   if (!Number.isNaN(parsed.getTime())) {
-    return formatDateForStorage(new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+    return finalizeCandidate(parsed, !hasExplicitYear);
   }
 
   return '';
@@ -290,8 +302,36 @@ function buildImportRows(rows: IntakeRow[]) {
   }));
 }
 
+function filterImportFiles(files: File[]) {
+  return files.filter((file) => file.size > 0);
+}
+
 function readFilesFromInput(event: ChangeEvent<HTMLInputElement>) {
-  return Array.from(event.target.files || []).filter((file) => file.size > 0);
+  return filterImportFiles(Array.from(event.target.files || []));
+}
+
+function mergeImportFiles(currentFiles: File[], nextFiles: File[]) {
+  const merged = new Map<string, File>();
+  [...currentFiles, ...filterImportFiles(nextFiles)].forEach((file) => {
+    merged.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+  });
+  return Array.from(merged.values());
+}
+
+function isImportableTextFile(file: File) {
+  return Boolean(file.type.startsWith('text/') || /\.(csv|tsv|txt|md|json|eml)$/i.test(file.name));
+}
+
+async function buildImportTextFromFiles(files: File[]) {
+  const textChunks = await Promise.all(
+    files.filter(isImportableTextFile).map(async (file) => {
+      const content = await file.text();
+      const trimmed = content.trim();
+      return trimmed ? `File: ${file.name}\n${trimmed}` : '';
+    }),
+  );
+
+  return textChunks.filter(Boolean).join('\n\n');
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
@@ -322,8 +362,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [reviewingImport, setReviewingImport] = useState(false);
-  const [importProviderLabel, setImportProviderLabel] = useState('');
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [importError, setImportError] = useState('');
+  const [isDraggingImportFiles, setIsDraggingImportFiles] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -370,8 +411,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
   const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)).sort((a,b)=>a.date.localeCompare(b.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
-  const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows)], [upcomingShows]);
-  const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows)], [pastShows]);
+  const upcomingTours = useMemo(() => ['All', 'Hide drafts', ...sortTourNamesForUpcoming(upcomingShows)], [upcomingShows]);
+  const pastTours = useMemo(() => ['All', 'Hide drafts', ...sortTourNamesForPast(pastShows)], [pastShows]);
   const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingSearch, upcomingTour, upcomingShows]);
   const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastSearch, pastTour, pastShows]);
   const availableTours = useMemo(() => Array.from(new Set(shows.map((show) => show.tour_name.trim()).filter(Boolean))).sort(), [shows]);
@@ -619,6 +660,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   function loadShow(show: Show) {
     setOpenMenuId(null);
+    setOpenMenuId(null);
 
     if (mode === 'dates') {
       window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
@@ -639,6 +681,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   function duplicateShow(show: Show) {
+    setOpenMenuId(null);
     setOpenMenuId(null);
 
     if (mode === 'dates') {
@@ -663,6 +706,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function handleDelete(showId: string) {
+    setOpenMenuId(null);
     const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
     if (!confirmed) return;
 
@@ -679,6 +723,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function publishShow(show: Show) {
     setOpenMenuId(null);
+    setOpenMenuId(null);
     try {
       if (!isValidStoredDate(show.date)) {
         setMessage('Draft needs a valid date before it can be published.');
@@ -694,6 +739,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function exportGuestList(showId: string) {
+    setOpenMenuId(null);
     const csv = await exportGuestListCsv(showId);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -710,7 +756,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportRows([]);
     setImportSourceText('');
     setImportFiles([]);
-    setImportProviderLabel('');
     setImportWarnings([]);
     setOpenMenuId(null);
   }
@@ -721,21 +766,47 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportRows([]);
     setImportSourceText('');
     setImportFiles([]);
-    setImportProviderLabel('');
     setImportWarnings([]);
+  }
+
+  function handleImportFileSelection(files: File[]) {
+    setImportFiles((current) => mergeImportFiles(current, files));
+    setImportError('');
+  }
+
+  function handleImportDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) return;
+    setIsDraggingImportFiles(true);
+  }
+
+  function handleImportDragLeave(event: DragEvent<HTMLLabelElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDraggingImportFiles(false);
+  }
+
+  function handleImportDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingImportFiles(false);
+    handleImportFileSelection(Array.from(event.dataTransfer.files || []));
   }
 
   async function reviewImportWithAi() {
     if (!importSourceText.trim() && importFiles.length === 0) {
-      setMessage('Add text or at least one image to review.');
+      setImportError('Add text or at least one file to review.');
       return;
     }
 
     setReviewingImport(true);
+    setImportError('');
     try {
       const body = new FormData();
-      body.append('text', importSourceText);
-      importFiles.forEach((file) => body.append('images', file));
+      const imageFiles = importFiles.filter((file) => file.type.startsWith('image/'));
+      const textFromFiles = await buildImportTextFromFiles(importFiles);
+      const combinedText = [importSourceText.trim(), textFromFiles].filter(Boolean).join('\n\n');
+      body.append('text', combinedText);
+      imageFiles.forEach((file) => body.append('images', file));
 
       const response = await fetch('/api/ai-intake', {
         method: 'POST',
@@ -750,12 +821,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const rows = Array.isArray(payload?.rows) ? buildImportRows(payload.rows as IntakeRow[]) : [];
       setImportRows(rows);
       setImportWarnings(Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : []);
-      setImportProviderLabel(payload?.provider && payload?.model ? `${payload.provider} · ${payload.model}` : payload?.provider || '');
       if (!rows.length) {
-        setMessage('AI Intake did not find any usable show rows.');
+        setImportError('AI Intake did not find any usable show rows.');
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to review AI intake.');
+      setImportError(error instanceof Error ? error.message : 'Unable to review AI intake.');
     } finally {
       setReviewingImport(false);
     }
@@ -794,7 +864,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   async function confirmImportRows() {
     const selectedRows = importRows.filter((row) => row.include);
     if (!selectedRows.length) {
-      setMessage('Select at least one imported row.');
+      setImportError('Select at least one imported row.');
       return;
     }
 
@@ -826,11 +896,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setImportSourceText('');
       setImportFiles([]);
       setImportWarnings([]);
-      setImportProviderLabel('');
+      setImportError('');
       setMessage(`${selectedRows.length} draft date${selectedRows.length === 1 ? '' : 's'} created.`);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to import dates.');
+      setImportError(error instanceof Error ? error.message : 'Unable to import dates.');
     } finally {
       setImporting(false);
     }
@@ -855,9 +925,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           <div className="w-full max-w-6xl rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/70">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">AI Intake</p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-100">Review text, emails, spreadsheets, or posters</h2>
-                <p className="mt-1 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
+                <h2 className="text-xl font-semibold tracking-tight text-zinc-100">AI Intake</h2>
+                <p className="mt-1 text-sm text-zinc-400">Insert text, spreadsheets or images</p>
+                <p className="mt-2 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
               </div>
               <button type="button" onClick={closeImportModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
@@ -869,24 +939,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   <textarea
                     value={importSourceText}
                     onChange={(event) => setImportSourceText(event.target.value)}
-                    placeholder={`April 30 - St. Cath - Warehouse $500 each band
-May 1 - Mills Hardware $750 each band
-May 2 - Guelph Sonic Hall $750 each band
-
-Or paste a promoter email here.`}
+                    
                     className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
                   />
                 </label>
 
-                <label className="block text-sm text-zinc-300">
-                  <span className="mb-2 block">Images / posters</span>
+                <label
+                  className={`block rounded-[24px] border border-dashed p-3 text-sm text-zinc-300 transition ${isDraggingImportFiles ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
+                  onDragOver={handleImportDragOver}
+                  onDragLeave={handleImportDragLeave}
+                  onDrop={handleImportDrop}
+                >
+                  <span className="mb-2 block">Files / images</span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.csv,.tsv,.txt,.md,.json,.eml"
                     multiple
-                    onChange={(event) => setImportFiles(readFilesFromInput(event))}
+                    onChange={(event) => handleImportFileSelection(readFilesFromInput(event))}
                     className="block w-full text-sm text-zinc-300 file:mr-3 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-100 hover:file:bg-white/15"
                   />
+                  <p className="mt-2 text-xs text-zinc-500">Drag and drop files here on desktop, or use Choose Files.</p>
                 </label>
 
                 {importFiles.length ? (
@@ -904,7 +976,7 @@ Or paste a promoter email here.`}
                   <button type="button" onClick={reviewImportWithAi} disabled={reviewingImport || importing} className={primaryButtonClassName()}>
                     {reviewingImport ? 'Reviewing…' : 'Review AI draft'}
                   </button>
-                  <p className="text-xs text-zinc-500">Use pasted text, images, or both. Smaller inputs stay more reliable on free tiers.</p>
+                  
                 </div>
               </div>
 
@@ -912,11 +984,14 @@ Or paste a promoter email here.`}
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-medium text-zinc-200">Review</h3>
-                    <p className="text-xs text-zinc-500">Edit anything, skip weak rows, then create drafts.</p>
-                    {importProviderLabel ? <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-zinc-500">{importProviderLabel}</p> : null}
+                    <p className="text-xs text-zinc-500">Edit, skip weak rows, then create drafts.</p>
                   </div>
                   <p className="text-xs text-zinc-400">{includedImportCount} selected</p>
                 </div>
+
+                {importError ? (
+                  <div className="mb-3 rounded-2xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-100">{importError}</div>
+                ) : null}
 
                 {importWarnings.length ? (
                   <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
@@ -928,7 +1003,7 @@ Or paste a promoter email here.`}
 
                 <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
                   {importRows.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">AI-reviewed rows will appear here. The importer creates drafts only after you confirm.</div>
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">No results yet</div>
                   ) : (
                     importRows.map((row, index) => (
                       <div key={row.id} className="rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
@@ -943,23 +1018,25 @@ Or paste a promoter email here.`}
                           </label>
                         </div>
 
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="grid gap-2 lg:grid-cols-3">
                           <Input label="Date" value={row.date} onChange={(value) => updateImportRow(row.id, { date: value })} inputClassName={fieldClassName()} />
                           <Input label="City" value={row.city} onChange={(value) => updateImportRow(row.id, { city: value })} inputClassName={fieldClassName()} />
                           <Input label="Region" value={row.region} onChange={(value) => updateImportRow(row.id, { region: value.toUpperCase() })} inputClassName={fieldClassName()} />
+                        </div>
+
+                        <div className="mt-2 grid gap-2 lg:grid-cols-3">
                           <Input label="Venue" value={row.venue_name} onChange={(value) => updateImportRow(row.id, { venue_name: value })} inputClassName={fieldClassName()} />
-                          <Input label="Tour" value={row.tour_name || ''} onChange={(value) => updateImportRow(row.id, { tour_name: value })} inputClassName={fieldClassName()} />
                           <Input label="Venue address" value={row.venue_address || ''} onChange={(value) => updateImportRow(row.id, { venue_address: value })} inputClassName={fieldClassName()} />
+                          <Input label="Tour" value={row.tour_name || ''} onChange={(value) => updateImportRow(row.id, { tour_name: value })} inputClassName={fieldClassName()} />
+                        </div>
+
+                        <div className="mt-2 grid gap-2 lg:grid-cols-2">
                           <Input label="DOS contact" value={row.dos_name || ''} onChange={(value) => updateImportRow(row.id, { dos_name: value })} inputClassName={fieldClassName()} />
                           <Input label="DOS phone" value={row.dos_phone || ''} onChange={(value) => updateImportRow(row.id, { dos_phone: value })} inputClassName={fieldClassName()} />
-                          <Input label="Hotel" value={row.hotel_name || ''} onChange={(value) => updateImportRow(row.id, { hotel_name: value })} inputClassName={fieldClassName()} />
-                          <Input label="Hotel address" value={row.hotel_address || ''} onChange={(value) => updateImportRow(row.id, { hotel_address: value })} inputClassName={fieldClassName()} />
                         </div>
 
                         <div className="mt-2 grid gap-2">
-                          <Textarea label="Parking / load" value={row.parking_load_info || ''} onChange={(value) => updateImportRow(row.id, { parking_load_info: value })} ariaLabel="Parking or load info" placeholder="Parking / load details" />
-                          <Textarea label="Hotel notes" value={row.hotel_notes || ''} onChange={(value) => updateImportRow(row.id, { hotel_notes: value })} ariaLabel="Hotel notes" placeholder="Hotel notes" />
-                          <Textarea label="Notes" value={row.notes || ''} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" placeholder="Notes" />
+                          <Textarea label="Parking / load" value={row.parking_load_info || ''} onChange={(value) => updateImportRow(row.id, { parking_load_info: value })} ariaLabel="Parking or load info" />
                         </div>
 
                         <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -985,6 +1062,16 @@ Or paste a promoter email here.`}
                               </div>
                             ))}
                           </div>
+                        </div>
+
+                        <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                          <Input label="Hotel" value={row.hotel_name || ''} onChange={(value) => updateImportRow(row.id, { hotel_name: value })} inputClassName={fieldClassName()} />
+                          <Input label="Hotel address" value={row.hotel_address || ''} onChange={(value) => updateImportRow(row.id, { hotel_address: value })} inputClassName={fieldClassName()} />
+                        </div>
+
+                        <div className="mt-2 grid gap-2">
+                          <Textarea label="Hotel notes" value={row.hotel_notes || ''} onChange={(value) => updateImportRow(row.id, { hotel_notes: value })} ariaLabel="Hotel notes" />
+                          <Textarea label="Notes" value={row.notes || ''} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" />
                         </div>
 
                         {row.warning ? <p className="mt-2 text-xs text-amber-300">{row.warning}</p> : null}
@@ -1465,7 +1552,7 @@ function ShowListSection({
         : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
 
     return (
-      <div key={show.id} className={`relative rounded-2xl bg-black/20 p-3 ${show.status === 'draft' ? 'opacity-75' : ''}`}>
+      <div key={show.id} className="relative rounded-2xl border border-white/8 bg-black/20 p-3">
         <div className="flex items-start justify-between gap-3">
           <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
             <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
@@ -1477,10 +1564,10 @@ function ShowListSection({
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 
-          <div data-admin-menu-root="true" className="relative z-20 flex shrink-0 items-center gap-2 self-start">
+          <div data-admin-menu-root="true" className="relative z-50 flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
-              onClick={() => onEdit(show)}
+              onClick={(event) => { event.stopPropagation(); onEdit(show); }}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
               aria-label="Edit date"
             >
@@ -1488,14 +1575,14 @@ function ShowListSection({
             </button>
             <button
               type="button"
-              onClick={() => onToggleMenu(menuOpen ? null : show.id)}
+              onClick={(event) => { event.stopPropagation(); onToggleMenu(menuOpen ? null : show.id); }}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
               aria-label="More actions"
             >
               …
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-full z-30 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/70 ring-1 ring-black/50">
+              <div className="absolute right-0 top-full z-[120] mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/100 shadow-2xl shadow-black/80 ring-1 ring-black/60 backdrop-blur-0">
                 {mode === 'drafts' ? (
                   <>
                     <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
@@ -1577,8 +1664,12 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`block w-full border-b border-white/5 px-4 py-3 text-left text-sm last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-200'}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
+      className={`block w-full border-b border-white/5 bg-zinc-950 px-4 py-3 text-left text-sm transition hover:bg-white/5 last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-200'}`}
     >
       {label}
     </button>
