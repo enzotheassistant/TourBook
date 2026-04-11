@@ -365,6 +365,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [importError, setImportError] = useState('');
   const [isDraggingImportFiles, setIsDraggingImportFiles] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -406,6 +407,29 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, []);
+
+
+  useEffect(() => {
+    if (!importOpen || typeof document === 'undefined') return;
+
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPaddingRight = body.style.paddingRight;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const scrollbarWidth = window.innerWidth - documentElement.clientWidth;
+
+    body.style.overflow = 'hidden';
+    documentElement.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      body.style.paddingRight = previousBodyPaddingRight;
+      documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [importOpen]);
 
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
   const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
@@ -758,6 +782,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportFiles([]);
     setImportWarnings([]);
     setOpenMenuId(null);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
   }
 
   function closeImportModal() {
@@ -767,11 +794,21 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportSourceText('');
     setImportFiles([]);
     setImportWarnings([]);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
   }
 
   function handleImportFileSelection(files: File[]) {
     setImportFiles((current) => mergeImportFiles(current, files));
     setImportError('');
+  }
+
+  function removeImportFile(fileToRemove: File) {
+    setImportFiles((current) => current.filter((file) => !(file.name === fileToRemove.name && file.size === fileToRemove.size && file.lastModified === fileToRemove.lastModified)));
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
   }
 
   function handleImportDragOver(event: DragEvent<HTMLLabelElement>) {
@@ -921,62 +958,79 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onCancel={() => closeConfirmation(false)}
       />
       {importOpen ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-6xl rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
+          <div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/80">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold tracking-tight text-zinc-100">AI Intake</h2>
-                <p className="mt-1 text-sm text-zinc-400">Insert text, spreadsheets or images</p>
-                <p className="mt-2 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
+              <div className="max-w-2xl">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">AI Intake</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">Insert text, spreadsheets or images</h2>
+                <p className="mt-3 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
               </div>
               <button type="button" onClick={closeImportModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-              <div className="space-y-3">
+            <div className="mt-4 grid max-h-[calc(100vh-10rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto pr-1">
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block">Source text</span>
                   <textarea
                     value={importSourceText}
                     onChange={(event) => setImportSourceText(event.target.value)}
-                    
                     className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
                   />
                 </label>
 
-                <label
-                  className={`block rounded-[24px] border border-dashed p-3 text-sm text-zinc-300 transition ${isDraggingImportFiles ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
-                  onDragOver={handleImportDragOver}
-                  onDragLeave={handleImportDragLeave}
-                  onDrop={handleImportDrop}
-                >
-                  <span className="mb-2 block">Files / images</span>
-                  <input
-                    type="file"
-                    accept="image/*,.csv,.tsv,.txt,.md,.json,.eml"
-                    multiple
-                    onChange={(event) => handleImportFileSelection(readFilesFromInput(event))}
-                    className="block w-full text-sm text-zinc-300 file:mr-3 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-100 hover:file:bg-white/15"
-                  />
-                  <p className="mt-2 text-xs text-zinc-500">Drag and drop files here on desktop, or use Choose Files.</p>
-                </label>
-
-                {importFiles.length ? (
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-xs text-zinc-400">
-                    <p className="font-medium text-zinc-200">Attached</p>
-                    <div className="mt-2 space-y-1">
-                      {importFiles.map((file) => (
-                        <p key={`${file.name}-${file.size}`}>{file.name}</p>
-                      ))}
-                    </div>
+                <div>
+                  <span className="mb-2 block text-sm text-zinc-300">Files / images</span>
+                  <div
+                    className={`rounded-[24px] border border-dashed p-6 transition ${isDraggingImportFiles ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
+                    onDragOver={handleImportDragOver}
+                    onDragLeave={handleImportDragLeave}
+                    onDrop={handleImportDrop}
+                  >
+                    <input
+                      ref={importFileInputRef}
+                      type="file"
+                      accept="image/*,.csv,.tsv,.txt,.md,.json,.eml"
+                      multiple
+                      onChange={(event) => handleImportFileSelection(readFilesFromInput(event))}
+                      className="hidden"
+                    />
+                    {importFiles.length ? (
+                      <div className="space-y-2">
+                        {importFiles.map((file) => (
+                          <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100">
+                            <span className="truncate">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeImportFile(file)}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-sm text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100"
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex min-h-[144px] flex-col items-center justify-center gap-4 text-center">
+                        <p className="text-sm text-zinc-500">Drag and drop files here</p>
+                        <button
+                          type="button"
+                          onClick={() => importFileInputRef.current?.click()}
+                          className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/15"
+                        >
+                          Choose File
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : null}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={reviewImportWithAi} disabled={reviewingImport || importing} className={primaryButtonClassName()}>
                     {reviewingImport ? 'Reviewing…' : 'Review AI draft'}
                   </button>
-                  
                 </div>
               </div>
 
@@ -1154,9 +1208,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       </div>
 
       {mode === 'new' ? (
-        <section ref={formRef} className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
+        <div ref={formRef} className="space-y-4">
           {isEditing ? (
-            <div className="mb-4">
+            <div>
               <button
                 type="button"
                 onClick={async () => {
@@ -1174,6 +1228,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </div>
           ) : null}
 
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="min-h-[2.5rem] pt-1">
               {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
@@ -1378,6 +1433,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
           </form>
         </section>
+        </div>
       ) : (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 min-h-[1rem] text-xs text-emerald-300/90">{message || ''}</div>
@@ -1564,9 +1620,10 @@ function ShowListSection({
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 
-          <div data-admin-menu-root="true" className="relative z-50 flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()}>
+          <div data-admin-menu-root="true" className="relative z-50 isolate flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
             <button
               type="button"
+              onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => { event.stopPropagation(); onEdit(show); }}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
               aria-label="Edit date"
@@ -1575,14 +1632,15 @@ function ShowListSection({
             </button>
             <button
               type="button"
+              onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => { event.stopPropagation(); onToggleMenu(menuOpen ? null : show.id); }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-zinc-200 transition ${menuOpen ? "border-sky-300 bg-sky-500/10" : "border-white/10 bg-transparent hover:border-white/20 hover:bg-white/[0.05]"}` }
               aria-label="More actions"
             >
               …
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-full z-[120] mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/100 shadow-2xl shadow-black/80 ring-1 ring-black/60 backdrop-blur-0">
+              <div className="absolute right-0 top-full z-[220] mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-zinc-700 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.9)] ring-1 ring-white/10 [isolation:isolate] pointer-events-auto">
                 {mode === 'drafts' ? (
                   <>
                     <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
@@ -1664,12 +1722,16 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
   return (
     <button
       type="button"
+      onMouseDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
         onClick();
       }}
-      className={`block w-full border-b border-white/5 bg-zinc-950 px-4 py-3 text-left text-sm transition hover:bg-white/5 last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-200'}`}
+      className={`block w-full border-b border-white/10 bg-black px-4 py-3 text-left text-sm transition hover:bg-white/[0.06] last:border-b-0 ${destructive ? 'text-red-200' : 'text-zinc-100'}`}
     >
       {label}
     </button>
