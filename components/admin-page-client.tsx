@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -350,7 +351,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [pastSearch, setPastSearch] = useState('');
   const [upcomingTour, setUpcomingTour] = useState('All');
   const [pastTour, setPastTour] = useState('All');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [draftSearch, setDraftSearch] = useState('');
   const [draftTour, setDraftTour] = useState('All');
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
@@ -385,29 +385,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (mode !== 'new' || typeof window === 'undefined') return;
     window.localStorage.setItem(EXPANDED_SECTIONS_STORAGE_KEY, JSON.stringify(expandedSections));
   }, [expandedSections, mode]);
-
-  useEffect(() => {
-    function closeMenuOnViewportChange() {
-      setOpenMenuId(null);
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-admin-menu-root="true"]')) return;
-      setOpenMenuId(null);
-    }
-
-    window.addEventListener('scroll', closeMenuOnViewportChange);
-    window.addEventListener('resize', closeMenuOnViewportChange);
-    document.addEventListener('mousedown', handlePointerDown);
-
-    return () => {
-      window.removeEventListener('scroll', closeMenuOnViewportChange);
-      window.removeEventListener('resize', closeMenuOnViewportChange);
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, []);
-
 
   useEffect(() => {
     if (!importOpen || typeof document === 'undefined') return;
@@ -683,8 +660,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   function loadShow(show: Show) {
-    setOpenMenuId(null);
-    setOpenMenuId(null);
 
     if (mode === 'dates') {
       window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
@@ -705,8 +680,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   function duplicateShow(show: Show) {
-    setOpenMenuId(null);
-    setOpenMenuId(null);
 
     if (mode === 'dates') {
       window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
@@ -730,7 +703,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function handleDelete(showId: string) {
-    setOpenMenuId(null);
     const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
     if (!confirmed) return;
 
@@ -739,15 +711,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (form.id === showId) {
       resetForm();
     }
-    setOpenMenuId(null);
     setMessage('Show deleted.');
     window.dispatchEvent(new Event('tourbook:shows-updated'));
   }
 
 
   async function publishShow(show: Show) {
-    setOpenMenuId(null);
-    setOpenMenuId(null);
     try {
       if (!isValidStoredDate(show.date)) {
         setMessage('Draft needs a valid date before it can be published.');
@@ -763,7 +732,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function exportGuestList(showId: string) {
-    setOpenMenuId(null);
     const csv = await exportGuestListCsv(showId);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -772,7 +740,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     anchor.download = `${showId}-guest-list.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setOpenMenuId(null);
   }
 
   function openImportModal() {
@@ -781,7 +748,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImportSourceText('');
     setImportFiles([]);
     setImportWarnings([]);
-    setOpenMenuId(null);
     if (importFileInputRef.current) {
       importFileInputRef.current.value = '';
     }
@@ -1018,7 +984,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                         <button
                           type="button"
                           onClick={() => importFileInputRef.current?.click()}
-                          className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/15"
+                          className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3.5 text-[13px] font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.09]"
                         >
                           Choose File
                         </button>
@@ -1147,6 +1113,25 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </div>
         </div>
       ) : null}
+      {mode === 'new' && isEditing ? (
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={async () => {
+              if (dirty) {
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
+                if (!confirmed) return;
+              }
+              window.location.href = returnToUrl;
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+            aria-label={`Back to ${returnLabel}`}
+          >
+            ←
+          </button>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -1209,43 +1194,25 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       {mode === 'new' ? (
         <div ref={formRef} className="space-y-4">
-          {isEditing ? (
-            <div>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (dirty) {
-                    const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
-                    if (!confirmed) return;
-                  }
-                  window.location.href = returnToUrl;
-                }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
-                aria-label={`Back to ${returnLabel}`}
-              >
-                ←
-              </button>
-            </div>
-          ) : null}
 
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="min-h-[2.5rem] pt-1">
               {isEditing ? <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1> : null}
             </div>
-            <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               {!isEditing ? (
-                <button type="button" onClick={openImportModal} className={secondaryButtonClassName()}>
+                <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                   Import
                 </button>
               ) : <span />}
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                 {isEditingDraft ? (
                   <>
                     <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
                       Delete
                     </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Save'}
                     </button>
                     <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
@@ -1258,10 +1225,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   </button>
                 ) : (
                   <>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={secondaryButtonClassName()}>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
+                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Create Date'}
                     </button>
                   </>
@@ -1297,8 +1264,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
                 </div>
                 <div className="hidden items-center gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} />
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} />
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px]" />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
               </div>
@@ -1436,7 +1403,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5">
-          <div className="mb-4 min-h-[1rem] text-xs text-emerald-300/90">{message || ''}</div>
+          {message ? <div className="mb-3 text-xs text-emerald-300/90">{message}</div> : null}
           {isDraftsMode ? (
             <ShowListSection
               title="Drafts"
@@ -1446,8 +1413,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onTourChange={setDraftTour}
               tours={draftTours}
               shows={filteredDraftShows}
-              openMenuId={openMenuId}
-              onToggleMenu={setOpenMenuId}
               onEdit={loadShow}
               onExport={exportGuestList}
               onDelete={handleDelete}
@@ -1468,7 +1433,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 </div>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-3">
                 {datesTab === 'past' ? (
                   <ShowListSection
                     title="Past dates"
@@ -1480,8 +1445,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     shows={filteredPastShows}
                     groupedShows={pastShowsByYear}
                     stickyYears
-                    openMenuId={openMenuId}
-                    onToggleMenu={setOpenMenuId}
                     onEdit={loadShow}
                     onExport={exportGuestList}
                     onDelete={handleDelete}
@@ -1497,8 +1460,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onTourChange={setUpcomingTour}
                     tours={upcomingTours}
                     shows={filteredUpcomingShows}
-                    openMenuId={openMenuId}
-                    onToggleMenu={setOpenMenuId}
                     onEdit={loadShow}
                     onExport={exportGuestList}
                     onDelete={handleDelete}
@@ -1572,8 +1533,6 @@ function ShowListSection({
   shows,
   groupedShows,
   stickyYears = false,
-  openMenuId,
-  onToggleMenu,
   onEdit,
   onExport,
   onDelete,
@@ -1590,8 +1549,6 @@ function ShowListSection({
   shows: Show[];
   groupedShows?: Array<[string, Show[]]>;
   stickyYears?: boolean;
-  openMenuId: string | null;
-  onToggleMenu: (value: string | null) => void;
   onEdit: (show: Show) => void;
   onExport: (showId: string) => void;
   onDelete: (showId: string) => void;
@@ -1599,8 +1556,76 @@ function ShowListSection({
   mode?: 'dates' | 'drafts';
   onPublish?: (show: Show) => void;
 }) {
+  const [menuState, setMenuState] = useState<{ show: Show; top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!menuState) return;
+
+    function closeMenuOnViewportChange() {
+      setMenuState(null);
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-admin-menu-portal="true"]') || target?.closest('[data-admin-menu-trigger="true"]')) return;
+      setMenuState(null);
+    }
+
+    window.addEventListener('scroll', closeMenuOnViewportChange, true);
+    window.addEventListener('resize', closeMenuOnViewportChange);
+    document.addEventListener('mousedown', handlePointerDown);
+
+    return () => {
+      window.removeEventListener('scroll', closeMenuOnViewportChange, true);
+      window.removeEventListener('resize', closeMenuOnViewportChange);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [menuState]);
+
+  function openMenuForShow(show: Show, trigger: HTMLButtonElement) {
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 220;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right;
+    const left = Math.max(16, Math.min(rect.right - menuWidth, viewportWidth - menuWidth - 16));
+    setMenuState({ show, top: rect.bottom + 8, left });
+  }
+
+  function runMenuAction(action: () => void) {
+    setMenuState(null);
+    action();
+  }
+
+  function renderMenuActions(show: Show) {
+    if (mode === 'drafts') {
+      return (
+        <>
+          <MenuButton label="Publish" onClick={() => runMenuAction(() => onPublish?.(show))} />
+          <MenuButton label="Delete" destructive onClick={() => runMenuAction(() => onDelete(show.id))} />
+        </>
+      );
+    }
+
+    if (show.status === 'draft') {
+      return (
+        <>
+          <MenuButton label="Publish" onClick={() => runMenuAction(() => onPublish?.(show))} />
+          <MenuButton label="Duplicate date" onClick={() => runMenuAction(() => onDuplicate(show))} />
+          <MenuButton label="Delete" destructive onClick={() => runMenuAction(() => onDelete(show.id))} />
+        </>
+      );
+    }
+
+    return (
+      <>
+        <MenuButton label="Export guest list" onClick={() => runMenuAction(() => onExport(show.id))} />
+        <MenuButton label="Duplicate date" onClick={() => runMenuAction(() => onDuplicate(show))} />
+        <MenuButton label="Delete" destructive onClick={() => runMenuAction(() => onDelete(show.id))} />
+      </>
+    );
+  }
+
   function renderShowListItem(show: Show) {
-    const menuOpen = openMenuId === show.id;
+    const menuOpen = menuState?.show.id === show.id;
     const href = mode === 'drafts'
       ? `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`
       : show.status === 'draft'
@@ -1620,7 +1645,7 @@ function ShowListSection({
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 
-          <div data-admin-menu-root="true" className="relative z-50 isolate flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
             <button
               type="button"
               onMouseDown={(event) => event.stopPropagation()}
@@ -1632,35 +1657,21 @@ function ShowListSection({
             </button>
             <button
               type="button"
+              data-admin-menu-trigger="true"
               onMouseDown={(event) => event.stopPropagation()}
-              onClick={(event) => { event.stopPropagation(); onToggleMenu(menuOpen ? null : show.id); }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (menuOpen) {
+                  setMenuState(null);
+                  return;
+                }
+                openMenuForShow(show, event.currentTarget);
+              }}
               className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-zinc-200 transition ${menuOpen ? "border-sky-300 bg-sky-500/10" : "border-white/10 bg-transparent hover:border-white/20 hover:bg-white/[0.05]"}` }
               aria-label="More actions"
             >
               …
             </button>
-            {menuOpen ? (
-              <div className="absolute right-0 top-full z-[220] mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-zinc-700 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.9)] ring-1 ring-white/10 [isolation:isolate] pointer-events-auto">
-                {mode === 'drafts' ? (
-                  <>
-                    <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
-                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
-                  </>
-                ) : show.status === 'draft' ? (
-                  <>
-                    <MenuButton label="Publish" onClick={() => onPublish?.(show)} />
-                    <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
-                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
-                  </>
-                ) : (
-                  <>
-                    <MenuButton label="Export guest list" onClick={() => onExport(show.id)} />
-                    <MenuButton label="Duplicate date" onClick={() => onDuplicate(show)} />
-                    <MenuButton label="Delete" destructive onClick={() => onDelete(show.id)} />
-                  </>
-                )}
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
@@ -1695,6 +1706,20 @@ function ShowListSection({
           shows.map((show) => renderShowListItem(show))
         )}
       </div>
+
+      {menuState && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              data-admin-menu-portal="true"
+              className="fixed z-[260] min-w-[220px] overflow-hidden rounded-2xl border border-zinc-700/90 bg-black shadow-[0_28px_80px_rgba(0,0,0,0.92)] ring-1 ring-white/10"
+              style={{ top: menuState.top, left: menuState.left }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              {renderMenuActions(menuState.show)}
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }
