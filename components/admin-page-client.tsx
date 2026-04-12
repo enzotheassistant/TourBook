@@ -336,7 +336,7 @@ async function buildImportTextFromFiles(files: File[]) {
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
-  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, activeTourId, isLoading: contextLoading } = useAppContext();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
