@@ -14,23 +14,26 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           password,
         }),
       });
 
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as { message?: string } | null;
-        setError(data?.message ?? 'Unable to sign in.');
+        setError(payload?.message || "Unable to sign in.");
         return;
       }
 
-      window.location.assign('/');
+      window.location.assign("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {

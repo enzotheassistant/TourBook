@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerSupabaseClient, createServerComponentSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
+import {
+  createRouteHandlerSupabaseClient,
+  createServerComponentSupabaseClient,
+  getServerSupabaseConfig,
+} from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
   id: string;
@@ -55,8 +59,8 @@ export async function requireApiAuth(request: NextRequest): Promise<AuthState | 
   }
 
   try {
-    const authResponse = NextResponse.next();
-    const supabase = createRouteHandlerSupabaseClient(request, authResponse);
+    const response = NextResponse.next();
+    const supabase = createRouteHandlerSupabaseClient(request, response);
     const { data, error } = await supabase.auth.getUser();
 
     if (error || !data.user) {
@@ -65,7 +69,7 @@ export async function requireApiAuth(request: NextRequest): Promise<AuthState | 
 
     return {
       user: mapUser(data.user),
-      response: authResponse,
+      response,
     };
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -86,10 +90,8 @@ export function finalizeAuthResponse(response: NextResponse, authState?: AuthSta
       expires: cookie.expires,
       httpOnly: cookie.httpOnly,
       maxAge: cookie.maxAge,
-      priority: cookie.priority,
       sameSite: cookie.sameSite,
       secure: cookie.secure,
-      partitioned: cookie.partitioned,
     });
   }
 
