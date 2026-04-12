@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
+import { AppContextProvider } from '@/components/providers/app-context-provider';
 
 export const metadata: Metadata = {
   title: 'TourBook',
@@ -17,7 +18,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><AppContextProvider>{children}</AppContextProvider></body>
     </html>
   );
 }

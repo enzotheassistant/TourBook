@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminApiAuth } from '@/lib/auth';
+import { finalizeAuthResponse, requireAdminApiAuth } from '@/lib/auth';
 import { runIntake } from '@/lib/ai/intake-provider';
 import { listShowsServer } from '@/lib/server-store';
 import { IntakeImageInput } from '@/lib/ai/intake-types';
@@ -38,8 +38,8 @@ async function parseBodyAsFormData(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResponse = await requireAdminApiAuth();
-  if (authResponse) return authResponse;
+  const authState = await requireAdminApiAuth(request);
+  if (authState instanceof NextResponse) return authState;
 
   try {
     const contentType = request.headers.get('content-type') || '';
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       : parseBodyAsJson(await request.json().catch(() => ({})));
 
     if (!parsed.text && parsed.images.length === 0) {
-      return NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 });
+      return finalizeAuthResponse(NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 }), authState);
     }
 
     const existingShows = (await listShowsServer()).map((show) => ({
@@ -65,9 +65,9 @@ export async function POST(request: NextRequest) {
       existingShows,
     });
 
-    return NextResponse.json(result);
+    return finalizeAuthResponse(NextResponse.json(result), authState);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to review AI intake.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status: 500 }), authState);
   }
 }

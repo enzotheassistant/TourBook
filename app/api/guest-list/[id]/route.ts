@@ -1,28 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiAuth } from '@/lib/auth';
+import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { deleteGuestListEntryServer, updateGuestListEntryServer } from '@/lib/server-store';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authResponse = await requireApiAuth();
-  if (authResponse) return authResponse;
+  const authState = await requireApiAuth(request);
+  if (authState instanceof NextResponse) return authState;
 
   const { id } = await params;
   const body = (await request.json()) as { name?: string };
   const name = body.name?.trim() ?? '';
 
   if (!name) {
-    return NextResponse.json({ error: 'Guest list entry cannot be empty.' }, { status: 400 });
+    return finalizeAuthResponse(NextResponse.json({ error: 'Guest list entry cannot be empty.' }, { status: 400 }), authState);
   }
 
   const entry = await updateGuestListEntryServer(id, name);
-  return NextResponse.json(entry);
+  return finalizeAuthResponse(NextResponse.json(entry), authState);
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authResponse = await requireApiAuth();
-  if (authResponse) return authResponse;
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authState = await requireApiAuth(request);
+  if (authState instanceof NextResponse) return authState;
 
   const { id } = await params;
   await deleteGuestListEntryServer(id);
-  return NextResponse.json({ ok: true });
+  return finalizeAuthResponse(NextResponse.json({ ok: true }), authState);
 }

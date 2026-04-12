@@ -1,30 +1,29 @@
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { createSessionValue, CREW_SESSION_COOKIE_NAME, isCrewPasswordValid } from '@/lib/auth';
+import { applySessionCookies, clearSessionCookies } from '@/lib/auth';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { password?: string };
+    const body = (await request.json()) as { email?: string; password?: string };
+    const email = body.email?.trim().toLowerCase() ?? '';
     const password = body.password ?? '';
 
-    if (!isCrewPasswordValid(password)) {
-      return NextResponse.json({ message: 'Invalid password.' }, { status: 401 });
+    if (!email || !password) {
+      return NextResponse.json({ message: 'Email and password are required.' }, { status: 400 });
     }
 
-    const cookieStore = await cookies();
+    const supabase = createServerSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    cookieStore.set({
-      name: CREW_SESSION_COOKIE_NAME,
-      value: createSessionValue(),
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 14,
-    });
+    if (error || !data.session) {
+      return clearSessionCookies(
+        NextResponse.json({ message: error?.message ?? 'Invalid credentials.' }, { status: 401 }),
+      );
+    }
 
-    return NextResponse.json({ ok: true });
-  } catch {
+    return applySessionCookies(NextResponse.json({ ok: true, user: { id: data.user.id, email: data.user.email ?? null } }), data.session);
+  } catch (error) {
+    console.error('Unable to login with Supabase Auth', error);
     return NextResponse.json({ message: 'Unable to login.' }, { status: 500 });
   }
 }

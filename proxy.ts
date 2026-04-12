@@ -1,42 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ADMIN_SESSION_COOKIE_NAME, CREW_SESSION_COOKIE_NAME, SESSION_COOKIE_VALUE } from '@/lib/auth';
+import { applySessionCookies, clearSessionCookies, getAuthCookieValuesFromRequest, getAuthStateFromRequest } from '@/lib/auth';
 
-const PUBLIC_PATHS = ['/login', '/admin/unlock'];
+const PUBLIC_PATHS = ['/login'];
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
   const isStaticAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/api/auth/login') ||
-    pathname.startsWith('/api/auth/logout') ||
-    pathname.startsWith('/api/auth/admin-login');
+    pathname.startsWith('/api/');
 
-  if (isPublicPath || isStaticAsset) {
+  if (isStaticAsset) {
     return NextResponse.next();
   }
 
-  const crewSessionCookie = request.cookies.get(CREW_SESSION_COOKIE_NAME)?.value;
-  const isCrewLoggedIn = crewSessionCookie === SESSION_COOKIE_VALUE;
+  const authState = await getAuthStateFromRequest(request);
 
-  if (!isCrewLoggedIn) {
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (pathname.startsWith('/admin')) {
-    const adminSessionCookie = request.cookies.get(ADMIN_SESSION_COOKIE_NAME)?.value;
-    const isAdminLoggedIn = adminSessionCookie === SESSION_COOKIE_VALUE;
-
-    if (!isAdminLoggedIn) {
-      const unlockUrl = new URL('/admin/unlock', request.url);
-      return NextResponse.redirect(unlockUrl);
+  if (isPublicPath) {
+    if (!authState) {
+      const hasSessionCookies = Object.values(getAuthCookieValuesFromRequest(request)).some(Boolean);
+      return hasSessionCookies ? clearSessionCookies(NextResponse.next()) : NextResponse.next();
     }
+
+    const response = NextResponse.redirect(new URL('/', request.url));
+    return authState.refreshedSession ? applySessionCookies(response, authState.refreshedSession) : response;
   }
 
-  return NextResponse.next();
+  if (!authState) {
+    const loginUrl = new URL('/login', request.url);
+    return clearSessionCookies(NextResponse.redirect(loginUrl));
+  }
+
+  const response = NextResponse.next();
+  return authState.refreshedSession ? applySessionCookies(response, authState.refreshedSession) : response;
 }
 
 export const config = {
