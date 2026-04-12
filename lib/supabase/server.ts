@@ -3,6 +3,21 @@ import type { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
+type CookieOptions = {
+  path?: string;
+  domain?: string;
+  maxAge?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "lax" | "strict" | "none" | boolean;
+};
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: CookieOptions;
+};
+
 export function getServerSupabaseConfig() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -21,7 +36,7 @@ export function getServerSupabaseConfig() {
   };
 }
 
-function getCookieOptions(options: Record<string, any> | undefined) {
+function getCookieOptions(options?: CookieOptions) {
   return {
     path: options?.path ?? "/",
     domain: options?.domain,
@@ -41,7 +56,7 @@ export async function createServerComponentSupabaseClient() {
       getAll() {
         return cookieStore.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: CookieToSet[]) {
         for (const { name, value, options } of cookiesToSet) {
           cookieStore.set(name, value, getCookieOptions(options));
         }
@@ -71,7 +86,7 @@ export function createRouteHandlerSupabaseClient(request: NextRequest, response:
       getAll() {
         return request.cookies.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: CookieToSet[]) {
         for (const { name, value, options } of cookiesToSet) {
           response.cookies.set(name, value, getCookieOptions(options));
         }
@@ -88,7 +103,7 @@ export function createProxySupabaseClient(request: NextRequest, response: NextRe
       getAll() {
         return request.cookies.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: CookieToSet[]) {
         for (const { name, value, options } of cookiesToSet) {
           request.cookies.set(name, value);
           response.cookies.set(name, value, getCookieOptions(options));
