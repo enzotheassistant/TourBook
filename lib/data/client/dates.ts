@@ -1,16 +1,15 @@
 'use client';
 
-import { getClientAuthHeaders } from '@/lib/client-auth';
 import type { DateFormValues, DateRecord, ScopedGuestListEntry } from '@/lib/types/date-record';
 import type { IntakeResult } from '@/lib/ai/intake-types';
 
 async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     ...init,
-    headers: getClientAuthHeaders({
-      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+    headers: {
+      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(init?.headers ?? {}),
-    }),
+    },
     cache: 'no-store',
     credentials: 'same-origin',
   });
@@ -93,7 +92,7 @@ export async function exportDateGuestListCsv(workspaceId: string, dateId: string
   const response = await fetch(`/api/dates/${dateId}/guest-list/export?${params.toString()}`, {
     cache: 'no-store',
     credentials: 'same-origin',
-    headers: getClientAuthHeaders(),
+    
   });
   if (!response.ok) {
     throw new Error('Unable to export guest list.');

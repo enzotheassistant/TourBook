@@ -13,7 +13,8 @@
     "@swc/helpers": "0.5.21",
     "next": "16.2.2",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "@supabase/ssr": "0.5.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.2",

@@ -1,43 +1,34 @@
-'use client';
+"use client";
 
-import { FormEvent, useState } from 'react';
-import { clearClientSession, setClientSession } from '@/lib/client-auth';
+import { FormEvent, useState } from "react";
+import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ email, password }),
+      const supabase = getBrowserSupabaseClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const data = (await response.json().catch(() => null)) as { message?: string; session?: { accessToken?: string; refreshToken?: string } } | null;
-
-      if (!response.ok) {
-        clearClientSession();
-        setError(data?.message ?? 'Unable to sign in.');
+      if (error) {
+        setError(error.message || "Unable to sign in.");
         return;
       }
 
-      if (data?.session?.accessToken && data.session.refreshToken) {
-        setClientSession({ accessToken: data.session.accessToken, refreshToken: data.session.refreshToken });
-      }
-
-      window.location.assign('/');
-      return;
+      window.location.assign("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
       setLoading(false);
     }
@@ -82,7 +73,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60"
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
       </div>
