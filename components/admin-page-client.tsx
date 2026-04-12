@@ -6,7 +6,6 @@ import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
-import { getClientAuthHeaders } from '@/lib/client-auth';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
@@ -830,7 +829,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       const response = await fetch('/api/dates/ai-intake', {
         method: 'POST',
-        headers: getClientAuthHeaders(),
+        
         body,
         credentials: 'same-origin',
       });

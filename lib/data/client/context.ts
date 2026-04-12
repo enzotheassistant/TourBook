@@ -1,15 +1,14 @@
 'use client';
 
-import { getClientAuthHeaders } from '@/lib/client-auth';
 import type { BootstrapContext, ProjectSummary, TourSummary, WorkspaceSummary } from '@/lib/types/tenant';
 
 async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     ...init,
-    headers: getClientAuthHeaders({
-      'Content-Type': 'application/json',
+    headers: {
+      "Content-Type": "application/json",
       ...(init?.headers ?? {}),
-    }),
+    },
     cache: 'no-store',
     credentials: 'same-origin',
   });

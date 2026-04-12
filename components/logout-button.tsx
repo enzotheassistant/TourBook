@@ -1,14 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { clearClientSession, getClientAuthHeaders } from '@/lib/client-auth';
 
 export function LogoutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
 
   async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST', headers: getClientAuthHeaders() });
-    clearClientSession();
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     router.replace('/login');
     router.refresh();
   }
