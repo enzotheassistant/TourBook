@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShowCard } from '@/components/show-card';
+import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
 import { listShows } from '@/lib/data-client';
 import { Show } from '@/lib/types';
@@ -54,6 +55,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 }
 
 export function DashboardClient() {
+  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -66,22 +68,23 @@ export function DashboardClient() {
   useEffect(() => {
     let active = true;
     async function load() {
+      if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
       setLoading(true);
       try {
-        const nextShows = await listShows();
+        const nextShows = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
         if (!active) return;
         setShows(nextShows);
       } finally {
         if (active) setLoading(false);
       }
     }
-    load();
+    void load();
     window.addEventListener('tourbook:shows-updated', load);
     return () => {
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, []);
+  }, [activeProjectId, activeWorkspaceId, contextLoading]);
 
   const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
@@ -107,7 +110,7 @@ export function DashboardClient() {
     });
   }, [filteredPastShows]);
 
-  if (loading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
+  if (contextLoading || loading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
 
   return (
     <div className="space-y-3">

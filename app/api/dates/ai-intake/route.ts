@@ -27,13 +27,23 @@ function pickAnchorTime(items: IntakeScheduleItem[] | undefined, labels: string[
   return '';
 }
 
+function parsePreviewOnly(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'preview';
+  }
+  return false;
+}
+
 function parseBodyAsJson(payload: unknown) {
-  const body = (payload ?? {}) as { text?: string; workspaceId?: string; projectId?: string; tourId?: string | null };
+  const body = (payload ?? {}) as { text?: string; workspaceId?: string; projectId?: string; tourId?: string | null; previewOnly?: boolean | string };
   return {
     text: normalizeText(body.text),
     workspaceId: normalizeText(body.workspaceId),
     projectId: normalizeText(body.projectId),
     tourId: normalizeText(body.tourId) || null,
+    previewOnly: parsePreviewOnly(body.previewOnly),
     images: [] as IntakeImageInput[],
   };
 }
@@ -44,6 +54,7 @@ async function parseBodyAsFormData(request: NextRequest) {
   const workspaceId = normalizeText(formData.get('workspaceId'));
   const projectId = normalizeText(formData.get('projectId'));
   const tourId = normalizeText(formData.get('tourId')) || null;
+  const previewOnly = parsePreviewOnly(formData.get('previewOnly'));
   const files = formData.getAll('images').filter((value): value is File => value instanceof File);
 
   const images = await Promise.all(
@@ -57,7 +68,7 @@ async function parseBodyAsFormData(request: NextRequest) {
       })),
   );
 
-  return { text, workspaceId, projectId, tourId, images };
+  return { text, workspaceId, projectId, tourId, previewOnly, images };
 }
 
 export async function POST(request: NextRequest) {
@@ -97,6 +108,10 @@ export async function POST(request: NextRequest) {
         status: date.status,
       })),
     });
+
+    if (parsed.previewOnly) {
+      return finalizeAuthResponse(NextResponse.json(intake), authState);
+    }
 
     const createdDates = [];
 

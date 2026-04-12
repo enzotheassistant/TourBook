@@ -1,56 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeAuthResponse, requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
-import { createDraftId, createPublishedId, isDraftId } from '@/lib/drafts';
-import { deleteShowServer, getShowServer, upsertShowServer } from '@/lib/server-store';
-import { isValidStoredDate } from '@/lib/date';
-import { normalizeShow } from '@/lib/normalize';
-import { ShowFormValues, ShowStatus } from '@/lib/types';
+import { mapDateRecordToShow, mapShowFormToDateForm } from '@/lib/adapters/date-show';
+import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
+import { ApiError } from '@/lib/data/server/shared';
+import { deleteDateScoped, getDateScoped, updateDateScoped } from '@/lib/data/server/dates';
+import type { ShowFormValues } from '@/lib/types';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
+  const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const { id } = await params;
-  const show = await getShowServer(id);
 
-  if (!show) {
-    return finalizeAuthResponse(NextResponse.json({ error: 'Show not found' }, { status: 404 }), authState);
+  try {
+    const dateRecord = await getDateScoped(authState.user.id, workspaceId, id);
+    return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Show not found.';
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
-
-  return finalizeAuthResponse(NextResponse.json(show), authState);
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authState = await requireAdminApiAuth(request);
+  const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
+  const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const { id } = await params;
-  const body = (await request.json()) as ShowFormValues & { status?: ShowStatus };
-  const requestedStatus = body.status === 'draft' ? 'draft' : 'published';
 
-  if (requestedStatus === 'published' && !isValidStoredDate(body.date)) {
-    return finalizeAuthResponse(NextResponse.json({ error: 'Please enter a valid date in YYYY-MM-DD format.' }, { status: 400 }), authState);
+  try {
+    const body = (await request.json()) as ShowFormValues & { projectId?: string; tourId?: string | null };
+    const current = await getDateScoped(authState.user.id, workspaceId, id);
+    const projectId = body.projectId ?? current.project_id;
+    const tourId = body.tourId ?? current.tour_id;
+    const dateRecord = await updateDateScoped(authState.user.id, workspaceId, id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
+    return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Unable to update show.';
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
-
-  const nextId = requestedStatus === 'draft'
-    ? (isDraftId(id) ? id : createDraftId(`${body.city}-${body.venue_name}-${body.date || 'draft'}`))
-    : createPublishedId(body.city, body.venue_name, body.date);
-
-  const normalized = normalizeShow({ ...body, id: nextId, status: requestedStatus });
-  const show = await upsertShowServer(normalized);
-
-  if (nextId !== id && isDraftId(id)) {
-    await deleteShowServer(id);
-  }
-
-  return finalizeAuthResponse(NextResponse.json(show), authState);
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authState = await requireAdminApiAuth(request);
+  const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
+  const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const { id } = await params;
-  await deleteShowServer(id);
-  return finalizeAuthResponse(NextResponse.json({ ok: true }), authState);
+
+  try {
+    await deleteDateScoped(authState.user.id, workspaceId, id);
+    return finalizeAuthResponse(NextResponse.json({ ok: true }), authState);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Unable to delete show.';
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
+  }
 }

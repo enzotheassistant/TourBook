@@ -1,54 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeAuthResponse, requireAdminApiAuth, requireApiAuth } from '@/lib/auth';
-import { createDraftId, createPublishedId } from '@/lib/drafts';
-import { emptyShowForm } from '@/lib/defaults';
-import { listShowsServer, upsertShowServer } from '@/lib/server-store';
-import { normalizeShow } from '@/lib/normalize';
-import { isValidStoredDate } from '@/lib/date';
-import { ShowFormValues, ShowStatus } from '@/lib/types';
-
-function serializeShow(show: ReturnType<typeof normalizeShow>) {
-  return { ...show };
-}
+import { mapDateRecordToShow, mapShowFormToDateForm } from '@/lib/adapters/date-show';
+import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
+import { ApiError, parseBooleanSearchParam } from '@/lib/data/server/shared';
+import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
+import type { ShowFormValues } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
-  const includeDrafts = request.nextUrl.searchParams.get('includeDrafts') === '1';
-  const shows = await listShowsServer();
-  return finalizeAuthResponse(
-    NextResponse.json(includeDrafts ? shows : shows.filter((show) => show.status !== 'draft')),
-    authState,
-  );
+  const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
+  const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
+  const tourId = request.nextUrl.searchParams.get('tourId');
+  const includeDrafts = parseBooleanSearchParam(request.nextUrl.searchParams.get('includeDrafts'));
+
+  try {
+    const dates = await listDatesScoped({
+      userId: authState.user.id,
+      workspaceId,
+      projectId,
+      tourId,
+      includeDrafts,
+    });
+    return finalizeAuthResponse(NextResponse.json(dates.map(mapDateRecordToShow)), authState);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Unable to load shows.';
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const authState = await requireAdminApiAuth(request);
+  const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
-  const body = (await request.json()) as Partial<ShowFormValues> & { status?: ShowStatus };
-  const requestedStatus = body.status === 'draft' ? 'draft' : 'published';
-  const date = body.date ?? '';
-  const city = body.city ?? '';
-  const venueName = body.venue_name ?? '';
-
-  if (requestedStatus === 'published' && !isValidStoredDate(date)) {
-    return finalizeAuthResponse(NextResponse.json({ error: 'Please enter a valid date in YYYY-MM-DD format.' }, { status: 400 }), authState);
+  try {
+    const body = (await request.json()) as ShowFormValues & { workspaceId?: string; projectId?: string; tourId?: string | null };
+    const workspaceId = body.workspaceId ?? request.nextUrl.searchParams.get('workspaceId') ?? '';
+    const projectId = body.projectId ?? request.nextUrl.searchParams.get('projectId') ?? '';
+    const tourId = body.tourId ?? request.nextUrl.searchParams.get('tourId');
+    const dateRecord = await createDateScoped(authState.user.id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
+    return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 500;
+    const message = error instanceof Error ? error.message : 'Unable to create show.';
+    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
-
-  const id = requestedStatus === 'draft'
-    ? (body.id && body.id.startsWith('draft--') ? body.id : createDraftId(`${city}-${venueName}-${date || 'draft'}`))
-    : createPublishedId(city, venueName, date);
-
-  const show = await upsertShowServer(
-    normalizeShow({
-      ...emptyShowForm,
-      ...body,
-      id,
-      status: requestedStatus,
-    }),
-  );
-
-  return finalizeAuthResponse(NextResponse.json(serializeShow(show)), authState);
 }

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { deleteShow, exportGuestListCsv, getShow } from '@/lib/data-client';
+import { useAppContext } from '@/hooks/use-app-context';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
@@ -43,6 +44,7 @@ function formatHeaderDate(date: string) {
 }
 
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
+  const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
@@ -56,8 +58,9 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   useEffect(() => {
     let active = true;
     async function load() {
+      if (contextLoading || !activeWorkspaceId) return;
       try {
-        const nextShow = await getShow(showId);
+        const nextShow = await getShow(showId, { workspaceId: activeWorkspaceId });
         if (!active) return;
         setShow(nextShow);
       } catch {
@@ -67,13 +70,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         if (active) setLoaded(true);
       }
     }
-    load();
+    void load();
     window.addEventListener('tourbook:shows-updated', load);
     return () => {
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, [showId]);
+  }, [activeWorkspaceId, contextLoading, showId]);
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
 
@@ -100,14 +103,16 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     if (!show) return;
     const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
     if (!confirmed) return;
-    await deleteShow(show.id);
+    if (!activeWorkspaceId) return;
+    await deleteShow(show.id, { workspaceId: activeWorkspaceId });
     window.dispatchEvent(new Event('tourbook:shows-updated'));
     window.location.href = '/admin/dates';
   }
 
   async function handleExport() {
     if (!show) return;
-    const csv = await exportGuestListCsv(show.id);
+    if (!activeWorkspaceId) return;
+    const csv = await exportGuestListCsv(show.id, { workspaceId: activeWorkspaceId });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -118,7 +123,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     setMenuOpen(false);
   }
 
-  if (!loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
+  if (contextLoading || !loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
   const backHref = adminMode ? `/admin/dates?tab=${returnTab}` : `/?tab=${returnTab}`;

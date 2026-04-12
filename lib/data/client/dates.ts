@@ -96,9 +96,9 @@ export async function exportDateGuestListCsv(workspaceId: string, dateId: string
   return response.text();
 }
 
-export async function runDateAiIntake(input: FormData | { text?: string; workspaceId: string; projectId: string; tourId?: string | null }) {
+export async function runDateAiIntake(input: FormData | { text?: string; workspaceId: string; projectId: string; tourId?: string | null; previewOnly?: boolean }) {
   const isFormData = input instanceof FormData;
-  return request<{ intake: IntakeResult; createdDates: DateRecord[] }>('/api/dates/ai-intake', {
+  return request<IntakeResult | { intake: IntakeResult; createdDates: DateRecord[] }>('/api/dates/ai-intake', {
     method: 'POST',
     body: isFormData ? input : JSON.stringify(input),
   });

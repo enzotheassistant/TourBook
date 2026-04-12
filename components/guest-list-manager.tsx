@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, updateGuestListEntry } from '@/lib/data-client';
+import { useAppContext } from '@/hooks/use-app-context';
 import { GuestListEntry } from '@/lib/types';
 
 function parseBulkInput(value: string) {
@@ -16,6 +17,7 @@ function DotsIcon() {
 }
 
 export function GuestListManager({ showId, note, showNote }: { showId: string; note: string; showNote: boolean }) {
+  const { activeWorkspaceId, isLoading } = useAppContext();
   const [value, setValue] = useState('');
   const [entries, setEntries] = useState<GuestListEntry[]>([]);
   const [saving, setSaving] = useState(false);
@@ -27,17 +29,18 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     let active = true;
 
     async function load() {
-      const nextEntries = await listGuestListEntries(showId);
+      if (isLoading || !activeWorkspaceId) return;
+      const nextEntries = await listGuestListEntries(showId, { workspaceId: activeWorkspaceId });
       if (!active) return;
       setEntries(nextEntries);
     }
 
-    load();
+    void load();
 
     return () => {
       active = false;
     };
-  }, [showId]);
+  }, [showId, activeWorkspaceId, isLoading]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -58,7 +61,8 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     if (!lines.length || saving) return;
     setSaving(true);
     try {
-      const createdEntries = await addGuestListEntries(showId, lines);
+      if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+      const createdEntries = await addGuestListEntries(showId, lines, { workspaceId: activeWorkspaceId });
       setEntries((current) => [...current, ...createdEntries]);
       setValue('');
     } finally {
@@ -67,7 +71,8 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleDelete(entryId: string) {
-    await deleteGuestListEntry(entryId);
+    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+    await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId });
     setEntries((current) => current.filter((entry) => entry.id !== entryId));
     setOpenMenuId(null);
   }
@@ -75,7 +80,8 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   async function handleSaveEdit(entryId: string) {
     const trimmed = editingValue.trim();
     if (!trimmed) return;
-    const updated = await updateGuestListEntry(entryId, trimmed);
+    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+    const updated = await updateGuestListEntry(entryId, trimmed, { workspaceId: activeWorkspaceId });
     setEntries((current) => current.map((entry) => (entry.id === entryId ? updated : entry)));
     setEditingId(null);
     setEditingValue('');

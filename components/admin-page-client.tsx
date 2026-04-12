@@ -5,9 +5,9 @@ import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useId, useMemo
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
+import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
-import { createPublishedId } from '@/lib/drafts';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
@@ -336,6 +336,7 @@ async function buildImportTextFromFiles(files: File[]) {
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
+  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading } = useAppContext();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
@@ -371,8 +372,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   useEffect(() => {
-    loadShows();
-  }, []);
+    if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
+    void loadShows();
+  }, [activeProjectId, activeWorkspaceId, contextLoading]);
 
   useEffect(() => {
     if (mode !== 'new') return;
@@ -509,7 +511,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [mode, searchParams, shows]);
 
   async function loadShows() {
-    const nextShows = await listShows(true);
+    if (!activeWorkspaceId || !activeProjectId) return;
+    const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
     setShows(nextShows);
   }
 
@@ -613,14 +616,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setSaving(true);
 
     try {
-      const publishedId = createPublishedId(form.city, form.venue_name, form.date);
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
       const show = await upsertShow({
         ...form,
-        id: requestedStatus === 'draft' ? form.id : (form.id && form.status === 'draft' ? form.id : (form.id || publishedId)),
+        id: form.id,
         status: requestedStatus,
         tour_name: form.tour_name.trim(),
         region: form.region.trim().toUpperCase(),
-      });
+      }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setDirty(false);
       setForm(show);
@@ -706,7 +709,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     const confirmed = await requestConfirmation({ title: 'Delete date?', description: 'Delete this show and its guest list?', confirmLabel: 'Delete', tone: 'danger' });
     if (!confirmed) return;
 
-    await deleteShow(showId);
+    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+    await deleteShow(showId, { workspaceId: activeWorkspaceId });
     await loadShows();
     if (form.id === showId) {
       resetForm();
@@ -722,7 +726,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setMessage('Draft needs a valid date before it can be published.');
         return;
       }
-      await upsertShow({ ...show, status: 'published', region: show.region.trim().toUpperCase(), tour_name: show.tour_name.trim() });
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      await upsertShow({ ...show, status: 'published', region: show.region.trim().toUpperCase(), tour_name: show.tour_name.trim() }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setMessage('Draft published.');
       window.dispatchEvent(new Event('tourbook:shows-updated'));
@@ -732,7 +737,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function exportGuestList(showId: string) {
-    const csv = await exportGuestListCsv(showId);
+    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+    const csv = await exportGuestListCsv(showId, { workspaceId: activeWorkspaceId });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -808,10 +814,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const imageFiles = importFiles.filter((file) => file.type.startsWith('image/'));
       const textFromFiles = await buildImportTextFromFiles(importFiles);
       const combinedText = [importSourceText.trim(), textFromFiles].filter(Boolean).join('\n\n');
+      if (!activeWorkspaceId || !activeProjectId) {
+        throw new Error('No active workspace or artist selected.');
+      }
+
       body.append('text', combinedText);
+      body.append('workspaceId', activeWorkspaceId);
+      body.append('projectId', activeProjectId);
+      if (activeTourId) {
+        body.append('tourId', activeTourId);
+      }
+      body.append('previewOnly', '1');
       imageFiles.forEach((file) => body.append('images', file));
 
-      const response = await fetch('/api/ai-intake', {
+      const response = await fetch('/api/dates/ai-intake', {
         method: 'POST',
         body,
       });
@@ -825,7 +841,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setImportRows(rows);
       setImportWarnings(Array.isArray(payload?.warnings) ? payload.warnings.filter(Boolean) : []);
       if (!rows.length) {
-        setImportError('AI Intake did not find any usable show rows.');
+        setImportError('AI Intake did not find any usable date rows.');
       }
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Unable to review AI intake.');
@@ -874,6 +890,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setImporting(true);
     try {
       for (const row of selectedRows) {
+        if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
         await upsertShow({
           ...emptyShowForm,
           date: parseFlexibleDateInput(row.date) || row.date.trim(),
@@ -891,7 +908,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           hotel_notes: row.hotel_notes?.trim() || '',
           notes: row.notes?.trim() || '',
           status: 'draft',
-        });
+        }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       }
       await loadShows();
       setImportOpen(false);
@@ -911,6 +928,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   const isEditingDraft = isEditing && form.status === 'draft';
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create Date';
+
+  if (contextLoading) {
+    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
+  }
+
+  if (!activeWorkspaceId || !activeProjectId) {
+    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Select a workspace and artist to manage dates.</div>;
+  }
 
   return (
     <div className="space-y-3">
