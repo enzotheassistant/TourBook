@@ -1,5 +1,6 @@
 'use client';
 
+import { getClientAuthHeaders } from '@/lib/client-auth';
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 
@@ -16,10 +17,10 @@ const TOUR_STORAGE_KEY = 'tourbook.activeTourId';
 async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
+    headers: getClientAuthHeaders({
+      'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
-    },
+    }),
     credentials: 'same-origin',
     cache: 'no-store',
   });
@@ -156,7 +157,7 @@ export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
   const response = await fetch(`/api/dates/${showId}/guest-list/export?${params.toString()}`, {
     cache: 'no-store',
     credentials: 'same-origin',
-    
+    headers: getClientAuthHeaders(),
   });
 
   if (!response.ok) {
