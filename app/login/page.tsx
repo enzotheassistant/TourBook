@@ -1,10 +1,9 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { clearClientSession, setClientSession } from '@/lib/client-auth';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -25,15 +24,20 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = (await response.json().catch(() => null)) as { message?: string } | null;
+      const data = (await response.json().catch(() => null)) as { message?: string; session?: { accessToken?: string; refreshToken?: string } } | null;
 
       if (!response.ok) {
+        clearClientSession();
         setError(data?.message ?? 'Unable to sign in.');
         return;
       }
 
-      router.replace('/');
-      router.refresh();
+      if (data?.session?.accessToken && data.session.refreshToken) {
+        setClientSession({ accessToken: data.session.accessToken, refreshToken: data.session.refreshToken });
+      }
+
+      window.location.assign('/');
+      return;
     } finally {
       setLoading(false);
     }

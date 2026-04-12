@@ -68,7 +68,14 @@ export function DashboardClient() {
   useEffect(() => {
     let active = true;
     async function load() {
-      if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
+      if (contextLoading) return;
+      if (!activeWorkspaceId || !activeProjectId) {
+        if (active) {
+          setShows([]);
+          setLoading(false);
+        }
+        return;
+      }
       setLoading(true);
       try {
         const nextShows = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });

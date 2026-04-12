@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import type { BootstrapContext } from '@/lib/types/tenant';
+import { getClientAuthHeaders } from '@/lib/client-auth';
 
 type AppContextValue = BootstrapContext & {
   isLoading: boolean;
@@ -55,6 +56,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch('/api/me/context', {
         method: 'GET',
+        headers: getClientAuthHeaders(),
         credentials: 'same-origin',
         cache: 'no-store',
       });

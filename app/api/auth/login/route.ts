@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return applySessionCookies(NextResponse.json({ ok: true, user: { id: data.user.id, email: data.user.email ?? null } }), data.session);
+    return applySessionCookies(NextResponse.json({ ok: true, user: { id: data.user.id, email: data.user.email ?? null }, session: { accessToken: data.session.access_token, refreshToken: data.session.refresh_token } }), data.session);
   } catch (error) {
     console.error('Unable to login with Supabase Auth', error);
     return NextResponse.json({ message: 'Unable to login.' }, { status: 500 });
