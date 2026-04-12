@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRequestSupabaseClient, createServerComponentSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
+import {
+  createRouteHandlerSupabaseClient,
+  createServerComponentSupabaseClient,
+  getServerSupabaseConfig,
+} from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
   id: string;
@@ -8,6 +12,7 @@ export type AuthenticatedUser = {
 
 export type AuthState = {
   user: AuthenticatedUser;
+  response: NextResponse;
 };
 
 export function hasSupabaseAuthEnv() {
@@ -43,10 +48,11 @@ export async function getAuthStateFromRequest(request: NextRequest): Promise<Aut
   if (!hasSupabaseAuthEnv()) return null;
 
   try {
-    const supabase = createRequestSupabaseClient(request);
+    const response = NextResponse.next();
+    const supabase = createRouteHandlerSupabaseClient(request, response);
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) return null;
-    return { user: mapUser(data.user) };
+    return { user: mapUser(data.user), response };
   } catch {
     return null;
   }
@@ -71,7 +77,21 @@ export async function requireAdminApiAuth(request: NextRequest) {
   return requireApiAuth(request);
 }
 
-export function finalizeAuthResponse(response: NextResponse, _authState?: AuthState) {
+export function finalizeAuthResponse(response: NextResponse, authState?: AuthState) {
+  if (!authState) return response;
+
+  for (const cookie of authState.response.cookies.getAll()) {
+    response.cookies.set(cookie.name, cookie.value, {
+      path: cookie.path,
+      domain: cookie.domain,
+      expires: cookie.expires,
+      httpOnly: cookie.httpOnly,
+      maxAge: cookie.maxAge,
+      sameSite: cookie.sameSite,
+      secure: cookie.secure,
+    });
+  }
+
   return response;
 }
 
