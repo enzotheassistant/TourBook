@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -14,22 +15,14 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
+      const supabase = getBrowserSupabaseClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
       });
 
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setError(typeof payload?.message === "string" ? payload.message : "Unable to sign in.");
+      if (error) {
+        setError(error.message || "Unable to sign in.");
         return;
       }
 
@@ -46,41 +39,49 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl">
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Sign in</h1>
-        <p className="mt-2 text-sm text-zinc-400">Use your TourBook account email and password.</p>
+        <p className="mt-2 text-sm text-zinc-400">Use your email and password to access your workspace.</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-3">
-          <label className="grid gap-2">
-            <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">Email</span>
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-zinc-200" htmlFor="email">
+              Email
+            </label>
             <input
+              id="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20"
-              placeholder="you@company.com"
-              autoComplete="email"
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+              placeholder="you@example.com"
+              required
             />
-          </label>
+          </div>
 
-          <label className="grid gap-2">
-            <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">Password</span>
+          <div>
+            <label className="block text-sm font-medium text-zinc-200" htmlFor="password">
+              Password
+            </label>
             <input
+              id="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-white/20"
-              placeholder="Enter your password"
-              autoComplete="current-password"
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+              placeholder="••••••••"
+              required
             />
-          </label>
+          </div>
 
           {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 disabled:opacity-60"
+            className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>

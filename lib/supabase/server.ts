@@ -1,22 +1,6 @@
 import { cookies } from "next/headers";
-import type { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-
-type CookieOptions = {
-  path?: string;
-  domain?: string;
-  maxAge?: number;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: "lax" | "strict" | "none" | boolean;
-};
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options?: CookieOptions;
-};
 
 export function getServerSupabaseConfig() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,84 +13,26 @@ export function getServerSupabaseConfig() {
     );
   }
 
-  return {
-    url,
-    anonKey,
-    serviceRoleKey,
-  };
+  return { url, anonKey, serviceRoleKey };
 }
 
-function getCookieOptions(options?: CookieOptions) {
-  return {
-    path: options?.path ?? "/",
-    domain: options?.domain,
-    maxAge: options?.maxAge,
-    httpOnly: options?.httpOnly,
-    secure: options?.secure,
-    sameSite: options?.sameSite,
-  } as const;
-}
-
-export async function createServerComponentSupabaseClient() {
+export async function createServerSupabaseClient() {
   const { url, anonKey } = getServerSupabaseConfig();
   const cookieStore = await cookies();
 
   return createServerClient(url, anonKey, {
     cookies: {
       getAll() {
-        return cookieStore.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
+        return cookieStore.getAll();
       },
-      setAll(cookiesToSet: CookieToSet[]) {
-        for (const { name, value, options } of cookiesToSet) {
-          cookieStore.set(name, value, getCookieOptions(options));
-        }
-      },
-    },
-  });
-}
-
-export function createRequestSupabaseClient(request: NextRequest) {
-  const { url, anonKey } = getServerSupabaseConfig();
-
-  return createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
-      },
-      setAll() {},
-    },
-  });
-}
-
-export function createRouteHandlerSupabaseClient(request: NextRequest, response: NextResponse) {
-  const { url, anonKey } = getServerSupabaseConfig();
-
-  return createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, getCookieOptions(options));
-        }
-      },
-    },
-  });
-}
-
-export function createProxySupabaseClient(request: NextRequest, response: NextResponse) {
-  const { url, anonKey } = getServerSupabaseConfig();
-
-  return createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll().map((cookie) => ({ name: cookie.name, value: cookie.value }));
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        for (const { name, value, options } of cookiesToSet) {
-          request.cookies.set(name, value);
-          response.cookies.set(name, value, getCookieOptions(options));
+      setAll(cookiesToSet) {
+        try {
+          for (const { name, value, options } of cookiesToSet) {
+            cookieStore.set(name, value, options);
+          }
+        } catch {
+          // Route handlers and server actions can write cookies here.
+          // Server Components may throw when attempting to set cookies.
         }
       },
     },
