@@ -10,24 +10,20 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/favicon.ico") ||
     /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/.test(pathname);
 
+  const { response, user } = await updateSession(request);
+
   if (isStaticAsset || pathname.startsWith("/api/")) {
-    return updateSession(request);
+    return response;
   }
 
-  const response = await updateSession(request);
-
-  const accessToken = request.cookies.get("sb-access-token")?.value;
-  const refreshToken = request.cookies.get("sb-refresh-token")?.value;
-  const hasSession = Boolean(accessToken && refreshToken);
-
   if (PUBLIC_PATHS.has(pathname)) {
-    if (hasSession) {
+    if (user) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return response;
   }
 
-  if (!hasSession) {
+  if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
