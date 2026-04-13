@@ -17,7 +17,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "content-type": "application/json",
         },
         credentials: "include",
         body: JSON.stringify({
@@ -26,10 +26,10 @@ export default function LoginPage() {
         }),
       });
 
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(payload?.message || "Unable to sign in.");
+        setError(typeof payload?.message === "string" ? payload.message : "Unable to sign in.");
         return;
       }
 

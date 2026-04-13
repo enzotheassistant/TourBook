@@ -1,9 +1,6 @@
-Phase 3.1 route-handler auth fix
+This patch aligns login and protected API auth on the same SSR cookie path.
 
 Changes:
-- Login page now posts to /api/auth/login so the server route writes Supabase SSR cookies.
-- requireApiAuth() now uses createRouteHandlerSupabaseClient(request, response) instead of the request-only client.
-- finalizeAuthResponse() now forwards any refreshed auth cookies to the returned API response.
-
-Expected result:
-- /api/me/context authenticates via the same cookie-based session path as proxy.ts.
+- Login now posts to /api/auth/login so Supabase cookies are set by the server route.
+- requireApiAuth() now uses createRouteHandlerSupabaseClient(request, response).
+- finalizeAuthResponse() forwards any refreshed auth cookies onto the final API response.
