@@ -76,6 +76,13 @@ function normalizeScheduleItems(rows: any[]): DateScheduleItem[] {
     }));
 }
 
+function requireDateValue(value: unknown) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    throw new ApiError(400, 'Date is required.');
+  }
+}
+
 function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, projectId: string) {
   return {
     workspace_id: workspaceId,
@@ -321,6 +328,7 @@ export async function createDateScoped(userId: string, values: Partial<DateFormV
   const workspaceId = String(values.workspace_id ?? '');
   const projectId = String(values.project_id ?? '');
   await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
+  requireDateValue(values.date);
   await ensureProjectInWorkspace(workspaceId, projectId);
   await ensureTourInScope(workspaceId, projectId, values.tour_id);
 
@@ -342,6 +350,7 @@ export async function updateDateScoped(userId: string, workspaceId: string, date
   await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
   const current = await getDateScoped(userId, workspaceId, dateId);
   const projectId = String(values.project_id ?? current.project_id);
+  requireDateValue(values.date ?? current.date);
   await ensureProjectInWorkspace(workspaceId, projectId);
   await ensureTourInScope(workspaceId, projectId, values.tour_id ?? current.tour_id);
 

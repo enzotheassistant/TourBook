@@ -39,6 +39,7 @@ export function AddressAutocompleteField({
   onAddressChange,
   onMapsUrlChange,
   onRegionDetected,
+  onCountryDetected,
 }: {
   label: string;
   value: string;
@@ -48,6 +49,7 @@ export function AddressAutocompleteField({
   onAddressChange: (value: string) => void;
   onMapsUrlChange: (value: string) => void;
   onRegionDetected?: (value: string) => void;
+  onCountryDetected?: (value: string) => void;
 }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -141,6 +143,7 @@ export function AddressAutocompleteField({
     onAddressChange(suggestion.address);
     onMapsUrlChange(suggestion.maps_url);
     if (suggestion.region && onRegionDetected && !region.trim()) onRegionDetected(suggestion.region);
+    if (suggestion.country && onCountryDetected) onCountryDetected(suggestion.country.toUpperCase());
     rememberSelection(suggestion);
     setSuggestions([]);
     setOpen(false);

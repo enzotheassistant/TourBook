@@ -609,8 +609,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function saveShow(requestedStatus: ShowStatus) {
-    if (requestedStatus === 'published' && !isValidStoredDate(form.date)) {
-      setMessage('Enter a valid date before publishing. Use the date picker or YYYY-MM-DD.');
+    if (!isValidStoredDate(form.date)) {
+      setMessage(
+        requestedStatus === 'draft'
+          ? 'Enter a valid date before saving a draft. Use the date picker or YYYY-MM-DD.'
+          : 'Enter a valid date before publishing. Use the date picker or YYYY-MM-DD.',
+      );
       return;
     }
 
@@ -1322,6 +1326,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   onAddressChange={(value) => updateField('venue_address', value)}
                   onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
                   onRegionDetected={(value) => updateField('region', value.toUpperCase())}
+                  onCountryDetected={(value) => updateField('country', value.toUpperCase())}
                 />
               </div>
             </CollapsibleSection>
@@ -1403,6 +1408,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   onAddressChange={(value) => updateField('hotel_address', value)}
                   onMapsUrlChange={(value) => updateField('hotel_maps_url', value)}
                   onRegionDetected={(value) => updateField('region', value.toUpperCase())}
+                  onCountryDetected={(value) => updateField('country', value.toUpperCase())}
                 />
                 <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
               </div>
