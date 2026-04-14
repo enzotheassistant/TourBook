@@ -23,6 +23,7 @@ export const emptyShowForm: ShowFormValues = {
   date: '',
   city: '',
   region: '',
+  country: '',
   venue_name: '',
   tour_name: '',
   venue_address: '',
