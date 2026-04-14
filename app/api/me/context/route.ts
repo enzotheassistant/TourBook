@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     let allProjects: ProjectSummary[] = [];
     const projectsResult = await supabase
       .from('projects')
-      .select('id, workspace_id, name, slug, archived_at, created_at')
+      .select('id, workspace_id, name, slug, created_at')
       .in('workspace_id', workspaceIds)
       .order('created_at', { ascending: true });
 
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         workspaceId: String(row.workspace_id),
         name: String(row.name ?? ''),
         slug: row.slug ? String(row.slug) : null,
-        archivedAt: row.archived_at ? String(row.archived_at) : null,
+        archivedAt: null,
       }));
     }
 
@@ -117,8 +117,6 @@ export async function GET(request: NextRequest) {
       const candidatePayloads: Array<Record<string, unknown>> = [
         { workspace_id: activeWorkspaceId, name: fallbackName, slug: fallbackSlug },
         { workspace_id: activeWorkspaceId, name: fallbackName },
-        { workspace_id: activeWorkspaceId, name: fallbackName, owner_user_id: user.id },
-        { workspace_id: activeWorkspaceId, name: fallbackName, slug: fallbackSlug, owner_user_id: user.id },
       ];
 
       let insertError: unknown = null;
@@ -126,7 +124,7 @@ export async function GET(request: NextRequest) {
         const insertResult = await supabase
           .from('projects')
           .insert(payload)
-          .select('id, workspace_id, name, slug, archived_at, created_at')
+          .select('id, workspace_id, name, slug, created_at')
           .single();
 
         if (!insertResult.error && insertResult.data) {
@@ -135,7 +133,7 @@ export async function GET(request: NextRequest) {
             workspaceId: String(insertResult.data.workspace_id),
             name: String(insertResult.data.name ?? fallbackName),
             slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
-            archivedAt: insertResult.data.archived_at ? String(insertResult.data.archived_at) : null,
+            archivedAt: null,
           };
           projects = [createdProject];
           insertError = null;
@@ -148,7 +146,7 @@ export async function GET(request: NextRequest) {
       if (!projects.length) {
         const retryProjects = await supabase
           .from('projects')
-          .select('id, workspace_id, name, slug, archived_at, created_at')
+          .select('id, workspace_id, name, slug, created_at')
           .eq('workspace_id', activeWorkspaceId)
           .order('created_at', { ascending: true });
 
@@ -158,7 +156,7 @@ export async function GET(request: NextRequest) {
             workspaceId: String(row.workspace_id),
             name: String(row.name ?? ''),
             slug: row.slug ? String(row.slug) : null,
-            archivedAt: row.archived_at ? String(row.archived_at) : null,
+            archivedAt: null,
           }));
         }
 

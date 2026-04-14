@@ -7,7 +7,7 @@ export async function listProjectsScoped(userId: string, workspaceId: string): P
   const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('projects')
-    .select('id, workspace_id, name, slug, archived_at, created_at')
+    .select('id, workspace_id, name, slug, created_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true });
 
@@ -21,6 +21,6 @@ export async function listProjectsScoped(userId: string, workspaceId: string): P
     workspaceId: String(row.workspace_id),
     name: String(row.name ?? ''),
     slug: row.slug ? String(row.slug) : null,
-    archivedAt: row.archived_at ? String(row.archived_at) : null,
+    archivedAt: null,
   }));
 }
