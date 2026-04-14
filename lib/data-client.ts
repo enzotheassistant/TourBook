@@ -123,15 +123,17 @@ export async function deleteShow(showId: string, scope?: ScopeInput) {
 }
 
 export async function listGuestListEntries(showId: string, scope?: ScopeInput) {
-  const workspaceId = requireWorkspaceId(scope);
-  const params = new URLSearchParams({ workspaceId });
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   const entries = await request<any[]>(`/api/dates/${showId}/guest-list?${params.toString()}`);
   return entries.map(mapScopedGuestListEntryToLegacy);
 }
 
 export async function addGuestListEntries(showId: string, names: string[], scope?: ScopeInput) {
-  const workspaceId = requireWorkspaceId(scope);
-  const params = new URLSearchParams({ workspaceId });
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   const entries = await request<any[]>(`/api/dates/${showId}/guest-list?${params.toString()}`, {
     method: 'POST',
     body: JSON.stringify({ names }),
@@ -140,8 +142,9 @@ export async function addGuestListEntries(showId: string, names: string[], scope
 }
 
 export async function updateGuestListEntry(entryId: string, name: string, scope?: ScopeInput) {
-  const workspaceId = requireWorkspaceId(scope);
-  const params = new URLSearchParams({ workspaceId });
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   const entry = await request<any>(`/api/dates/guest-list/${entryId}?${params.toString()}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
@@ -150,16 +153,18 @@ export async function updateGuestListEntry(entryId: string, name: string, scope?
 }
 
 export async function deleteGuestListEntry(entryId: string, scope?: ScopeInput) {
-  const workspaceId = requireWorkspaceId(scope);
-  const params = new URLSearchParams({ workspaceId });
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   await request<{ ok: boolean }>(`/api/dates/guest-list/${entryId}?${params.toString()}`, {
     method: 'DELETE',
   });
 }
 
 export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
-  const workspaceId = requireWorkspaceId(scope);
-  const params = new URLSearchParams({ workspaceId });
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   const supabase = getBrowserSupabaseClient();
   const {
     data: { session },

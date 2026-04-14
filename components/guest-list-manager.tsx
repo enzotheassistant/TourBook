@@ -24,6 +24,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -60,32 +61,42 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     const lines = parseBulkInput(value);
     if (!lines.length || saving) return;
     setSaving(true);
+    setError('');
     try {
-      if (!activeWorkspaceId) throw new Error('No active workspace selected.');
       const createdEntries = await addGuestListEntries(showId, lines, { workspaceId: activeWorkspaceId });
       setEntries((current) => [...current, ...createdEntries]);
       setValue('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to add guest list entry.');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(entryId: string) {
-    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
-    await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId });
-    setEntries((current) => current.filter((entry) => entry.id !== entryId));
-    setOpenMenuId(null);
+    setError('');
+    try {
+      await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId });
+      setEntries((current) => current.filter((entry) => entry.id !== entryId));
+      setOpenMenuId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to remove guest list entry.');
+    }
   }
 
   async function handleSaveEdit(entryId: string) {
     const trimmed = editingValue.trim();
     if (!trimmed) return;
-    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
-    const updated = await updateGuestListEntry(entryId, trimmed, { workspaceId: activeWorkspaceId });
-    setEntries((current) => current.map((entry) => (entry.id === entryId ? updated : entry)));
-    setEditingId(null);
-    setEditingValue('');
-    setOpenMenuId(null);
+    setError('');
+    try {
+      const updated = await updateGuestListEntry(entryId, trimmed, { workspaceId: activeWorkspaceId });
+      setEntries((current) => current.map((entry) => (entry.id === entryId ? updated : entry)));
+      setEditingId(null);
+      setEditingValue('');
+      setOpenMenuId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update guest list entry.');
+    }
   }
 
   return (
@@ -107,6 +118,8 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
           </button>
         </div>
       </form>
+
+      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
       <div className="space-y-2">
         {sortedEntries.length === 0 ? (
