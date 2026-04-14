@@ -3,13 +3,21 @@ import { mapScopedGuestListEntryToLegacy } from '@/lib/adapters/date-show';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/data/server/shared';
 import { deleteGuestListEntryScoped, updateGuestListEntryScoped } from '@/lib/data/server/guest-list';
+import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
+  const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
   const { id } = await params;
+
+  await recordLegacyEndpointTelemetry(request, {
+    endpoint: '/api/guest-list/[id]',
+    workspaceId,
+    projectId,
+  });
 
   try {
     const body = (await request.json()) as { name?: string };
@@ -27,7 +35,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (authState instanceof NextResponse) return authState;
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
+  const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
   const { id } = await params;
+
+  await recordLegacyEndpointTelemetry(request, {
+    endpoint: '/api/guest-list/[id]',
+    workspaceId,
+    projectId,
+  });
 
   try {
     await deleteGuestListEntryScoped(authState.user.id, workspaceId, id);

@@ -3,6 +3,7 @@ import { mapDateRecordToShow, mapShowFormToDateForm } from '@/lib/adapters/date-
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError, parseBooleanSearchParam } from '@/lib/data/server/shared';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
+import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 import type { ShowFormValues } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -13,6 +14,12 @@ export async function GET(request: NextRequest) {
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
   const tourId = request.nextUrl.searchParams.get('tourId');
   const includeDrafts = parseBooleanSearchParam(request.nextUrl.searchParams.get('includeDrafts'));
+
+  await recordLegacyEndpointTelemetry(request, {
+    endpoint: '/api/shows',
+    workspaceId,
+    projectId,
+  });
 
   try {
     const dates = await listDatesScoped({
@@ -39,6 +46,13 @@ export async function POST(request: NextRequest) {
     const workspaceId = body.workspaceId ?? request.nextUrl.searchParams.get('workspaceId') ?? '';
     const projectId = body.projectId ?? request.nextUrl.searchParams.get('projectId') ?? '';
     const tourId = body.tourId ?? request.nextUrl.searchParams.get('tourId');
+
+    await recordLegacyEndpointTelemetry(request, {
+      endpoint: '/api/shows',
+      workspaceId,
+      projectId,
+    });
+
     const dateRecord = await createDateScoped(authState.user.id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
     return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
   } catch (error) {

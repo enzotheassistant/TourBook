@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { exportGuestListCsvScoped } from '@/lib/data/server/guest-list';
 import { ApiError } from '@/lib/data/server/shared';
+import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
+  const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
   const { id } = await params;
+
+  await recordLegacyEndpointTelemetry(request, {
+    endpoint: '/api/shows/[id]/guest-list/export',
+    workspaceId,
+    projectId,
+  });
 
   try {
     const csv = await exportGuestListCsvScoped(authState.user.id, workspaceId, id);

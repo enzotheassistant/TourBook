@@ -4,6 +4,7 @@ import { runIntake } from '@/lib/ai/intake-provider';
 import type { IntakeImageInput, IntakeScheduleItem } from '@/lib/ai/intake-types';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import { ApiError } from '@/lib/data/server/shared';
+import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 import type { DateFormValues } from '@/lib/types/date-record';
 
 export const runtime = 'nodejs';
@@ -80,6 +81,12 @@ export async function POST(request: NextRequest) {
     const parsed = contentType.includes('multipart/form-data')
       ? await parseBodyAsFormData(request)
       : parseBodyAsJson(await request.json().catch(() => ({})));
+
+    await recordLegacyEndpointTelemetry(request, {
+      endpoint: '/api/ai-intake',
+      workspaceId: parsed.workspaceId,
+      projectId: parsed.projectId,
+    });
 
     if (!parsed.workspaceId || !parsed.projectId) {
       return finalizeAuthResponse(NextResponse.json({ error: 'workspaceId and projectId are required.' }, { status: 400 }), authState);
