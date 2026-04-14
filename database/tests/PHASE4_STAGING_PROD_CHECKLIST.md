@@ -96,6 +96,32 @@ Use a logged-in session cookie/token for each role and call:
 - [ ] `GET /api/projects?workspaceId=<other-ws>` as non-member
   - denied/empty
 
+### API smoke execution record (2026-04-15)
+
+- Runtime execution from this workspace session: **BLOCKED** (no staging base URL/tokens present in runner env).
+- Closest high-confidence verification completed:
+  - Static route + data-layer trace confirms expected behavior for the 4 required GET endpoints.
+  - Reproducible executable runner added: `scripts/phase4-api-smoke.mjs`.
+
+Run command once staging tokens are available:
+
+```bash
+BASE_URL=... \
+WORKSPACE_ID=... \
+OTHER_WORKSPACE_ID=... \
+PROJECT_ID=... \
+DRAFT_DATE_ID=... \
+VIEWER_TOKEN=... \
+EDITOR_TOKEN=... \
+ADMIN_TOKEN=... \
+OWNER_TOKEN=... \
+node scripts/phase4-api-smoke.mjs
+```
+
+Expected statuses:
+- viewer: dates list `200` (no drafts), draft date `404`, draft guest-list `404`, cross-workspace projects `403`
+- editor/admin/owner: dates list `200` (drafts visible), draft date `200`, draft guest-list `200`, cross-workspace projects `403`
+
 ## 6) Go/No-Go
 
 - [ ] No failing RLS smoke probes
