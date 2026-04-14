@@ -26,7 +26,7 @@ alter table if exists public.date_schedule_items enable row level security;
 create policy "workspace_members_self_read"
 on public.workspace_members
 for select
-using (auth.uid()::text = user_id);
+using (auth.uid() = user_id);
 
 -- Allow workspace owners/admins to see all members in their workspace
 create policy "workspace_members_admin_read"
@@ -36,7 +36,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_members.workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin')
   )
 );
@@ -49,7 +49,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_members.workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin')
   )
 );
@@ -62,7 +62,7 @@ using (
   exists (
     select 1 from public.workspaces w
     where w.id = workspace_members.workspace_id
-      and w.owner_user_id = auth.uid()::text
+      and w.owner_user_id = auth.uid()
   )
 );
 
@@ -78,7 +78,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
   )
 );
 
@@ -86,13 +86,13 @@ using (
 create policy "workspaces_owner_update"
 on public.workspaces
 for update
-using (owner_user_id = auth.uid()::text);
+using (owner_user_id = auth.uid());
 
 -- Only workspace owner can delete
 create policy "workspaces_owner_delete"
 on public.workspaces
 for delete
-using (owner_user_id = auth.uid()::text);
+using (owner_user_id = auth.uid());
 
 -- ============================================================================
 -- 4. PROJECTS POLICIES
@@ -106,7 +106,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = projects.workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
   )
 );
 
@@ -118,7 +118,7 @@ with check (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -131,7 +131,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -144,7 +144,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin')
   )
 );
@@ -161,7 +161,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = tours.workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
   )
 );
 
@@ -172,7 +172,7 @@ with check (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -184,7 +184,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -196,7 +196,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin')
   )
 );
@@ -216,7 +216,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = dates.workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
   )
   and (
     (
@@ -224,7 +224,7 @@ using (
       (
         select wm.role from public.workspace_members wm
         where wm.workspace_id = dates.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
         limit 1
       ) = 'viewer'
       and status = 'published'
@@ -234,7 +234,7 @@ using (
       (
         select wm.role from public.workspace_members wm
         where wm.workspace_id = dates.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
         limit 1
       ) in ('owner', 'admin', 'editor')
     )
@@ -249,7 +249,7 @@ with check (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -262,7 +262,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin', 'editor')
   )
 );
@@ -275,7 +275,7 @@ using (
   exists (
     select 1 from public.workspace_members wm
     where wm.workspace_id = workspace_id
-      and wm.user_id = auth.uid()::text
+      and wm.user_id = auth.uid()
       and wm.role in ('owner', 'admin')
   )
 );
@@ -299,7 +299,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
       )
       and (
         (
@@ -307,7 +307,7 @@ using (
           (
             select wm.role from public.workspace_members wm
             where wm.workspace_id = d.workspace_id
-              and wm.user_id = auth.uid()::text
+              and wm.user_id = auth.uid()
             limit 1
           ) = 'viewer'
           and d.status = 'published'
@@ -317,7 +317,7 @@ using (
           (
             select wm.role from public.workspace_members wm
             where wm.workspace_id = d.workspace_id
-              and wm.user_id = auth.uid()::text
+              and wm.user_id = auth.uid()
             limit 1
           ) in ('owner', 'admin', 'editor')
         )
@@ -337,7 +337,7 @@ with check (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
@@ -355,7 +355,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
@@ -373,7 +373,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
@@ -397,7 +397,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
       )
       and (
         (
@@ -405,7 +405,7 @@ using (
           (
             select wm.role from public.workspace_members wm
             where wm.workspace_id = d.workspace_id
-              and wm.user_id = auth.uid()::text
+              and wm.user_id = auth.uid()
             limit 1
           ) = 'viewer'
           and d.status = 'published'
@@ -415,7 +415,7 @@ using (
           (
             select wm.role from public.workspace_members wm
             where wm.workspace_id = d.workspace_id
-              and wm.user_id = auth.uid()::text
+              and wm.user_id = auth.uid()
             limit 1
           ) in ('owner', 'admin', 'editor')
         )
@@ -435,7 +435,7 @@ with check (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
@@ -453,7 +453,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
@@ -471,7 +471,7 @@ using (
       and exists (
         select 1 from public.workspace_members wm
         where wm.workspace_id = d.workspace_id
-          and wm.user_id = auth.uid()::text
+          and wm.user_id = auth.uid()
           and wm.role in ('owner', 'admin', 'editor')
       )
   )
