@@ -1683,6 +1683,7 @@ function ShowListSection({
               {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}
             </div>
             <p className="text-sm text-zinc-300">{show.venue_name}</p>
+            {show.venue_address ? <p className="text-xs text-zinc-500">{show.venue_address}</p> : null}
             {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 

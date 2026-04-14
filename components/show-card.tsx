@@ -19,6 +19,7 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
           <p className="text-sm text-zinc-400">{formatShowDate(show.date)}</p>
           <h2 className="mt-2 text-[2rem] font-semibold leading-none tracking-tight text-zinc-50 sm:text-[2.15rem]">{show.city}{show.region ? `, ${show.region}` : ''}</h2>
           <p className="mt-3 text-lg font-medium text-zinc-200">{show.venue_name}</p>
+          {show.venue_address ? <p className="mt-1 text-sm text-zinc-400">{show.venue_address}</p> : null}
           {show.tour_name ? <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-emerald-300/90">{show.tour_name}</p> : null}
         </div>
 
