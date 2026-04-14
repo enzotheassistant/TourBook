@@ -49,33 +49,42 @@ Roles:
 - Non-member gets `403 You do not have access to this workspace.`
 - **Result**: expected behavior **PASS (code-trace confidence: high)**
 
-## 4) Critical caveat / blocker found (outside requested GET set)
+## 4) Blocker status update — guest-list write role gate patched
 
-`POST/PATCH/DELETE` guest-list paths do not role-gate to editor+ in app layer:
-- `addGuestListEntriesScoped`, `updateGuestListEntryScoped`, `deleteGuestListEntryScoped`
-- They call `requireWorkspaceAccess(userId, workspaceId)` **without allowedRoles**.
-- With current service-role data client, a viewer can likely mutate guest list for published dates.
+`POST/PATCH/DELETE` guest-list mutation paths are now explicitly role-gated in app-layer auth:
+- `addGuestListEntriesScoped`
+- `updateGuestListEntryScoped`
+- `deleteGuestListEntryScoped`
 
-Impact:
-- Not a cross-workspace leak, but a role-enforcement gap.
-- Prevents claiming fully solid role enforcement at API layer in Phase 4.
+Enforcement now requires workspace role in:
+- `owner`
+- `admin`
+- `editor`
 
-## 5) Recommendation
+Denied:
+- `viewer`
+- non-members
 
-- **Phase 4 complete & solid?** **NO (not fully solid)**
-  - RLS migration + required GET read-path behavior look correct.
-  - But write-role gap on guest list is a real blocker.
+Implementation notes:
+- Centralized reusable role constant + predicate in `lib/data/server/authorization.ts`.
+- Mutation handlers call `requireWorkspaceAccess(..., ['owner','admin','editor'])` via helper.
+- Read paths remain unchanged.
 
-- **Remaining blockers for true multi-tenant enforcement**
-  1. Fix guest-list write role checks to `['owner','admin','editor']` in app layer.
-  2. Run live API smoke with real role tokens on staging (script provided).
-  3. Phase 5 refactor to user-scoped Supabase clients (remove routine service-role dependency) for true RLS-at-query-time enforcement.
+## 5) Verification and recommendation
+
+- **Phase 4 complete & solid?** **YES for the previously identified app-layer blocker**
+  - The guest-list write-role gap is now closed.
+  - Required GET read-path behavior remains unchanged.
+
+- **Still recommended before final production security signoff**
+  1. Run live API smoke with real role tokens on staging (script provided).
+  2. Proceed with Phase 5 refactor to user-scoped Supabase clients to reduce service-role reliance.
 
 - **Go/No-Go for Phase 5**
-  - **GO for Phase 5 work**, with a condition:
-    - Patch guest-list write role checks first (or in first Phase 5 PR) before claiming security signoff.
+  - **GO**.
 
 ## 6) Confidence
 
 - Code-trace confidence on required GET behavior: **High**.
-- Live staging confidence: **Medium** until the script is run with real role tokens.
+- Guest-list write-role enforcement confidence: **High** (code + authz tests).
+- Live staging confidence: **Medium** until smoke script is run with real role tokens.
