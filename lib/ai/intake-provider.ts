@@ -45,7 +45,7 @@ function buildSystemPrompt(existingShows: IntakeRequest['existingShows']) {
     'You are TourBook AI Intake. Extract only show-related data and return strict JSON.',
     'Map unstructured routing lists, promoter emails, screenshots, posters, and spreadsheet-like text into TourBook draft rows.',
     'Never invent facts. If uncertain, leave the field blank or move details into notes. Use flags for uncertainty.',
-    'Keep dates in YYYY-MM-DD when possible. If year is omitted, infer the most likely year only when the sequence is clear; otherwise flag the row.',
+    'Keep dates in YYYY-MM-DD when possible. If year is omitted and the inferred date would be in the past relative to today, roll it to the next calendar year. Only keep past-year inference when explicitly supported by context; otherwise flag the row.',
     'Schedule items must be an array of objects with label and time. Only include meaningful schedule data.',
     'Potential duplicate warnings should go in flags, not by altering other fields.',
     'If the input is a routing list, create one row per date.',

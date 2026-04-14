@@ -27,6 +27,66 @@ function pickAnchorTime(items: IntakeScheduleItem[] | undefined, labels: string[
   return '';
 }
 
+function formatDateForStorage(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeAiImportDate(value: string) {
+  const trimmed = normalizeText(value);
+  if (!trimmed) return '';
+
+  const normalized = trimmed.replace(/[./]/g, '-').replace(/\s+/g, ' ');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const finalizeCandidate = (candidate: Date, inferredYear: boolean) => {
+    if (Number.isNaN(candidate.getTime())) return '';
+    const normalizedCandidate = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate());
+    if (inferredYear && normalizedCandidate < today) {
+      normalizedCandidate.setFullYear(normalizedCandidate.getFullYear() + 1);
+    }
+    return formatDateForStorage(normalizedCandidate);
+  };
+
+  const tryParts = (year: number, month: number, day: number, inferredYear = false) => {
+    const candidate = new Date(year, month - 1, day);
+    if (candidate.getFullYear() === year && candidate.getMonth() === month - 1 && candidate.getDate() === day) {
+      return finalizeCandidate(candidate, inferredYear);
+    }
+    return '';
+  };
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split('-').map(Number);
+    return tryParts(year, month, day);
+  }
+
+  const currentYear = today.getFullYear();
+
+  if (/^\d{1,2}-\d{1,2}$/.test(normalized)) {
+    const [month, day] = normalized.split('-').map(Number);
+    return tryParts(currentYear, month, day, true);
+  }
+
+  if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(normalized)) {
+    let [month, day, year] = normalized.split('-').map(Number);
+    if (year < 100) year += 2000;
+    return tryParts(year, month, day);
+  }
+
+  const hasExplicitYear = /\b\d{4}\b/.test(trimmed);
+  const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${currentYear}`;
+  const parsed = new Date(parseTarget);
+  if (!Number.isNaN(parsed.getTime())) {
+    return finalizeCandidate(parsed, !hasExplicitYear);
+  }
+
+  return '';
+}
+
 function parsePreviewOnly(value: unknown) {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -121,7 +181,7 @@ export async function POST(request: NextRequest) {
         project_id: parsed.projectId,
         tour_id: parsed.tourId,
         status: 'draft',
-        date: row.date,
+        date: normalizeAiImportDate(row.date) || row.date,
         city: row.city,
         region: row.region,
         venue_name: row.venue_name,
