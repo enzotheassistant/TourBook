@@ -102,9 +102,50 @@ export async function GET(request: NextRequest) {
     );
 
     const activeWorkspaceId = workspaceWithProjects?.id ?? workspaces[0]?.id ?? null;
-    const projects = activeWorkspaceId
+    let projects = activeWorkspaceId
       ? allProjects.filter((project) => project.workspaceId === activeWorkspaceId)
       : [];
+
+    if (activeWorkspaceId && !projects.length) {
+      const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
+      const fallbackName = workspace?.name?.trim() || 'Artist';
+      const insertResult = await supabase
+        .from('projects')
+        .insert({
+          workspace_id: activeWorkspaceId,
+          name: fallbackName,
+          slug: null,
+        })
+        .select('id, workspace_id, name, slug, archived_at, created_at')
+        .single();
+
+      if (!insertResult.error && insertResult.data) {
+        const createdProject: ProjectSummary = {
+          id: String(insertResult.data.id),
+          workspaceId: String(insertResult.data.workspace_id),
+          name: String(insertResult.data.name ?? fallbackName),
+          slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
+          archivedAt: insertResult.data.archived_at ? String(insertResult.data.archived_at) : null,
+        };
+        projects = [createdProject];
+      } else {
+        const retryProjects = await supabase
+          .from('projects')
+          .select('id, workspace_id, name, slug, archived_at, created_at')
+          .eq('workspace_id', activeWorkspaceId)
+          .order('created_at', { ascending: true });
+
+        if (!retryProjects.error) {
+          projects = (retryProjects.data ?? []).map((row: any) => ({
+            id: String(row.id),
+            workspaceId: String(row.workspace_id),
+            name: String(row.name ?? ''),
+            slug: row.slug ? String(row.slug) : null,
+            archivedAt: row.archived_at ? String(row.archived_at) : null,
+          }));
+        }
+      }
+    }
 
     const activeProjectId = projects[0]?.id ?? null;
 
