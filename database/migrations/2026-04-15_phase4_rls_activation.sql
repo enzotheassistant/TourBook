@@ -219,23 +219,25 @@ using (
       and wm.user_id = auth.uid()::text
   )
   and (
-    -- Viewers can only see published dates
     (
-      select wm.role from public.workspace_members wm
-      where wm.workspace_id = dates.workspace_id
-        and wm.user_id = auth.uid()::text
-      limit 1
-    ) = 'viewer'
-    and status = 'published'
-  )
-  or (
-    -- Editors/admins/owners see all statuses
-    (
-      select wm.role from public.workspace_members wm
-      where wm.workspace_id = dates.workspace_id
-        and wm.user_id = auth.uid()::text
-      limit 1
-    ) in ('owner', 'admin', 'editor')
+      -- Viewers can only see published dates
+      (
+        select wm.role from public.workspace_members wm
+        where wm.workspace_id = dates.workspace_id
+          and wm.user_id = auth.uid()::text
+        limit 1
+      ) = 'viewer'
+      and status = 'published'
+    )
+    or (
+      -- Editors/admins/owners see all statuses
+      (
+        select wm.role from public.workspace_members wm
+        where wm.workspace_id = dates.workspace_id
+          and wm.user_id = auth.uid()::text
+        limit 1
+      ) in ('owner', 'admin', 'editor')
+    )
   )
 );
 
@@ -300,23 +302,25 @@ using (
           and wm.user_id = auth.uid()::text
       )
       and (
-        -- Viewers can only see entries for published dates
         (
-          select wm.role from public.workspace_members wm
-          where wm.workspace_id = d.workspace_id
-            and wm.user_id = auth.uid()::text
-          limit 1
-        ) = 'viewer'
-        and d.status = 'published'
-      )
-      or (
-        -- Editors/admins/owners see all entries
-        (
-          select wm.role from public.workspace_members wm
-          where wm.workspace_id = d.workspace_id
-            and wm.user_id = auth.uid()::text
-          limit 1
-        ) in ('owner', 'admin', 'editor')
+          -- Viewers can only see entries for published dates
+          (
+            select wm.role from public.workspace_members wm
+            where wm.workspace_id = d.workspace_id
+              and wm.user_id = auth.uid()::text
+            limit 1
+          ) = 'viewer'
+          and d.status = 'published'
+        )
+        or (
+          -- Editors/admins/owners see all entries
+          (
+            select wm.role from public.workspace_members wm
+            where wm.workspace_id = d.workspace_id
+              and wm.user_id = auth.uid()::text
+            limit 1
+          ) in ('owner', 'admin', 'editor')
+        )
       )
   )
 );
@@ -396,23 +400,25 @@ using (
           and wm.user_id = auth.uid()::text
       )
       and (
-        -- Viewers can only see items for published dates
         (
-          select wm.role from public.workspace_members wm
-          where wm.workspace_id = d.workspace_id
-            and wm.user_id = auth.uid()::text
-          limit 1
-        ) = 'viewer'
-        and d.status = 'published'
-      )
-      or (
-        -- Editors/admins/owners see all items
-        (
-          select wm.role from public.workspace_members wm
-          where wm.workspace_id = d.workspace_id
-            and wm.user_id = auth.uid()::text
-          limit 1
-        ) in ('owner', 'admin', 'editor')
+          -- Viewers can only see items for published dates
+          (
+            select wm.role from public.workspace_members wm
+            where wm.workspace_id = d.workspace_id
+              and wm.user_id = auth.uid()::text
+            limit 1
+          ) = 'viewer'
+          and d.status = 'published'
+        )
+        or (
+          -- Editors/admins/owners see all items
+          (
+            select wm.role from public.workspace_members wm
+            where wm.workspace_id = d.workspace_id
+              and wm.user_id = auth.uid()::text
+            limit 1
+          ) in ('owner', 'admin', 'editor')
+        )
       )
   )
 );

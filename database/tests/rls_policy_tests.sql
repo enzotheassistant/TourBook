@@ -161,12 +161,12 @@ select 'TEST 17: Owner reads all workspace members' as test_name;
 -- set request.jwt.claim.sub = 'test_owner_id';
 -- select * from workspace_members where workspace_id = 'test_workspace_id';
 
--- TEST 18: Editor can read all members in workspace
-select 'TEST 18: Editor reads all workspace members' as test_name;
--- Expected: 3+ rows (all members in workspace)
+-- TEST 18: Editor cannot read all members in workspace
+select 'TEST 18: Editor cannot read all workspace members' as test_name;
+-- Expected: 0 rows when querying other members (editor is self-only for member visibility)
 -- set role authenticated;
 -- set request.jwt.claim.sub = 'test_editor_id';
--- select * from workspace_members where workspace_id = 'test_workspace_id';
+-- select * from workspace_members where workspace_id = 'test_workspace_id' and user_id != 'test_editor_id';
 
 -- TEST 19: Viewer can only read own membership
 select 'TEST 19: Viewer restricted to own membership' as test_name;
