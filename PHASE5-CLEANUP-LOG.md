@@ -103,9 +103,36 @@ b) Disable flags in **staging** for **7 days** and monitor.
 c) Disable in **production**.  
 d) Remove compatibility code in next batch if no regressions.
 
+## Batch 4 (operator disable + delete readiness pack)
+
+### Added
+
+1. `PHASE5-LEGACY-DISABLE-RUNBOOK.md`
+- Single-source runbook for staged legacy API disable execution.
+- Includes prerequisites, telemetry review process, 14-day zero-hit threshold, exception handling, 7-day staging protocol, production protocol, rollback steps, and signoff ownership fields.
+
+2. `PHASE5-LEGACY-REMOVAL-CHECKLIST.md`
+- Post-disable checklist for physical route deletion readiness.
+- Maps each legacy endpoint to canonical replacement path.
+- Defines post-removal API/UI smoke checks and signoff template.
+
+3. `scripts/legacy-telemetry-deprecation-check.mjs`
+- Summarizes legacy telemetry over configurable window (`--days`).
+- Reports endpoint + method counts and emits explicit `DEPRECATION_CHECK=PASS|FAIL`.
+- Designed for conservative gate decisions before disabling flags.
+
+4. `package.json`
+- Added helper command:
+  - `npm run telemetry:legacy:check -- --days 14`
+
+### No behavior changes
+
+- No live endpoint behavior changed in this batch.
+- Changes are operational docs/tooling only.
+
 ## Verification notes
 
 - No route/UI workflow changed by default (flags unset => enabled).
 - Telemetry remains additive and fail-open for enabled routes.
 - No sensitive payload capture introduced.
-- Build/typecheck/lint/tests validation executed; pre-existing failures (if any) are called out separately.
+- Unit tests and production build were re-run after Batch 4 doc/script additions.

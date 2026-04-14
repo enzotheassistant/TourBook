@@ -115,15 +115,34 @@ b) Disable flag in **staging** for **7 days** and monitor regressions.
 c) Disable flag in **production**.  
 d) Remove compatibility code in next batch if no regressions.
 
+## Batch 4 — Operator rollout pack for staged disable + removal readiness
+
+Added operator-facing execution artifacts (no runtime behavior change):
+- `PHASE5-LEGACY-DISABLE-RUNBOOK.md`
+  - single-source execution plan for prereqs, telemetry decisioning, staging/prod disable, rollback, and signoff ownership.
+- `PHASE5-LEGACY-REMOVAL-CHECKLIST.md`
+  - physical deletion readiness gates, canonical replacement mapping, and post-removal smoke checks.
+- `scripts/legacy-telemetry-deprecation-check.mjs`
+  - configurable telemetry decision helper with PASS/FAIL output for deprecation thresholds.
+
+Primary operator command (14-day threshold):
+```bash
+npm run telemetry:legacy:check -- --days 14
+```
+
 ## Next Phase 5 Batches (recommended order)
 
-1. **Bearer fallback deprecation pass (low-medium risk)**
+1. **Execute staged disable per runbook (ops change; reversible)**
+   - Use `PHASE5-LEGACY-DISABLE-RUNBOOK.md` in staging then production.
+   - Keep rollback-by-flag as first response path.
+
+2. **Legacy route physical deletion (post-disable, no-incidents window)**
+   - Use `PHASE5-LEGACY-REMOVAL-CHECKLIST.md` for route-by-route removal.
+   - Validate canonical `/api/dates/*` smoke tests before/after merge.
+
+3. **Bearer fallback deprecation pass (low-medium risk)**
    - Gate bearer-token fallback in `getAuthStateFromRequest` via env flag (default ON).
    - Run staging bake period before defaulting OFF.
 
-2. **Route consolidation pass (medium risk)**
-   - Move internal UI client to `/api/dates/*` native types where feasible.
-   - Keep alias routes until stability window completes.
-
-3. **Schema cleanup pass (medium-high risk)**
+4. **Schema cleanup pass (medium-high risk)**
    - Remove remaining schema-level legacy `show_id` only with explicit migration/rollback and data validation.
