@@ -59,12 +59,26 @@ function normalizeAiImportDate(value: string) {
     return '';
   };
 
+  const currentYear = today.getFullYear();
+
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [year, month, day] = normalized.split('-').map(Number);
+
+    // AI can over-eagerly roll all yearless dates to next year.
+    // If we get next-year for a month/day that is still upcoming this year,
+    // normalize back to current year.
+    if (year === currentYear + 1) {
+      const currentYearCandidate = tryParts(currentYear, month, day);
+      if (currentYearCandidate) {
+        const currentYearDate = new Date(`${currentYearCandidate}T00:00:00`);
+        if (!Number.isNaN(currentYearDate.getTime()) && currentYearDate >= today) {
+          return currentYearCandidate;
+        }
+      }
+    }
+
     return tryParts(year, month, day);
   }
-
-  const currentYear = today.getFullYear();
 
   if (/^\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [month, day] = normalized.split('-').map(Number);
