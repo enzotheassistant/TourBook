@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
 
+  const debug = request.nextUrl.searchParams.get('debug') === '1';
+  const debugInfo: Record<string, unknown> = {};
+
   const { user } = authState;
   const baseContext: BootstrapContext = {
     user,
@@ -109,26 +112,40 @@ export async function GET(request: NextRequest) {
     if (activeWorkspaceId && !projects.length) {
       const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
       const fallbackName = workspace?.name?.trim() || 'Artist';
-      const insertResult = await supabase
-        .from('projects')
-        .insert({
-          workspace_id: activeWorkspaceId,
-          name: fallbackName,
-          slug: null,
-        })
-        .select('id, workspace_id, name, slug, archived_at, created_at')
-        .single();
+      const fallbackSlug = fallbackName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'artist';
 
-      if (!insertResult.error && insertResult.data) {
-        const createdProject: ProjectSummary = {
-          id: String(insertResult.data.id),
-          workspaceId: String(insertResult.data.workspace_id),
-          name: String(insertResult.data.name ?? fallbackName),
-          slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
-          archivedAt: insertResult.data.archived_at ? String(insertResult.data.archived_at) : null,
-        };
-        projects = [createdProject];
-      } else {
+      const candidatePayloads: Array<Record<string, unknown>> = [
+        { workspace_id: activeWorkspaceId, name: fallbackName, slug: fallbackSlug },
+        { workspace_id: activeWorkspaceId, name: fallbackName },
+        { workspace_id: activeWorkspaceId, name: fallbackName, owner_user_id: user.id },
+        { workspace_id: activeWorkspaceId, name: fallbackName, slug: fallbackSlug, owner_user_id: user.id },
+      ];
+
+      let insertError: unknown = null;
+      for (const payload of candidatePayloads) {
+        const insertResult = await supabase
+          .from('projects')
+          .insert(payload)
+          .select('id, workspace_id, name, slug, archived_at, created_at')
+          .single();
+
+        if (!insertResult.error && insertResult.data) {
+          const createdProject: ProjectSummary = {
+            id: String(insertResult.data.id),
+            workspaceId: String(insertResult.data.workspace_id),
+            name: String(insertResult.data.name ?? fallbackName),
+            slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
+            archivedAt: insertResult.data.archived_at ? String(insertResult.data.archived_at) : null,
+          };
+          projects = [createdProject];
+          insertError = null;
+          break;
+        }
+
+        insertError = insertResult.error;
+      }
+
+      if (!projects.length) {
         const retryProjects = await supabase
           .from('projects')
           .select('id, workspace_id, name, slug, archived_at, created_at')
@@ -143,6 +160,12 @@ export async function GET(request: NextRequest) {
             slug: row.slug ? String(row.slug) : null,
             archivedAt: row.archived_at ? String(row.archived_at) : null,
           }));
+        }
+
+        if (debug) {
+          debugInfo.projectInsertError = insertError;
+          debugInfo.retryProjectsError = retryProjects.error ?? null;
+          debugInfo.retryProjectsCount = projects.length;
         }
       }
     }
@@ -182,7 +205,8 @@ export async function GET(request: NextRequest) {
       activeWorkspaceId,
       activeProjectId,
       activeTourId: null,
-    } satisfies BootstrapContext), authState);
+      ...(debug ? { _debug: debugInfo } : {}),
+    }), authState);
   } catch (error) {
     console.error('Unable to build /api/me/context response', error);
     return finalizeAuthResponse(NextResponse.json({ error: 'Unable to build bootstrap context.' }, { status: 500 }), authState);
