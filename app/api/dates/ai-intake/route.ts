@@ -77,6 +77,18 @@ function normalizeAiImportDate(value: string) {
       }
     }
 
+    // Conversely, if AI gives current-year for a month/day already passed,
+    // treat it as next year for yearless routing style input.
+    if (year === currentYear) {
+      const currentYearCandidate = tryParts(currentYear, month, day);
+      if (currentYearCandidate) {
+        const currentYearDate = new Date(`${currentYearCandidate}T00:00:00`);
+        if (!Number.isNaN(currentYearDate.getTime()) && currentYearDate < today) {
+          return tryParts(currentYear + 1, month, day) || currentYearCandidate;
+        }
+      }
+    }
+
     return tryParts(year, month, day);
   }
 
