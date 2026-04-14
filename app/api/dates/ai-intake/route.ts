@@ -49,6 +49,14 @@ function detectForcedYearFromText(sourceText: string) {
     if (match?.[1]) return Number(match[1]);
   }
 
+  // If the source text has exactly one explicit year, treat it as the intended year.
+  // This catches inputs like "May 1 2027" even when the model rewrites rows.
+  const yearMatches = [...text.matchAll(/\b(20\d{2})\b/g)].map((m) => Number(m[1]));
+  const uniqueYears = [...new Set(yearMatches)];
+  if (uniqueYears.length === 1) {
+    return uniqueYears[0];
+  }
+
   return null;
 }
 
