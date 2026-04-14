@@ -122,61 +122,6 @@ function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, 
   };
 }
 
-function getMissingColumnName(error: unknown): string | null {
-  if (!error || typeof error !== 'object') return null;
-  const message = 'message' in error ? String((error as { message?: string }).message ?? '') : '';
-  const match = message.match(/'([^']+)' column/i);
-  return match?.[1] ?? null;
-}
-
-async function insertDateWithSchemaFallback(supabase: any, payload: Record<string, unknown>) {
-  const workingPayload = { ...payload };
-
-  for (let i = 0; i < 20; i += 1) {
-    const result = await supabase.from('dates').insert(workingPayload).select('*').single();
-    if (!result.error && result.data) return result;
-
-    const missingColumn = getMissingColumnName(result.error);
-    if (!missingColumn || !(missingColumn in workingPayload)) {
-      return result;
-    }
-
-    delete workingPayload[missingColumn];
-  }
-
-  return supabase.from('dates').insert(workingPayload).select('*').single();
-}
-
-async function updateDateWithSchemaFallback(supabase: any, payload: Record<string, unknown>, workspaceId: string, dateId: string) {
-  const workingPayload = { ...payload };
-
-  for (let i = 0; i < 20; i += 1) {
-    const result = await supabase
-      .from('dates')
-      .update(workingPayload)
-      .eq('id', dateId)
-      .eq('workspace_id', workspaceId)
-      .select('*')
-      .single();
-
-    if (!result.error && result.data) return result;
-
-    const missingColumn = getMissingColumnName(result.error);
-    if (!missingColumn || !(missingColumn in workingPayload)) {
-      return result;
-    }
-
-    delete workingPayload[missingColumn];
-  }
-
-  return supabase
-    .from('dates')
-    .update(workingPayload)
-    .eq('id', dateId)
-    .eq('workspace_id', workspaceId)
-    .select('*')
-    .single();
-}
 
 async function listScheduleItemsForDate(dateId: string): Promise<DateScheduleItem[]> {
   const supabase = getPrivilegedDataClient();
@@ -334,7 +279,7 @@ export async function createDateScoped(userId: string, values: Partial<DateFormV
 
   const supabase = getPrivilegedDataClient();
   const payload = buildDatePayload(values, workspaceId, projectId);
-  const { data, error } = await insertDateWithSchemaFallback(supabase, payload);
+  const { data, error } = await supabase.from('dates').insert(payload).select('*').single();
   if (error || !data) {
     if (isMissingRelationError(error)) {
       throw new ApiError(409, 'Dates schema is not ready yet.');
@@ -356,7 +301,13 @@ export async function updateDateScoped(userId: string, workspaceId: string, date
 
   const supabase = getPrivilegedDataClient();
   const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
-  const { data, error } = await updateDateWithSchemaFallback(supabase, payload, workspaceId, dateId);
+  const { data, error } = await supabase
+    .from('dates')
+    .update(payload)
+    .eq('id', dateId)
+    .eq('workspace_id', workspaceId)
+    .select('*')
+    .single();
 
   if (error || !data) {
     if (isMissingRelationError(error)) {
