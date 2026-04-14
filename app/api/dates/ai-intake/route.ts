@@ -38,8 +38,16 @@ function detectForcedYearFromText(sourceText: string) {
   const text = normalizeText(sourceText).toLowerCase();
   if (!text) return null;
 
-  const explicitAllDatesYear = text.match(/all\s+(?:these\s+)?dates\s+(?:are\s+)?(?:in|for)\s+(20\d{2})/i);
-  if (explicitAllDatesYear?.[1]) return Number(explicitAllDatesYear[1]);
+  const patterns = [
+    /all\s+(?:these\s+)?dates\s+(?:are\s+)?(?:in|for)\s+(20\d{2})/i,
+    /all\s+(?:these\s+)?dates\s+(?:are\s+)?(20\d{2})/i,
+    /(?:everything|all)\s+(?:is|in)\s+(20\d{2})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return Number(match[1]);
+  }
 
   return null;
 }
