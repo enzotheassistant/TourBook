@@ -34,13 +34,24 @@ function formatDateForStorage(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function normalizeAiImportDate(value: string) {
+function detectForcedYearFromText(sourceText: string) {
+  const text = normalizeText(sourceText).toLowerCase();
+  if (!text) return null;
+
+  const explicitAllDatesYear = text.match(/all\s+(?:these\s+)?dates\s+(?:are\s+)?(?:in|for)\s+(20\d{2})/i);
+  if (explicitAllDatesYear?.[1]) return Number(explicitAllDatesYear[1]);
+
+  return null;
+}
+
+function normalizeAiImportDate(value: string, options?: { forcedYear?: number | null }) {
   const trimmed = normalizeText(value);
   if (!trimmed) return '';
 
   const normalized = trimmed.replace(/[./]/g, '-').replace(/\s+/g, ' ');
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const forcedYear = options?.forcedYear ?? null;
 
   const finalizeCandidate = (candidate: Date, inferredYear: boolean) => {
     if (Number.isNaN(candidate.getTime())) return '';
@@ -63,6 +74,10 @@ function normalizeAiImportDate(value: string) {
 
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [year, month, day] = normalized.split('-').map(Number);
+
+    if (forcedYear) {
+      return tryParts(forcedYear, month, day) || '';
+    }
 
     // AI can over-eagerly roll all yearless dates to next year.
     // If we get next-year for a month/day that is still upcoming this year,
@@ -94,19 +109,29 @@ function normalizeAiImportDate(value: string) {
 
   if (/^\d{1,2}-\d{1,2}$/.test(normalized)) {
     const [month, day] = normalized.split('-').map(Number);
+    if (forcedYear) {
+      return tryParts(forcedYear, month, day) || '';
+    }
     return tryParts(currentYear, month, day, true);
   }
 
   if (/^\d{1,2}-\d{1,2}-\d{2,4}$/.test(normalized)) {
     let [month, day, year] = normalized.split('-').map(Number);
+    if (forcedYear) {
+      return tryParts(forcedYear, month, day) || '';
+    }
     if (year < 100) year += 2000;
     return tryParts(year, month, day);
   }
 
   const hasExplicitYear = /\b\d{4}\b/.test(trimmed);
-  const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${currentYear}`;
+  const parseTarget = hasExplicitYear ? trimmed : `${trimmed} ${forcedYear || currentYear}`;
   const parsed = new Date(parseTarget);
   if (!Number.isNaN(parsed.getTime())) {
+    if (forcedYear) {
+      const forced = new Date(forcedYear, parsed.getMonth(), parsed.getDate());
+      return finalizeCandidate(forced, false);
+    }
     return finalizeCandidate(parsed, !hasExplicitYear);
   }
 
@@ -195,19 +220,26 @@ export async function POST(request: NextRequest) {
       })),
     });
 
+    const forcedYear = detectForcedYearFromText(parsed.text);
+    const normalizedRows = intake.rows.map((row) => ({
+      ...row,
+      date: normalizeAiImportDate(row.date, { forcedYear }) || row.date,
+    }));
+    const normalizedIntake = { ...intake, rows: normalizedRows };
+
     if (parsed.previewOnly) {
-      return finalizeAuthResponse(NextResponse.json(intake), authState);
+      return finalizeAuthResponse(NextResponse.json(normalizedIntake), authState);
     }
 
     const createdDates = [];
 
-    for (const row of intake.rows) {
+    for (const row of normalizedRows) {
       const values: Partial<DateFormValues> = {
         workspace_id: parsed.workspaceId,
         project_id: parsed.projectId,
         tour_id: parsed.tourId,
         status: 'draft',
-        date: normalizeAiImportDate(row.date) || row.date,
+        date: row.date,
         city: row.city,
         region: row.region,
         venue_name: row.venue_name,
@@ -236,7 +268,7 @@ export async function POST(request: NextRequest) {
       createdDates.push(created);
     }
 
-    return finalizeAuthResponse(NextResponse.json({ intake, createdDates }), authState);
+    return finalizeAuthResponse(NextResponse.json({ intake: normalizedIntake, createdDates }), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
     const message = error instanceof Error ? error.message : 'Unable to run AI intake.';
