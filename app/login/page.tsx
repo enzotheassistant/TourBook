@@ -16,15 +16,25 @@ export default function LoginPage() {
 
     try {
       const supabase = getBrowserSupabaseClient();
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        setError(error.message || "Unable to sign in.");
+      if (error || !data.session) {
+        setError(error?.message || "Unable to sign in.");
         return;
       }
+
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+        }),
+      });
 
       window.location.assign("/");
     } catch (err) {
