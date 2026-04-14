@@ -97,10 +97,28 @@ Then execute:
 - Step 3: switch default OFF after warning window if still no usage
 - Step 4: remove code in next cleanup batch
 
+## Batch 3 — Env-flagged legacy endpoint deprecation gates
+
+Added centralized legacy endpoint flags (`lib/config/legacy-flags.ts`) with default-safe behavior (enabled when env var is unset):
+- `LEGACY_SHOWS_API_ENABLED` → gates all `/api/shows/*` compatibility routes
+- `LEGACY_GUEST_LIST_API_ENABLED` → gates `/api/guest-list/[id]`
+- `LEGACY_AI_INTAKE_API_ENABLED` → gates `/api/ai-intake`
+
+When a flag is disabled, the endpoint returns HTTP `410` with a consistent JSON payload:
+- `code: "LEGACY_ENDPOINT_DISABLED"`
+- `message: "<endpoint> is deprecated and has been disabled."`
+
+### Rollout steps (for each legacy surface)
+
+a) Observe telemetry for **14 full days** under normal traffic.  
+b) Disable flag in **staging** for **7 days** and monitor regressions.  
+c) Disable flag in **production**.  
+d) Remove compatibility code in next batch if no regressions.
+
 ## Next Phase 5 Batches (recommended order)
 
-1. **Flagged deprecation pass (low-medium risk)**
-   - Gate bearer-token fallback and `/api/ai-intake` via env flags (default ON).
+1. **Bearer fallback deprecation pass (low-medium risk)**
+   - Gate bearer-token fallback in `getAuthStateFromRequest` via env flag (default ON).
    - Run staging bake period before defaulting OFF.
 
 2. **Route consolidation pass (medium risk)**

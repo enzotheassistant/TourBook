@@ -71,9 +71,41 @@ Date: 2026-04-15
   - then switch default OFF,
   - then remove in next cleanup batch if still unused.
 
+## Batch 3 (env-flagged deprecation toggles)
+
+### Added
+
+1. `lib/config/legacy-flags.ts`
+- Centralized source of truth for legacy compatibility flags and deprecation response shape.
+- Default-safe parser: unset/empty env vars are treated as enabled (`true`).
+- Flags:
+  - `LEGACY_SHOWS_API_ENABLED`
+  - `LEGACY_GUEST_LIST_API_ENABLED`
+  - `LEGACY_AI_INTAKE_API_ENABLED`
+- Disabled behavior: HTTP `410` JSON `{ code: "LEGACY_ENDPOINT_DISABLED", message: "..." }`.
+
+2. Endpoint gating (no default behavior change)
+- `/api/shows`
+- `/api/shows/[id]`
+- `/api/shows/[id]/guest-list`
+- `/api/shows/[id]/guest-list/export`
+- `/api/guest-list/[id]`
+- `/api/ai-intake`
+
+3. Docs and tests
+- `.env.example` updated with new flags (default `true`).
+- Added unit tests for legacy flag helper and endpoint gate response behavior.
+
+### Rollout sequence
+
+a) Observe telemetry for **14 days**.  
+b) Disable flags in **staging** for **7 days** and monitor.  
+c) Disable in **production**.  
+d) Remove compatibility code in next batch if no regressions.
+
 ## Verification notes
 
-- No route/UI workflow changed.
-- Telemetry is additive and fail-open.
+- No route/UI workflow changed by default (flags unset => enabled).
+- Telemetry remains additive and fail-open for enabled routes.
 - No sensitive payload capture introduced.
-- Build/typecheck/lint validation executed; see command outputs in commit context (including any pre-existing failures).
+- Build/typecheck/lint/tests validation executed; pre-existing failures (if any) are called out separately.

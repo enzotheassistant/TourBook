@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "telemetry:legacy": "node scripts/legacy-telemetry-tail.mjs",
-    "test:authz": "node --test --experimental-strip-types lib/data/server/authorization.test.mjs"
+    "test:authz": "node --test --experimental-strip-types lib/data/server/authorization.test.mjs",
+    "test:unit": "node --test --experimental-strip-types lib/data/server/authorization.test.mjs lib/config/legacy-flags.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.102.1",

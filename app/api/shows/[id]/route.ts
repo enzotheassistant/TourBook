@@ -5,10 +5,12 @@ import { ApiError } from '@/lib/data/server/shared';
 import { deleteDateScoped, getDateScoped, updateDateScoped } from '@/lib/data/server/dates';
 import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 import type { ShowFormValues } from '@/lib/types';
+import { getLegacyDeprecationPayload, isLegacyEndpointEnabled, LEGACY_DEPRECATION_STATUS } from '@/lib/config/legacy-flags';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const fallbackProjectId = request.nextUrl.searchParams.get('projectId') ?? '';
@@ -62,6 +65,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';

@@ -6,6 +6,7 @@ import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import { ApiError } from '@/lib/data/server/shared';
 import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 import type { DateFormValues } from '@/lib/types/date-record';
+import { getLegacyDeprecationPayload, isLegacyEndpointEnabled, LEGACY_DEPRECATION_STATUS } from '@/lib/config/legacy-flags';
 
 export const runtime = 'nodejs';
 
@@ -75,6 +76,7 @@ async function parseBodyAsFormData(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authState = await requireAdminApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('aiIntakeApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('aiIntakeApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   try {
     const contentType = request.headers.get('content-type') || '';

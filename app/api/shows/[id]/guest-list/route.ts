@@ -4,10 +4,12 @@ import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { addGuestListEntriesScoped, listGuestListEntriesScoped } from '@/lib/data/server/guest-list';
 import { ApiError } from '@/lib/data/server/shared';
 import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
+import { getLegacyDeprecationPayload, isLegacyEndpointEnabled, LEGACY_DEPRECATION_STATUS } from '@/lib/config/legacy-flags';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
@@ -32,6 +34,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';

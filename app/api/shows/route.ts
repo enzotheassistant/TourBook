@@ -5,10 +5,12 @@ import { ApiError, parseBooleanSearchParam } from '@/lib/data/server/shared';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import { recordLegacyEndpointTelemetry } from '@/lib/telemetry/legacy-endpoints';
 import type { ShowFormValues } from '@/lib/types';
+import { getLegacyDeprecationPayload, isLegacyEndpointEnabled, LEGACY_DEPRECATION_STATUS } from '@/lib/config/legacy-flags';
 
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
@@ -40,6 +42,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
+  if (!isLegacyEndpointEnabled('showsApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('showsApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
   try {
     const body = (await request.json()) as ShowFormValues & { workspaceId?: string; projectId?: string; tourId?: string | null };
