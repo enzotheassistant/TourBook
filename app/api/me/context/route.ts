@@ -168,7 +168,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const activeProjectId = projects[0]?.id ?? null;
+    let activeProjectId = projects[0]?.id ?? null;
+
+    if (activeWorkspaceId && projects.length > 1) {
+      const projectIds = projects.map((project) => project.id);
+      const dateProjectResult = await supabase
+        .from('dates')
+        .select('project_id')
+        .eq('workspace_id', activeWorkspaceId)
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: true })
+        .limit(200);
+
+      if (!dateProjectResult.error) {
+        const projectIdWithDates = (dateProjectResult.data ?? [])
+          .map((row: any) => String(row.project_id ?? ''))
+          .find((id) => projectIds.includes(id));
+
+        if (projectIdWithDates) {
+          activeProjectId = projectIdWithDates;
+          projects = [
+            ...projects.filter((project) => project.id === projectIdWithDates),
+            ...projects.filter((project) => project.id !== projectIdWithDates),
+          ];
+        }
+      }
+    }
 
     let tours: TourSummary[] = [];
     if (activeWorkspaceId && activeProjectId) {
