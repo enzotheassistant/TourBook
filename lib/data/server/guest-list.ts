@@ -142,7 +142,7 @@ async function getGuestListEntryScoped(userId: string, workspaceId: string | nul
 export async function updateGuestListEntryScoped(userId: string, workspaceId: string | null | undefined, entryId: string, name: string) {
   const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForEntry(userId, entryId);
   await requireWorkspaceAccess(userId, resolvedWorkspaceId);
-  const existing = await getGuestListEntryScoped(userId, resolvedWorkspaceId, entryId);
+  await getGuestListEntryScoped(userId, resolvedWorkspaceId, entryId);
   const nextName = name.trim();
   if (!nextName) {
     throw new ApiError(400, 'Guest name is required.');
