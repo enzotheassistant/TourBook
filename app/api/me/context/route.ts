@@ -99,6 +99,30 @@ export async function GET(request: NextRequest) {
           archivedAt: row.archived_at ? String(row.archived_at) : null,
         }));
       }
+
+      if (!projects.length) {
+        const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
+        const fallbackName = workspace?.name?.trim() || 'Artist';
+        const insertResult = await supabase
+          .from('projects')
+          .insert({
+            workspace_id: activeWorkspaceId,
+            name: fallbackName,
+            slug: null,
+          })
+          .select('id, workspace_id, name, slug, archived_at, created_at')
+          .single();
+
+        if (!insertResult.error && insertResult.data) {
+          projects = [{
+            id: String(insertResult.data.id),
+            workspaceId: String(insertResult.data.workspace_id),
+            name: String(insertResult.data.name ?? fallbackName),
+            slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
+            archivedAt: insertResult.data.archived_at ? String(insertResult.data.archived_at) : null,
+          }];
+        }
+      }
     }
 
     const activeProjectId = projects[0]?.id ?? null;
