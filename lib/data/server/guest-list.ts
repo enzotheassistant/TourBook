@@ -32,7 +32,7 @@ export async function listGuestListEntriesScoped(userId: string, workspaceId: st
 }
 
 export async function addGuestListEntriesScoped(userId: string, workspaceId: string, dateId: string, names: string[]) {
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
+  await requireWorkspaceAccess(userId, workspaceId);
   const dateRecord = await getDateScoped(userId, workspaceId, dateId);
   const cleanedNames = names.map((name) => name.trim()).filter(Boolean);
 
@@ -89,7 +89,7 @@ async function getGuestListEntryScoped(userId: string, workspaceId: string, entr
 }
 
 export async function updateGuestListEntryScoped(userId: string, workspaceId: string, entryId: string, name: string) {
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
+  await requireWorkspaceAccess(userId, workspaceId);
   const existing = await getGuestListEntryScoped(userId, workspaceId, entryId);
   const nextName = name.trim();
   if (!nextName) {
@@ -116,7 +116,7 @@ export async function updateGuestListEntryScoped(userId: string, workspaceId: st
 }
 
 export async function deleteGuestListEntryScoped(userId: string, workspaceId: string, entryId: string) {
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
+  await requireWorkspaceAccess(userId, workspaceId);
   await getGuestListEntryScoped(userId, workspaceId, entryId);
   const supabase = getPrivilegedDataClient();
   const { error } = await supabase.from('guest_list_entries').delete().eq('id', entryId).eq('workspace_id', workspaceId);
