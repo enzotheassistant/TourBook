@@ -1,6 +1,7 @@
 'use client';
 
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
+import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 
 type ScopeInput = {
@@ -14,10 +15,16 @@ const PROJECT_STORAGE_KEY = 'tourbook.activeProjectId';
 const TOUR_STORAGE_KEY = 'tourbook.activeTourId';
 
 async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const supabase = getBrowserSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   const response = await fetch(input, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...(init?.headers ?? {}),
     },
     credentials: 'same-origin',
@@ -153,10 +160,15 @@ export async function deleteGuestListEntry(entryId: string, scope?: ScopeInput) 
 export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
   const workspaceId = requireWorkspaceId(scope);
   const params = new URLSearchParams({ workspaceId });
+  const supabase = getBrowserSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   const response = await fetch(`/api/dates/${showId}/guest-list/export?${params.toString()}`, {
     cache: 'no-store',
     credentials: 'same-origin',
-    
+    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
   });
 
   if (!response.ok) {

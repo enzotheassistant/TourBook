@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { BootstrapContext } from '@/lib/types/tenant';
 
 type AppContextValue = BootstrapContext & {
@@ -53,9 +54,14 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
+      const supabase = getBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const response = await fetch('/api/me/context', {
         method: 'GET',
-        
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         credentials: 'same-origin',
         cache: 'no-store',
       });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createRouteHandlerSupabaseClient, createServerSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
@@ -48,6 +49,34 @@ export async function getAuthStateFromRequest(request: NextRequest): Promise<Aut
   try {
     const supabase = createRouteHandlerSupabaseClient(request, response);
     const { data, error } = await supabase.auth.getUser();
+    if (!error && data.user) {
+      return { user: mapUser(data.user), response };
+    }
+  } catch {
+    // Fall through to bearer token fallback.
+  }
+
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.toLowerCase().startsWith("bearer ")) return null;
+
+    const token = authHeader.slice(7).trim();
+    if (!token) return null;
+
+    const { url, anonKey } = getServerSupabaseConfig();
+    const supabase = createClient(url, anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
+
+    const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) return null;
     return { user: mapUser(data.user), response };
   } catch {

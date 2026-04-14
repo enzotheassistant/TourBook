@@ -12,6 +12,7 @@ import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/l
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
 import type { IntakeRow } from '@/lib/ai/intake-types';
+import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -827,9 +828,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       body.append('previewOnly', '1');
       imageFiles.forEach((file) => body.append('images', file));
 
+      const supabase = getBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const response = await fetch('/api/dates/ai-intake', {
         method: 'POST',
-        
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         body,
         credentials: 'same-origin',
       });
