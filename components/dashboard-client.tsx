@@ -55,7 +55,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 }
 
 export function DashboardClient() {
-  const { activeWorkspaceId, activeProjectId, memberships, isLoading: contextLoading } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -77,12 +77,9 @@ export function DashboardClient() {
         return;
       }
 
-      const role = memberships.find((item) => item.workspaceId === activeWorkspaceId)?.role;
-      const includeDrafts = role === 'owner' || role === 'admin' || role === 'editor';
-
       setLoading(true);
       try {
-        const nextShows = await listShows(includeDrafts, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+        const nextShows = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
         if (!active) return;
         setShows(nextShows);
       } finally {
@@ -95,7 +92,7 @@ export function DashboardClient() {
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, [activeProjectId, activeWorkspaceId, contextLoading, memberships]);
+  }, [activeProjectId, activeWorkspaceId, contextLoading]);
 
   const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
