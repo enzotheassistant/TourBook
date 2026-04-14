@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
 
   try {
-    const dateRecord = await getDateScoped(authState.user.id, workspaceId, id);
+    const dateRecord = await getDateScoped(authState.supabase, authState.user.id, workspaceId, id);
     return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const body = (await request.json()) as ShowFormValues & { projectId?: string; tourId?: string | null };
-    const current = await getDateScoped(authState.user.id, workspaceId, id);
+    const current = await getDateScoped(authState.supabase, authState.user.id, workspaceId, id);
     const projectId = body.projectId ?? current.project_id ?? fallbackProjectId;
     const tourId = body.tourId ?? current.tour_id;
 
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       projectId,
     });
 
-    const dateRecord = await updateDateScoped(authState.user.id, workspaceId, id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
+    const dateRecord = await updateDateScoped(authState.supabase, authState.user.id, workspaceId, id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
     return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
@@ -78,7 +78,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   });
 
   try {
-    await deleteDateScoped(authState.user.id, workspaceId, id);
+    await deleteDateScoped(authState.supabase, authState.user.id, workspaceId, id);
     return finalizeAuthResponse(NextResponse.json({ ok: true }), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

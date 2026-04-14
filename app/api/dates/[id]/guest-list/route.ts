@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   try {
-    const entries = await listGuestListEntriesScoped(authState.user.id, workspaceId, id);
+    const entries = await listGuestListEntriesScoped(authState.supabase, authState.user.id, workspaceId, id);
     return finalizeAuthResponse(NextResponse.json(entries), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const body = (await request.json()) as { names?: string[] };
-    const entries = await addGuestListEntriesScoped(authState.user.id, workspaceId, id, body.names ?? []);
+    const entries = await addGuestListEntriesScoped(authState.supabase, authState.user.id, workspaceId, id, body.names ?? []);
     return finalizeAuthResponse(NextResponse.json(entries), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

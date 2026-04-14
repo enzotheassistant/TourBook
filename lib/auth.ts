@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createRouteHandlerSupabaseClient, createServerSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
@@ -10,6 +10,7 @@ export type AuthenticatedUser = {
 export type AuthState = {
   user: AuthenticatedUser;
   response: NextResponse;
+  supabase: SupabaseClient;
 };
 
 export function hasSupabaseAuthEnv() {
@@ -50,7 +51,7 @@ export async function getAuthStateFromRequest(request: NextRequest): Promise<Aut
     const supabase = createRouteHandlerSupabaseClient(request, response);
     const { data, error } = await supabase.auth.getUser();
     if (!error && data.user) {
-      return { user: mapUser(data.user), response };
+      return { user: mapUser(data.user), response, supabase };
     }
   } catch {
     // Fall through to bearer token fallback.
@@ -78,7 +79,7 @@ export async function getAuthStateFromRequest(request: NextRequest): Promise<Aut
 
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) return null;
-    return { user: mapUser(data.user), response };
+    return { user: mapUser(data.user), response, supabase };
   } catch {
     return null;
   }
@@ -99,8 +100,43 @@ export async function requireApiAuth(request: NextRequest): Promise<AuthState | 
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
+export async function requireApiAuthForWorkspaceAdmin(
+  request: NextRequest,
+  workspaceId: string,
+): Promise<AuthState | NextResponse> {
+  const authState = await requireApiAuth(request);
+  if (authState instanceof NextResponse) return authState;
+
+  const normalizedWorkspaceId = workspaceId.trim();
+  if (!normalizedWorkspaceId) {
+    return NextResponse.json({ error: 'workspaceId is required.' }, { status: 400 });
+  }
+
+  const { data, error } = await authState.supabase
+    .from('workspace_members')
+    .select('role')
+    .eq('workspace_id', normalizedWorkspaceId)
+    .eq('user_id', authState.user.id)
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const role = String(data?.role ?? '');
+  if (role !== 'owner' && role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  return authState;
+}
+
+/** @deprecated Use requireApiAuthForWorkspaceAdmin() with explicit workspace scope. */
 export async function requireAdminApiAuth(request: NextRequest) {
-  return requireApiAuth(request);
+  return NextResponse.json(
+    { error: 'Deprecated auth helper. Use requireApiAuthForWorkspaceAdmin with explicit workspaceId.' },
+    { status: 500 },
+  );
 }
 
 export function finalizeAuthResponse(response: NextResponse, authState?: AuthState) {

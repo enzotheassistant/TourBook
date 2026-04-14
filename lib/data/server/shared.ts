@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -17,16 +18,31 @@ export function isMissingRelationError(error: unknown) {
   return maybeCode === '42P01' || maybeMessage.toLowerCase().includes('does not exist');
 }
 
+/**
+ * Explicit privileged client for system/background/admin tasks.
+ * Do not use in normal user request paths.
+ */
 export function getPrivilegedDataClient() {
   return createServiceRoleSupabaseClient();
 }
 
-export async function requireWorkspaceAccess(userId: string, workspaceId: string, allowedRoles?: WorkspaceRole[]) {
+export function requireScopedDataClient(supabase: SupabaseClient | null | undefined) {
+  if (!supabase) {
+    throw new ApiError(500, 'Scoped Supabase client is required.');
+  }
+  return supabase;
+}
+
+export async function requireWorkspaceAccess(
+  supabase: SupabaseClient,
+  userId: string,
+  workspaceId: string,
+  allowedRoles?: WorkspaceRole[],
+) {
   if (!workspaceId) {
     throw new ApiError(400, 'workspaceId is required.');
   }
 
-  const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('workspace_members')
     .select('workspace_id, user_id, role')
@@ -57,12 +73,11 @@ export async function requireWorkspaceAccess(userId: string, workspaceId: string
   };
 }
 
-export async function ensureProjectInWorkspace(workspaceId: string, projectId: string) {
+export async function ensureProjectInWorkspace(supabase: SupabaseClient, workspaceId: string, projectId: string) {
   if (!projectId) {
     throw new ApiError(400, 'projectId is required.');
   }
 
-  const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('projects')
     .select('id, workspace_id')
@@ -82,10 +97,14 @@ export async function ensureProjectInWorkspace(workspaceId: string, projectId: s
   }
 }
 
-export async function ensureTourInScope(workspaceId: string, projectId: string, tourId: string | null | undefined) {
+export async function ensureTourInScope(
+  supabase: SupabaseClient,
+  workspaceId: string,
+  projectId: string,
+  tourId: string | null | undefined,
+) {
   if (!tourId) return;
 
-  const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('tours')
     .select('id, workspace_id, project_id')

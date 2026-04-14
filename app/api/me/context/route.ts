@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
-import { createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import type {
   BootstrapContext,
   ProjectSummary,
@@ -23,7 +22,7 @@ export async function GET(request: NextRequest) {
   const debug = request.nextUrl.searchParams.get('debug') === '1';
   const debugInfo: Record<string, unknown> = {};
 
-  const { user } = authState;
+  const { user, supabase } = authState;
   const baseContext: BootstrapContext = {
     user,
     memberships: [],
@@ -36,9 +35,6 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    // Phase 1 intentionally uses the service role here for bootstrap reads before RLS and the scoped data layer are in place.
-    const supabase = createServiceRoleSupabaseClient();
-
     const membershipsResult = await supabase
       .from('workspace_members')
       .select('id, workspace_id, user_id, role')
@@ -70,7 +66,8 @@ export async function GET(request: NextRequest) {
       .from('workspaces')
       .select('id, name, slug, owner_user_id, created_at')
       .in('id', workspaceIds)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (workspacesResult.error) throw workspacesResult.error;
 
@@ -86,7 +83,8 @@ export async function GET(request: NextRequest) {
       .from('projects')
       .select('id, workspace_id, name, slug, created_at')
       .in('workspace_id', workspaceIds)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (projectsResult.error) {
       if (!isMissingRelationError(projectsResult.error)) throw projectsResult.error;
@@ -109,91 +107,8 @@ export async function GET(request: NextRequest) {
       ? allProjects.filter((project) => project.workspaceId === activeWorkspaceId)
       : [];
 
-    if (activeWorkspaceId && !projects.length) {
-      const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
-      const fallbackName = workspace?.name?.trim() || 'Artist';
-      const fallbackSlug = fallbackName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'artist';
-
-      const candidatePayloads: Array<Record<string, unknown>> = [
-        { workspace_id: activeWorkspaceId, name: fallbackName, slug: fallbackSlug },
-        { workspace_id: activeWorkspaceId, name: fallbackName },
-      ];
-
-      let insertError: unknown = null;
-      for (const payload of candidatePayloads) {
-        const insertResult = await supabase
-          .from('projects')
-          .insert(payload)
-          .select('id, workspace_id, name, slug, created_at')
-          .single();
-
-        if (!insertResult.error && insertResult.data) {
-          const createdProject: ProjectSummary = {
-            id: String(insertResult.data.id),
-            workspaceId: String(insertResult.data.workspace_id),
-            name: String(insertResult.data.name ?? fallbackName),
-            slug: insertResult.data.slug ? String(insertResult.data.slug) : null,
-            archivedAt: null,
-          };
-          projects = [createdProject];
-          insertError = null;
-          break;
-        }
-
-        insertError = insertResult.error;
-      }
-
-      if (!projects.length) {
-        const retryProjects = await supabase
-          .from('projects')
-          .select('id, workspace_id, name, slug, created_at')
-          .eq('workspace_id', activeWorkspaceId)
-          .order('created_at', { ascending: true });
-
-        if (!retryProjects.error) {
-          projects = (retryProjects.data ?? []).map((row: any) => ({
-            id: String(row.id),
-            workspaceId: String(row.workspace_id),
-            name: String(row.name ?? ''),
-            slug: row.slug ? String(row.slug) : null,
-            archivedAt: null,
-          }));
-        }
-
-        if (debug) {
-          debugInfo.projectInsertError = insertError;
-          debugInfo.retryProjectsError = retryProjects.error ?? null;
-          debugInfo.retryProjectsCount = projects.length;
-        }
-      }
-    }
-
-    let activeProjectId = projects[0]?.id ?? null;
-
-    if (activeWorkspaceId && projects.length > 1) {
-      const projectIds = projects.map((project) => project.id);
-      const dateProjectResult = await supabase
-        .from('dates')
-        .select('project_id')
-        .eq('workspace_id', activeWorkspaceId)
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: true })
-        .limit(200);
-
-      if (!dateProjectResult.error) {
-        const projectIdWithDates = (dateProjectResult.data ?? [])
-          .map((row: any) => String(row.project_id ?? ''))
-          .find((id) => projectIds.includes(id));
-
-        if (projectIdWithDates) {
-          activeProjectId = projectIdWithDates;
-          projects = [
-            ...projects.filter((project) => project.id === projectIdWithDates),
-            ...projects.filter((project) => project.id !== projectIdWithDates),
-          ];
-        }
-      }
-    }
+    // Read-only context endpoint: no implicit bootstrap writes.
+    const activeProjectId = projects[0]?.id ?? null;
 
     let tours: TourSummary[] = [];
     if (activeWorkspaceId && activeProjectId) {
@@ -202,7 +117,8 @@ export async function GET(request: NextRequest) {
         .select('id, workspace_id, project_id, name, status, start_date, end_date, created_at')
         .eq('workspace_id', activeWorkspaceId)
         .eq('project_id', activeProjectId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(200);
 
       if (toursResult.error) {
         if (!isMissingRelationError(toursResult.error)) throw toursResult.error;
@@ -217,6 +133,11 @@ export async function GET(request: NextRequest) {
           endDate: row.end_date ? String(row.end_date) : null,
         }));
       }
+    }
+
+    if (debug) {
+      debugInfo.readOnly = true;
+      debugInfo.projectCount = projects.length;
     }
 
     return finalizeAuthResponse(NextResponse.json({

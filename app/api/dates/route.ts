@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const includeDrafts = parseBooleanSearchParam(request.nextUrl.searchParams.get('includeDrafts'));
 
   try {
-    const dates = await listDatesScoped({
+    const dates = await listDatesScoped(authState.supabase, {
       userId: authState.user.id,
       workspaceId,
       projectId,
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as Partial<DateFormValues>;
-    const dateRecord = await createDateScoped(authState.user.id, body);
+    const dateRecord = await createDateScoped(authState.supabase, authState.user.id, body);
     return finalizeAuthResponse(NextResponse.json(dateRecord), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

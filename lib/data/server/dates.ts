@@ -1,4 +1,5 @@
-import { ensureProjectInWorkspace, ensureTourInScope, getPrivilegedDataClient, isMissingRelationError, requireWorkspaceAccess, ApiError } from '@/lib/data/server/shared';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { ensureProjectInWorkspace, ensureTourInScope, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -123,9 +124,8 @@ function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, 
 }
 
 
-async function listScheduleItemsForDate(dateId: string): Promise<DateScheduleItem[]> {
-  const supabase = getPrivilegedDataClient();
-  const { data, error } = await supabase
+async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string): Promise<DateScheduleItem[]> {
+    const { data, error } = await supabase
     .from('date_schedule_items')
     .select('id, label, time_text, sort_order')
     .eq('date_id', dateId)
@@ -140,9 +140,8 @@ async function listScheduleItemsForDate(dateId: string): Promise<DateScheduleIte
   return normalizeScheduleItems(data ?? []);
 }
 
-async function replaceScheduleItems(dateId: string, workspaceId: string, projectId: string, scheduleItems: Array<Partial<DateScheduleItem>>) {
-  const supabase = getPrivilegedDataClient();
-  const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
+async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: Array<Partial<DateScheduleItem>>) {
+    const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
   if (deleteResult.error && !isMissingRelationError(deleteResult.error)) {
     throw new Error(deleteResult.error.message);
   }
@@ -169,10 +168,9 @@ async function replaceScheduleItems(dateId: string, workspaceId: string, project
   }
 }
 
-async function assertDateReadable(userId: string, workspaceId: string, dateId: string) {
-  const membership = await requireWorkspaceAccess(userId, workspaceId);
-  const supabase = getPrivilegedDataClient();
-  const { data, error } = await supabase
+async function assertDateReadable(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
+  const membership = await requireWorkspaceAccess(supabase, userId, workspaceId);
+    const { data, error } = await supabase
     .from('dates')
     .select('*')
     .eq('id', dateId)
@@ -198,19 +196,20 @@ async function assertDateReadable(userId: string, workspaceId: string, dateId: s
   return { row: data, role: membership.role };
 }
 
-export async function listDatesScoped(input: {
+export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
   userId: string;
   workspaceId: string;
   projectId: string;
   tourId?: string | null;
   includeDrafts?: boolean;
+  limit?: number;
 }): Promise<DateRecord[]> {
-  const membership = await requireWorkspaceAccess(input.userId, input.workspaceId);
-  await ensureProjectInWorkspace(input.workspaceId, input.projectId);
-  await ensureTourInScope(input.workspaceId, input.projectId, input.tourId);
+  const supabase = requireScopedDataClient(supabaseInput);
+  const membership = await requireWorkspaceAccess(supabase, input.userId, input.workspaceId);
+  await ensureProjectInWorkspace(supabase, input.workspaceId, input.projectId);
+  await ensureTourInScope(supabase, input.workspaceId, input.projectId, input.tourId);
 
-  const supabase = getPrivilegedDataClient();
-  let query = supabase
+    let query = supabase
     .from('dates')
     .select('*')
     .eq('workspace_id', input.workspaceId)
@@ -225,6 +224,9 @@ export async function listDatesScoped(input: {
   if (membership.role === 'viewer' || !input.includeDrafts) {
     query = query.eq('status', 'published');
   }
+
+  const cappedLimit = Math.min(Math.max(Number(input.limit ?? 200), 1), 500);
+  query = query.limit(cappedLimit);
 
   const { data, error } = await query;
   if (error) {
@@ -263,22 +265,23 @@ export async function listDatesScoped(input: {
   return rows.map((row: any) => normalizeDateRecord(row, scheduleByDate.get(String(row.id)) ?? []));
 }
 
-export async function getDateScoped(userId: string, workspaceId: string, dateId: string): Promise<DateRecord> {
-  const { row } = await assertDateReadable(userId, workspaceId, dateId);
-  const scheduleItems = await listScheduleItemsForDate(String(row.id));
+export async function getDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string): Promise<DateRecord> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const { row } = await assertDateReadable(supabase, userId, workspaceId, dateId);
+  const scheduleItems = await listScheduleItemsForDate(supabase, String(row.id));
   return normalizeDateRecord(row, scheduleItems);
 }
 
-export async function createDateScoped(userId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
+export async function createDateScoped(supabaseInput: SupabaseClient, userId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
+  const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(values.workspace_id ?? '');
   const projectId = String(values.project_id ?? '');
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date);
-  await ensureProjectInWorkspace(workspaceId, projectId);
-  await ensureTourInScope(workspaceId, projectId, values.tour_id);
+  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
+  await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id);
 
-  const supabase = getPrivilegedDataClient();
-  const payload = buildDatePayload(values, workspaceId, projectId);
+    const payload = buildDatePayload(values, workspaceId, projectId);
   const { data, error } = await supabase.from('dates').insert(payload).select('*').single();
   if (error || !data) {
     if (isMissingRelationError(error)) {
@@ -287,20 +290,20 @@ export async function createDateScoped(userId: string, values: Partial<DateFormV
     throw new ApiError(500, error?.message ?? 'Unable to create date.');
   }
 
-  await replaceScheduleItems(String(data.id), workspaceId, projectId, values.schedule_items ?? []);
-  return getDateScoped(userId, workspaceId, String(data.id));
+  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, values.schedule_items ?? []);
+  return getDateScoped(supabase, userId, workspaceId, String(data.id));
 }
 
-export async function updateDateScoped(userId: string, workspaceId: string, dateId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin', 'editor']);
-  const current = await getDateScoped(userId, workspaceId, dateId);
+export async function updateDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  const current = await getDateScoped(supabase, userId, workspaceId, dateId);
   const projectId = String(values.project_id ?? current.project_id);
   requireDateValue(values.date ?? current.date);
-  await ensureProjectInWorkspace(workspaceId, projectId);
-  await ensureTourInScope(workspaceId, projectId, values.tour_id ?? current.tour_id);
+  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
+  await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id ?? current.tour_id);
 
-  const supabase = getPrivilegedDataClient();
-  const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
+    const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
   const { data, error } = await supabase
     .from('dates')
     .update(payload)
@@ -316,14 +319,14 @@ export async function updateDateScoped(userId: string, workspaceId: string, date
     throw new ApiError(500, error?.message ?? 'Unable to update date.');
   }
 
-  await replaceScheduleItems(String(data.id), workspaceId, projectId, values.schedule_items ?? current.schedule_items);
-  return getDateScoped(userId, workspaceId, dateId);
+  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, values.schedule_items ?? current.schedule_items);
+  return getDateScoped(supabase, userId, workspaceId, dateId);
 }
 
-export async function deleteDateScoped(userId: string, workspaceId: string, dateId: string) {
-  await requireWorkspaceAccess(userId, workspaceId, ['owner', 'admin']);
-  const supabase = getPrivilegedDataClient();
-  const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
+export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
+  const supabase = requireScopedDataClient(supabaseInput);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+    const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
   if (error) {
     if (isMissingRelationError(error)) {
       throw new ApiError(409, 'Dates schema is not ready yet.');
@@ -332,12 +335,14 @@ export async function deleteDateScoped(userId: string, workspaceId: string, date
   }
 }
 
-export async function canUserSeeDrafts(userId: string, workspaceId: string) {
-  const access = await requireWorkspaceAccess(userId, workspaceId);
+export async function canUserSeeDrafts(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
   return access.role !== 'viewer';
 }
 
-export async function getWorkspaceRoleForDateScope(userId: string, workspaceId: string): Promise<WorkspaceRole> {
-  const access = await requireWorkspaceAccess(userId, workspaceId);
+export async function getWorkspaceRoleForDateScope(supabaseInput: SupabaseClient, userId: string, workspaceId: string): Promise<WorkspaceRole> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
   return access.role;
 }

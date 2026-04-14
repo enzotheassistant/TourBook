@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
 
   try {
-    const projects = await listProjectsScoped(authState.user.id, workspaceId);
+    const projects = await listProjectsScoped(authState.supabase, authState.user.id, workspaceId);
     return finalizeAuthResponse(NextResponse.json(projects), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

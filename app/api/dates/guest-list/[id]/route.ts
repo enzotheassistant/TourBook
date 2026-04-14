@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   try {
     const body = (await request.json()) as { name?: string };
-    const entry = await updateGuestListEntryScoped(authState.user.id, workspaceId, id, body.name ?? '');
+    const entry = await updateGuestListEntryScoped(authState.supabase, authState.user.id, workspaceId, id, body.name ?? '');
     return finalizeAuthResponse(NextResponse.json(entry), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
@@ -29,7 +29,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
 
   try {
-    await deleteGuestListEntryScoped(authState.user.id, workspaceId, id);
+    await deleteGuestListEntryScoped(authState.supabase, authState.user.id, workspaceId, id);
     return finalizeAuthResponse(NextResponse.json({ ok: true }), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
 
   try {
-    const csv = await exportGuestListCsvScoped(authState.user.id, workspaceId, id);
+    const csv = await exportGuestListCsvScoped(authState.supabase, authState.user.id, workspaceId, id);
     const response = new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',

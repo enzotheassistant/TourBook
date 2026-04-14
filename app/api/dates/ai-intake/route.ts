@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
       return finalizeAuthResponse(NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 }), authState);
     }
 
-    const existingDates = await listDatesScoped({
+    const existingDates = await listDatesScoped(authState.supabase, {
       userId: authState.user.id,
       workspaceId: parsed.workspaceId,
       projectId: parsed.projectId,
@@ -280,7 +280,7 @@ export async function POST(request: NextRequest) {
         curfew_time: pickAnchorTime(row.schedule_items, ['curfew']),
       };
 
-      const created = await createDateScoped(authState.user.id, values);
+      const created = await createDateScoped(authState.supabase, authState.user.id, values);
       createdDates.push(created);
     }
 

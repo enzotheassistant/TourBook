@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const projectId = request.nextUrl.searchParams.get('projectId') ?? '';
 
   try {
-    const tours = await listToursScoped(authState.user.id, workspaceId, projectId);
+    const tours = await listToursScoped(authState.supabase, authState.user.id, workspaceId, projectId);
     return finalizeAuthResponse(NextResponse.json(tours), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

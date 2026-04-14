@@ -1,5 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
-import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireWorkspaceAccess } from '@/lib/data/server/shared';
+import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { getDateScoped } from '@/lib/data/server/dates';
 import type { ScopedGuestListEntry } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
@@ -15,12 +16,16 @@ function normalizeGuestListEntry(row: any): ScopedGuestListEntry {
   };
 }
 
-async function requireGuestListWriteAccess(userId: string, workspaceId: string) {
-  await requireWorkspaceAccess(userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
+async function requireGuestListWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
+  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
 }
 
-async function resolveWorkspaceForDate(userId: string, dateId: string, allowedRoles?: readonly WorkspaceRole[]) {
-  const supabase = getPrivilegedDataClient();
+async function resolveWorkspaceForDate(
+  supabase: SupabaseClient,
+  userId: string,
+  dateId: string,
+  allowedRoles?: readonly WorkspaceRole[],
+) {
   const { data, error } = await supabase
     .from('dates')
     .select('workspace_id')
@@ -39,12 +44,16 @@ async function resolveWorkspaceForDate(userId: string, dateId: string, allowedRo
   }
 
   const workspaceId = String(data.workspace_id);
-  await requireWorkspaceAccess(userId, workspaceId, allowedRoles ? [...allowedRoles] : undefined);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, allowedRoles ? [...allowedRoles] : undefined);
   return workspaceId;
 }
 
-async function resolveWorkspaceForEntry(userId: string, entryId: string, allowedRoles?: readonly WorkspaceRole[]) {
-  const supabase = getPrivilegedDataClient();
+async function resolveWorkspaceForEntry(
+  supabase: SupabaseClient,
+  userId: string,
+  entryId: string,
+  allowedRoles?: readonly WorkspaceRole[],
+) {
   const { data, error } = await supabase
     .from('guest_list_entries')
     .select('workspace_id')
@@ -63,20 +72,26 @@ async function resolveWorkspaceForEntry(userId: string, entryId: string, allowed
   }
 
   const workspaceId = String(data.workspace_id);
-  await requireWorkspaceAccess(userId, workspaceId, allowedRoles ? [...allowedRoles] : undefined);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, allowedRoles ? [...allowedRoles] : undefined);
   return workspaceId;
 }
 
-export async function listGuestListEntriesScoped(userId: string, workspaceId: string | null | undefined, dateId: string): Promise<ScopedGuestListEntry[]> {
-  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForDate(userId, dateId);
-  await getDateScoped(userId, resolvedWorkspaceId, dateId);
-  const supabase = getPrivilegedDataClient();
+export async function listGuestListEntriesScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  workspaceId: string | null | undefined,
+  dateId: string,
+): Promise<ScopedGuestListEntry[]> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForDate(supabase, userId, dateId);
+  await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const { data, error } = await supabase
     .from('guest_list_entries')
     .select('id, workspace_id, project_id, date_id, name, created_at')
     .eq('workspace_id', resolvedWorkspaceId)
     .eq('date_id', dateId)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(500);
 
   if (error) {
     if (isMissingRelationError(error)) return [];
@@ -86,19 +101,25 @@ export async function listGuestListEntriesScoped(userId: string, workspaceId: st
   return (data ?? []).map(normalizeGuestListEntry);
 }
 
-export async function addGuestListEntriesScoped(userId: string, workspaceId: string | null | undefined, dateId: string, names: string[]) {
+export async function addGuestListEntriesScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  workspaceId: string | null | undefined,
+  dateId: string,
+  names: string[],
+) {
+  const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForDate(userId, dateId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(userId, resolvedWorkspaceId);
-  const dateRecord = await getDateScoped(userId, resolvedWorkspaceId, dateId);
+    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_WRITE_ROLES);
+  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
+  const dateRecord = await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const cleanedNames = names.map((name) => name.trim()).filter(Boolean);
 
   if (!cleanedNames.length) {
     throw new ApiError(400, 'At least one guest name is required.');
   }
 
-  const supabase = getPrivilegedDataClient();
   const payload = cleanedNames.map((name) => ({
     workspace_id: resolvedWorkspaceId,
     project_id: dateRecord.project_id,
@@ -121,10 +142,14 @@ export async function addGuestListEntriesScoped(userId: string, workspaceId: str
   return (data ?? []).map(normalizeGuestListEntry);
 }
 
-async function getGuestListEntryScoped(userId: string, workspaceId: string | null | undefined, entryId: string) {
-  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForEntry(userId, entryId);
-  await requireWorkspaceAccess(userId, resolvedWorkspaceId);
-  const supabase = getPrivilegedDataClient();
+async function getGuestListEntryScoped(
+  supabase: SupabaseClient,
+  userId: string,
+  workspaceId: string | null | undefined,
+  entryId: string,
+) {
+  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForEntry(supabase, userId, entryId);
+  await requireWorkspaceAccess(supabase, userId, resolvedWorkspaceId);
   const { data, error } = await supabase
     .from('guest_list_entries')
     .select('id, workspace_id, project_id, date_id, name, created_at')
@@ -143,22 +168,28 @@ async function getGuestListEntryScoped(userId: string, workspaceId: string | nul
     throw new ApiError(404, 'Guest list entry not found.');
   }
 
-  await getDateScoped(userId, resolvedWorkspaceId, String(data.date_id));
+  await getDateScoped(supabase, userId, resolvedWorkspaceId, String(data.date_id));
   return normalizeGuestListEntry(data);
 }
 
-export async function updateGuestListEntryScoped(userId: string, workspaceId: string | null | undefined, entryId: string, name: string) {
+export async function updateGuestListEntryScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  workspaceId: string | null | undefined,
+  entryId: string,
+  name: string,
+) {
+  const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForEntry(userId, entryId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(userId, resolvedWorkspaceId);
-  await getGuestListEntryScoped(userId, resolvedWorkspaceId, entryId);
+    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_WRITE_ROLES);
+  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
+  await getGuestListEntryScoped(supabase, userId, resolvedWorkspaceId, entryId);
   const nextName = name.trim();
   if (!nextName) {
     throw new ApiError(400, 'Guest name is required.');
   }
 
-  const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('guest_list_entries')
     .update({ name: nextName })
@@ -177,13 +208,18 @@ export async function updateGuestListEntryScoped(userId: string, workspaceId: st
   return normalizeGuestListEntry(data);
 }
 
-export async function deleteGuestListEntryScoped(userId: string, workspaceId: string | null | undefined, entryId: string) {
+export async function deleteGuestListEntryScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  workspaceId: string | null | undefined,
+  entryId: string,
+) {
+  const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForEntry(userId, entryId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(userId, resolvedWorkspaceId);
-  await getGuestListEntryScoped(userId, resolvedWorkspaceId, entryId);
-  const supabase = getPrivilegedDataClient();
+    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_WRITE_ROLES);
+  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
+  await getGuestListEntryScoped(supabase, userId, resolvedWorkspaceId, entryId);
   const { error } = await supabase.from('guest_list_entries').delete().eq('id', entryId).eq('workspace_id', resolvedWorkspaceId);
 
   if (error) {
@@ -194,8 +230,8 @@ export async function deleteGuestListEntryScoped(userId: string, workspaceId: st
   }
 }
 
-export async function exportGuestListCsvScoped(userId: string, workspaceId: string, dateId: string) {
-  const entries = await listGuestListEntriesScoped(userId, workspaceId, dateId);
+export async function exportGuestListCsvScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
+  const entries = await listGuestListEntriesScoped(supabaseInput, userId, workspaceId, dateId);
   const lines = ['Name'];
   for (const entry of entries) {
     const escaped = entry.name.replaceAll('"', '""');

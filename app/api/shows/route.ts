@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   });
 
   try {
-    const dates = await listDatesScoped({
+    const dates = await listDatesScoped(authState.supabase, {
       userId: authState.user.id,
       workspaceId,
       projectId,
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       projectId,
     });
 
-    const dateRecord = await createDateScoped(authState.user.id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
+    const dateRecord = await createDateScoped(authState.supabase, authState.user.id, mapShowFormToDateForm(body, { workspaceId, projectId, tourId }));
     return finalizeAuthResponse(NextResponse.json(mapDateRecordToShow(dateRecord)), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

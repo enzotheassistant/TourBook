@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeAuthResponse, requireAdminApiAuth } from '@/lib/auth';
+import { finalizeAuthResponse, requireApiAuthForWorkspaceAdmin } from '@/lib/auth';
 import { runIntake } from '@/lib/ai/intake-provider';
 import type { IntakeImageInput, IntakeScheduleItem } from '@/lib/ai/intake-types';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
@@ -74,15 +74,15 @@ async function parseBodyAsFormData(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authState = await requireAdminApiAuth(request);
-  if (authState instanceof NextResponse) return authState;
-  if (!isLegacyEndpointEnabled('aiIntakeApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('aiIntakeApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
-
   try {
     const contentType = request.headers.get('content-type') || '';
     const parsed = contentType.includes('multipart/form-data')
       ? await parseBodyAsFormData(request)
       : parseBodyAsJson(await request.json().catch(() => ({})));
+
+    const authState = await requireApiAuthForWorkspaceAdmin(request, parsed.workspaceId);
+    if (authState instanceof NextResponse) return authState;
+    if (!isLegacyEndpointEnabled('aiIntakeApi')) return finalizeAuthResponse(NextResponse.json(getLegacyDeprecationPayload('aiIntakeApi'), { status: LEGACY_DEPRECATION_STATUS }), authState);
 
     await recordLegacyEndpointTelemetry(request, {
       endpoint: '/api/ai-intake',
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       return finalizeAuthResponse(NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 }), authState);
     }
 
-    const existingDates = await listDatesScoped({
+    const existingDates = await listDatesScoped(authState.supabase, {
       userId: authState.user.id,
       workspaceId: parsed.workspaceId,
       projectId: parsed.projectId,
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         curfew_time: pickAnchorTime(row.schedule_items, ['curfew']),
       };
 
-      const created = await createDateScoped(authState.user.id, values);
+      const created = await createDateScoped(authState.supabase, authState.user.id, values);
       createdDates.push(created);
     }
 
@@ -163,6 +163,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
     const message = error instanceof Error ? error.message : 'Unable to review AI intake.';
-    return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
+    return NextResponse.json({ error: message }, { status });
   }
 }

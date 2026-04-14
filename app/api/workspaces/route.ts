@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   if (authState instanceof NextResponse) return authState;
 
   try {
-    const workspaces = await listWorkspacesForUser(authState.user.id);
+    const workspaces = await listWorkspacesForUser(authState.supabase, authState.user.id);
     return finalizeAuthResponse(NextResponse.json(workspaces), authState);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load workspaces.';
