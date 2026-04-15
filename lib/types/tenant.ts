@@ -37,6 +37,23 @@ export type ViewerUser = {
   email: string | null;
 };
 
+export type WorkspaceInviteRole = 'admin' | 'editor' | 'viewer';
+
+export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
+
+export type WorkspaceInviteSummary = {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: WorkspaceInviteRole;
+  status: WorkspaceInviteStatus;
+  invitedByUserId: string;
+  acceptedByUserId: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BootstrapContext = {
   user: ViewerUser | null;
   memberships: WorkspaceMemberSummary[];

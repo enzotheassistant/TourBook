@@ -3,7 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
-import type { ProjectSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -192,5 +192,31 @@ export async function createArtist(input: { workspaceId: string; name: string; s
       name: input.name,
       slug: input.slug ?? null,
     }),
+  });
+}
+
+export async function listWorkspaceInvites(workspaceId: string) {
+  const payload = await request<{ invites: WorkspaceInviteSummary[] }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/invites`);
+  return payload.invites ?? [];
+}
+
+export async function createWorkspaceInvite(input: { workspaceId: string; email: string; role: WorkspaceInviteRole }) {
+  return request<{ invite: WorkspaceInviteSummary; acceptToken: string }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
+    method: 'POST',
+    body: JSON.stringify({ email: input.email, role: input.role }),
+  });
+}
+
+export async function revokeWorkspaceInvite(input: { workspaceId: string; inviteId: string }) {
+  const payload = await request<{ invite: WorkspaceInviteSummary }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites/${encodeURIComponent(input.inviteId)}`, {
+    method: 'DELETE',
+  });
+  return payload.invite;
+}
+
+export async function acceptWorkspaceInvite(token: string) {
+  return request<{ invite: WorkspaceInviteSummary; membershipCreated: boolean }>('/api/workspaces/invites/accept', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
   });
 }

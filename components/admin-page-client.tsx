@@ -8,14 +8,16 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
-import { canCreateArtists, getWorkspaceRole } from '@/lib/roles';
+import { trackInviteEvent } from '@/lib/invite-telemetry';
+import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
+import type { WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 function slugify(value: string) {
@@ -364,6 +366,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [message, setMessage] = useState('');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
+  const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [lastInviteShare, setLastInviteShare] = useState<{ token: string; link: string } | null>(null);
   const [upcomingSearch, setUpcomingSearch] = useState('');
   const [pastSearch, setPastSearch] = useState('');
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -389,16 +398,42 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
+  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
+  const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
+
   const loadShows = useCallback(async () => {
     if (!activeWorkspaceId || !activeProjectId) return;
     const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
     setShows(nextShows);
   }, [activeProjectId, activeWorkspaceId]);
 
+  const loadInvites = useCallback(async () => {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) {
+      setInvites([]);
+      return;
+    }
+
+    setInvitesLoading(true);
+    try {
+      const nextInvites = await listWorkspaceInvites(activeWorkspaceId);
+      setInvites(nextInvites);
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to load invites.');
+    } finally {
+      setInvitesLoading(false);
+    }
+  }, [activeWorkspaceId, canManageInvitesInWorkspace]);
+
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
     void loadShows();
   }, [activeProjectId, activeWorkspaceId, contextLoading, loadShows]);
+
+  useEffect(() => {
+    if (contextLoading) return;
+    void loadInvites();
+  }, [contextLoading, loadInvites]);
 
   useEffect(() => {
     if (mode !== 'new') return;
@@ -433,9 +468,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [importOpen]);
-
-  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
 
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
   const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
@@ -606,6 +638,60 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       });
     } finally {
       setCreatingArtist(false);
+    }
+  }
+
+  async function handleCreateInvite() {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
+    if (!inviteEmail.trim()) {
+      setInviteMessage('Enter an email to invite.');
+      return;
+    }
+
+    setCreatingInvite(true);
+    setInviteMessage('');
+    setLastInviteShare(null);
+
+    try {
+      const created = await createWorkspaceInvite({ workspaceId: activeWorkspaceId, email: inviteEmail.trim(), role: inviteRole });
+      const inviteLink = `${window.location.origin}/?inviteToken=${encodeURIComponent(created.acceptToken)}`;
+      setLastInviteShare({ token: created.acceptToken, link: inviteLink });
+      setInviteEmail('');
+      setInvites((current) => [created.invite, ...current]);
+      setInviteMessage('Invite created. Copy and share the one-time link below.');
+      await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unable to create invite.';
+      setInviteMessage(reason);
+      await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId, reason });
+    } finally {
+      setCreatingInvite(false);
+    }
+  }
+
+  async function handleRevokeInvite(invite: WorkspaceInviteSummary) {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
+    const confirmed = await requestConfirmation({ title: 'Revoke invite?', description: `Revoke invite for ${invite.email}?`, confirmLabel: 'Revoke', tone: 'danger' });
+    if (!confirmed) return;
+
+    try {
+      const revoked = await revokeWorkspaceInvite({ workspaceId: activeWorkspaceId, inviteId: invite.id });
+      setInvites((current) => current.map((item) => (item.id === revoked.id ? revoked : item)));
+      setInviteMessage('Invite revoked.');
+      await trackInviteEvent({ event: 'invite.revoked', workspaceId: revoked.workspaceId, inviteId: revoked.id, role: revoked.role });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unable to revoke invite.';
+      setInviteMessage(reason);
+      await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId, inviteId: invite.id, reason });
+    }
+  }
+
+  async function copyToClipboard(value: string, successMessage: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setInviteMessage(successMessage);
+    } catch {
+      setInviteMessage('Copy failed. You can still select and copy manually.');
     }
   }
 
@@ -1159,6 +1245,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </label>
         </div>
 
+        {canManageInvitesInWorkspace ? (
+          <InviteManagementSection
+            invites={invites}
+            loading={invitesLoading}
+            email={inviteEmail}
+            role={inviteRole}
+            message={inviteMessage}
+            creating={creatingInvite}
+            lastInviteShare={lastInviteShare}
+            onEmailChange={setInviteEmail}
+            onRoleChange={setInviteRole}
+            onCreateInvite={() => void handleCreateInvite()}
+            onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
+            onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
+          />
+        ) : null}
+
         {!projectsForActiveWorkspace.length ? (
           noArtistGuardrail.showCreateArtist ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
@@ -1465,6 +1568,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </button>
       </div>
 
+      {canManageInvitesInWorkspace ? (
+        <InviteManagementSection
+          invites={invites}
+          loading={invitesLoading}
+          email={inviteEmail}
+          role={inviteRole}
+          message={inviteMessage}
+          creating={creatingInvite}
+          lastInviteShare={lastInviteShare}
+          onEmailChange={setInviteEmail}
+          onRoleChange={setInviteRole}
+          onCreateInvite={() => void handleCreateInvite()}
+          onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
+          onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
+        />
+      ) : null}
+
       {mode === 'new' ? (
         <div ref={formRef} className="space-y-3">
 
@@ -1747,6 +1867,118 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </section>
       )}
     </div>
+  );
+}
+
+function formatInviteDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
+function InviteManagementSection({
+  invites,
+  loading,
+  email,
+  role,
+  message,
+  creating,
+  lastInviteShare,
+  onEmailChange,
+  onRoleChange,
+  onCreateInvite,
+  onRevokeInvite,
+  onCopyValue,
+}: {
+  invites: WorkspaceInviteSummary[];
+  loading: boolean;
+  email: string;
+  role: WorkspaceInviteRole;
+  message: string;
+  creating: boolean;
+  lastInviteShare: { token: string; link: string } | null;
+  onEmailChange: (value: string) => void;
+  onRoleChange: (value: WorkspaceInviteRole) => void;
+  onCreateInvite: () => void;
+  onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
+  onCopyValue: (value: string, successMessage: string) => void;
+}) {
+  const recentInvites = invites.slice(0, 12);
+
+  return (
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
+          <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
+          <p className="mt-1 text-sm text-zinc-400">Temporary manual delivery: create an invite, then copy/share the generated link or token.</p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
+          <input
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            type="email"
+            placeholder="teammate@example.com"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+          />
+          <select
+            value={role}
+            onChange={(event) => onRoleChange(event.target.value as WorkspaceInviteRole)}
+            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+          >
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="button" onClick={onCreateInvite} disabled={creating} className={primaryButtonClassName()}>
+            {creating ? 'Creating…' : 'Create invite'}
+          </button>
+        </div>
+
+        {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
+
+        {lastInviteShare ? (
+          <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+            <p className="mb-2">Share this invite (interim manual flow):</p>
+            <div className="space-y-2">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 break-all">{lastInviteShare.link}</div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => onCopyValue(lastInviteShare.link, 'Invite link copied.')} className={secondaryButtonClassName()}>Copy link</button>
+                <button type="button" onClick={() => onCopyValue(lastInviteShare.token, 'Invite token copied.')} className={secondaryButtonClassName()}>Copy token</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Pending / recent invites</p>
+          {loading ? (
+            <p className="text-sm text-zinc-400">Loading invites…</p>
+          ) : recentInvites.length === 0 ? (
+            <p className="text-sm text-zinc-400">No invites yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {recentInvites.map((invite) => (
+                <div key={invite.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm text-zinc-100">{invite.email}</p>
+                      <p className="text-xs text-zinc-400">{invite.role} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
+                    </div>
+                    {invite.status === 'pending' ? (
+                      <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>
+                        Revoke
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -12,3 +12,7 @@ export function canCreateDates(role: WorkspaceRole | null | undefined) {
 export function canCreateArtists(role: WorkspaceRole | null | undefined) {
   return role === 'owner' || role === 'admin' || role === 'editor';
 }
+
+export function canManageInvites(role: WorkspaceRole | null | undefined) {
+  return role === 'owner' || role === 'admin';
+}

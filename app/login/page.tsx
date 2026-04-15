@@ -1,13 +1,21 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const [inviteToken, setInviteToken] = useState('');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const token = (url.searchParams.get('inviteToken') || url.searchParams.get('token') || '').trim();
+    setInviteToken(token);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,7 +44,7 @@ export default function LoginPage() {
         }),
       });
 
-      window.location.assign("/");
+      window.location.assign(inviteToken ? `/?inviteToken=${encodeURIComponent(inviteToken)}` : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
@@ -50,6 +58,7 @@ export default function LoginPage() {
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-zinc-400">Use your email and password to access your workspace.</p>
+        {inviteToken ? <p className="mt-2 text-xs text-emerald-300">Invite token detected. Sign in, then you can accept the invite securely.</p> : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>

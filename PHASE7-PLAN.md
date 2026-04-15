@@ -38,7 +38,12 @@ Add a safe, incremental invite system foundation for workspace collaboration wit
    - Admin UI entry-point and token delivery UX deferred to Batch 2.
 
 ## Delivery strategy (without email infra)
-Batch 1 issues secure invite tokens and supports authenticated acceptance via API. Outbound email dispatch will be added in Batch 2 (provider integration + template + delivery telemetry + retry strategy).
+Batch 1 issues secure invite tokens and supports authenticated acceptance via API.
+
+Batch 2 interim delivery path (implemented):
+- Admin invite UX now exposes one-time invite link/token for manual copy/share.
+- Acceptance UX is wired in dashboard (URL token + paste fallback).
+- Outbound email dispatch remains deferred to Batch 3 (provider integration + template + retry strategy).
 
 ## Validation gates
 - `npm run test:unit`
@@ -46,6 +51,12 @@ Batch 1 issues secure invite tokens and supports authenticated acceptance via AP
 - `npm run build`
 - `npm run lint`
 
+## Monitoring (Batch 2)
+- `tail -f var/telemetry/invites.ndjson`
+- `grep -o '"event":"[^"]*"' var/telemetry/invites.ndjson | sort | uniq -c`
+- `grep '"event":"invite.failed"' var/telemetry/invites.ndjson | tail -n 20`
+
 ## Rollback
-- Revert API/routes/module changes.
-- Revert migration and re-run down/compensating migration (drop `workspace_invites`) if needed.
+- Revert Batch 2 UI/telemetry wiring only (safe, no schema changes).
+- Revert API/routes/module changes from Batch 1 if full invite rollback is needed.
+- Revert migration and re-run down/compensating migration (drop `workspace_invites`) only for full feature removal.
