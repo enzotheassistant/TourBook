@@ -103,12 +103,12 @@ export async function GET(request: NextRequest) {
     );
 
     const activeWorkspaceId = workspaceWithProjects?.id ?? workspaces[0]?.id ?? null;
-    let projects = activeWorkspaceId
+    const projectsForActiveWorkspace = activeWorkspaceId
       ? allProjects.filter((project) => project.workspaceId === activeWorkspaceId)
       : [];
 
     // Read-only context endpoint: no implicit bootstrap writes.
-    const activeProjectId = projects[0]?.id ?? null;
+    const activeProjectId = projectsForActiveWorkspace[0]?.id ?? null;
 
     let tours: TourSummary[] = [];
     if (activeWorkspaceId && activeProjectId) {
@@ -137,14 +137,14 @@ export async function GET(request: NextRequest) {
 
     if (debug) {
       debugInfo.readOnly = true;
-      debugInfo.projectCount = projects.length;
+      debugInfo.projectCount = allProjects.length;
     }
 
     return finalizeAuthResponse(NextResponse.json({
       user,
       memberships,
       workspaces,
-      projects,
+      projects: allProjects,
       tours,
       activeWorkspaceId,
       activeProjectId,
