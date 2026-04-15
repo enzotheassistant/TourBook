@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
+import { recordApiRuntimeError } from '@/lib/telemetry/runtime-errors';
 import type {
   BootstrapContext,
   ProjectSummary,
@@ -152,7 +153,11 @@ export async function GET(request: NextRequest) {
       ...(debug ? { _debug: debugInfo } : {}),
     }), authState);
   } catch (error) {
-    console.error('Unable to build /api/me/context response', error);
+    await recordApiRuntimeError(request, {
+      endpoint: '/api/me/context',
+      status: 500,
+      error,
+    });
     return finalizeAuthResponse(NextResponse.json({ error: 'Unable to build bootstrap context.' }, { status: 500 }), authState);
   }
 }

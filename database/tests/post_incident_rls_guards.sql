@@ -8,6 +8,13 @@
 -- Replace placeholders before running:
 --   __MEMBER_ID__    -> UUID for an authenticated user who is a member of __WORKSPACE_ID__
 --   __WORKSPACE_ID__ -> UUID of the workspace that __MEMBER_ID__ belongs to
+-- Quick run (psql):
+--   cp database/tests/post_incident_rls_guards.sql /tmp/post_incident_rls_guards.run.sql
+--   sed -i "s/__MEMBER_ID__/<member-uuid>/g; s/__WORKSPACE_ID__/<workspace-uuid>/g" /tmp/post_incident_rls_guards.run.sql
+--   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f /tmp/post_incident_rls_guards.run.sql
+--
+-- SQL Editor run: paste file into Supabase SQL Editor, replace placeholders, execute.
+--
 
 begin;
 set local role authenticated;

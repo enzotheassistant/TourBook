@@ -3,6 +3,7 @@ import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError, parseBooleanSearchParam } from '@/lib/data/server/shared';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import type { DateFormValues } from '@/lib/types/date-record';
+import { recordApiRuntimeError } from '@/lib/telemetry/runtime-errors';
 
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
     return finalizeAuthResponse(NextResponse.json(dates), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
+    await recordApiRuntimeError(request, {
+      endpoint: '/api/dates',
+      status,
+      error,
+    });
     const message = error instanceof Error ? error.message : 'Unable to load dates.';
     return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
@@ -40,6 +46,11 @@ export async function POST(request: NextRequest) {
     return finalizeAuthResponse(NextResponse.json(dateRecord), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
+    await recordApiRuntimeError(request, {
+      endpoint: '/api/dates',
+      status,
+      error,
+    });
     const message = error instanceof Error ? error.message : 'Unable to create date.';
     return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }

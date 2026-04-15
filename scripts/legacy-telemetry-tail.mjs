@@ -41,6 +41,18 @@ try {
     console.log(`${count}x ${key}`);
   }
 } catch (error) {
+  const isMissingFile =
+    !!error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'ENOENT';
+
+  if (isMissingFile) {
+    console.log(`File: ${logPath}`);
+    console.log('No legacy telemetry file found yet (no recorded events in this environment).');
+    process.exit(0);
+  }
+
   console.error(`Unable to read telemetry file at ${logPath}`);
   if (error instanceof Error) console.error(error.message);
   process.exit(1);

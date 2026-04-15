@@ -72,6 +72,7 @@ Expected for current branch:
 - [ ] Run `database/tests/rls_policy_tests.sql` (updated for workspace member policy consistency)
 - [ ] Run `database/tests/phase4_rls_smoke_probes.sql` with real UUID substitutions
 - [ ] Run `database/tests/post_incident_rls_guards.sql` (post-incident guards added for recursion + workspace visibility regressions)
+  - Practical execution: create a temporary copy, replace `__MEMBER_ID__` + `__WORKSPACE_ID__`, then run with `psql -v ON_ERROR_STOP=1 -f <file>` against target DB
 
 Key pass criteria:
 
