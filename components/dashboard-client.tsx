@@ -7,6 +7,7 @@ import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
 import { listShows } from '@/lib/data-client';
+import { getWorkspaceRole, canCreateDates } from '@/lib/roles';
 import { Show } from '@/lib/types';
 
 function normalizeTourName(value: string) {
@@ -56,7 +57,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 }
 
 export function DashboardClient() {
-  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects, memberships } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -106,6 +107,9 @@ export function DashboardClient() {
   const filteredUpcomingShows = useMemo(() => upcomingShows.filter((show) => (upcomingTour === 'All' || normalizeTourName(show.tour_name) === upcomingTour) && [show.city, show.region, show.venue_name, show.tour_name, show.date].join(' ').toLowerCase().includes(upcomingSearch.trim().toLowerCase())), [upcomingShows, upcomingTour, upcomingSearch]);
   const filteredPastShows = useMemo(() => pastShows.filter((show) => (pastTour === 'All' || normalizeTourName(show.tour_name) === pastTour) && [show.city, show.region, show.venue_name, show.tour_name, show.date].join(' ').toLowerCase().includes(pastSearch.trim().toLowerCase())), [pastShows, pastTour, pastSearch]);
 
+  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const canCreateDateInWorkspace = canCreateDates(activeWorkspaceRole);
+
   const pastByYear = useMemo(() => {
     const groups = new Map<string, Show[]>();
     for (const show of filteredPastShows) {
@@ -130,9 +134,12 @@ export function DashboardClient() {
           ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
           : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
         actions={[
-          { label: 'Open Admin', href: '/admin', tone: 'primary' },
-          { label: 'Past Dates', href: '/?tab=past' },
+          { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+          { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
         ]}
+        telemetry={{
+          stateType: hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
+        }}
       />
     );
   }
@@ -144,11 +151,22 @@ export function DashboardClient() {
         title={hasAnyProject ? 'No artist is active for this workspace.' : 'No artists found in this workspace.'}
         body={hasAnyProject
           ? 'This workspace has no artist selected. Open Admin to pick the correct workspace and artist before viewing dates.'
-          : 'Dates unlock after the first artist is created in this workspace. Open Admin to continue setup.'}
-        actions={[
-          { label: 'Go to Admin', href: '/admin', tone: 'primary' },
-          { label: 'View Past Dates', href: '/?tab=past' },
-        ]}
+          : canCreateDateInWorkspace
+            ? 'Dates unlock after the first artist is created in this workspace. Open Admin to continue setup.'
+            : 'No artists are available in this workspace yet. Ask an owner/admin/editor to create the first artist, then come back.'}
+        actions={hasAnyProject
+          ? [
+              { label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+              { label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+            ]
+          : canCreateDateInWorkspace
+            ? [{ label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }]
+            : [{ label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
+        telemetry={{
+          stateType: hasAnyProject ? 'crew.no_active_artist' : 'crew.no_artists',
+          workspaceId: activeWorkspaceId,
+          role: activeWorkspaceRole,
+        }}
       />
     );
   }
@@ -170,7 +188,15 @@ export function DashboardClient() {
           <ActivationEmptyState
             title="No past dates yet."
             body="Past dates will appear here after your first show is added and completed."
-            actions={[{ label: 'Open Admin', href: '/admin', tone: 'primary' }, { label: 'Upcoming Dates', href: '/?tab=upcoming' }]}
+            actions={canCreateDateInWorkspace
+              ? [{ label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }, { label: 'Upcoming Dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]
+              : [{ label: 'Upcoming Dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]}
+            telemetry={{
+              stateType: 'crew.no_past_dates',
+              workspaceId: activeWorkspaceId,
+              projectId: activeProjectId,
+              role: activeWorkspaceRole,
+            }}
           />
         ) : (
           <div className="space-y-5">
@@ -185,8 +211,18 @@ export function DashboardClient() {
       ) : filteredUpcomingShows.length === 0 ? (
         <ActivationEmptyState
           title="No upcoming dates yet."
-          body="Create your first date in Admin so the crew dashboard has something actionable."
-          actions={[{ label: 'Create First Date', href: '/admin', tone: 'primary' }, { label: 'Past Dates', href: '/?tab=past' }]}
+          body={canCreateDateInWorkspace
+            ? 'Create your first date in Admin so the crew dashboard has something actionable.'
+            : 'No upcoming dates are published for this artist yet. Ask an owner/admin/editor to create the first date.'}
+          actions={canCreateDateInWorkspace
+            ? [{ label: 'Create First Date', href: '/admin', tone: 'primary', ctaId: 'create_first_date' }, { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]
+            : [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
+          telemetry={{
+            stateType: 'crew.no_upcoming_dates',
+            workspaceId: activeWorkspaceId,
+            projectId: activeProjectId,
+            role: activeWorkspaceRole,
+          }}
         />
       ) : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} tab="upcoming" />)}</div>}
     </div>

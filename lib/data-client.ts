@@ -3,6 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import type { ProjectSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -181,4 +182,15 @@ export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
   }
 
   return response.text();
+}
+
+export async function createArtist(input: { workspaceId: string; name: string; slug?: string | null }) {
+  return request<ProjectSummary>('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify({
+      workspaceId: input.workspaceId,
+      name: input.name,
+      slug: input.slug ?? null,
+    }),
+  });
 }

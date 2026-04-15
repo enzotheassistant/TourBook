@@ -39,14 +39,21 @@ Reduce first-run drop-off by removing dead-end states in Crew/Admin and guiding 
 ---
 
 ## Batch 2 — Activation completion path
-**Priority:** P1
+**Priority:** P1  
+**Status:** Implemented in this branch
 
-### Proposed Scope
-1. Add lightweight guided creation flow where feasible:
-   - Create artist (project) CTA from Admin empty state to existing API/route.
-   - Optional workspace creation CTA if API exists and permissions allow.
-2. Persist onboarding hint state (dismissed/completed) to reduce repeat friction.
-3. Add telemetry hooks for activation funnel stages.
+### Shipped Scope
+1. Role-scoped activation CTAs in Crew/Admin empty states.
+   - Viewer role no longer gets create CTAs.
+   - Owner/admin/editor keep create-oriented paths.
+2. Activation flow wiring (incremental, existing routes preserved).
+   - Workspace/artist selection remains in Admin empty state.
+   - Added first-artist creation path in Admin (`POST /api/projects`) for owner/admin/editor.
+   - Kept create-first-date path to Admin with role-aware CTA visibility.
+3. Activation telemetry hooks (fail-open, NDJSON).
+   - Empty state rendered.
+   - CTA clicked.
+   - Create success/failure for artist/date flows.
 
 ### Acceptance Criteria
 - New user can reach a first active artist/date flow with minimal guesswork.
@@ -54,8 +61,8 @@ Reduce first-run drop-off by removing dead-end states in Crew/Admin and guiding 
 - No route churn or schema-breaking changes.
 
 ### Risks
-- Missing or inconsistent create endpoints.
-- Permission model mismatch (owner/admin/editor).
+- Workspace creation endpoint still unavailable in this phase.
+- Permission model mismatch (owner/admin/editor) remains guarded by backend/RLS.
 
 ---
 
@@ -73,7 +80,7 @@ Reduce first-run drop-off by removing dead-end states in Crew/Admin and guiding 
 
 ---
 
-## Open Decisions (Phil)
-1. Should non-admin members see create CTA buttons, or only guidance text?
-2. Preferred language for “artist” vs “project” across the product.
-3. Should activation telemetry be added now or deferred until Batch 2?
+## Decision Log (Phil)
+1. Create CTAs are role-scoped (no viewer create CTA).
+2. UI copy remains “Artist” while internal/backend naming remains project.
+3. Activation telemetry is included in Batch 2.

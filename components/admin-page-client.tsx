@@ -8,10 +8,12 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
+import { createArtist, deleteShow, exportGuestListCsv, listShows, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
+import { trackActivationEvent } from '@/lib/activation-telemetry';
+import { canCreateArtists, getWorkspaceRole } from '@/lib/roles';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
@@ -347,6 +349,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     projects,
     setActiveWorkspaceId,
     setActiveProjectId,
+    memberships,
+    refreshContext,
   } = useAppContext();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
@@ -369,6 +373,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [returnLabel, setReturnLabel] = useState('Existing Dates');
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
+  const [newArtistName, setNewArtistName] = useState('');
+  const [creatingArtist, setCreatingArtist] = useState(false);
   const [importSourceText, setImportSourceText] = useState('');
   const [importRows, setImportRows] = useState<ParsedImportRow[]>([]);
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -420,6 +426,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [importOpen]);
+
+  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
 
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
   const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
@@ -525,6 +534,78 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!activeWorkspaceId || !activeProjectId) return;
     const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
     setShows(nextShows);
+  }
+
+  function handleWorkspaceSelection(workspaceId: string | null) {
+    setActiveWorkspaceId(workspaceId);
+    void trackActivationEvent({
+      event: 'activation.create_cta_clicked',
+      stateType: 'admin.select_workspace',
+      cta: 'select_workspace',
+      entity: 'workspace',
+      workspaceId,
+      role: getWorkspaceRole(memberships, workspaceId),
+    });
+  }
+
+  function handleArtistSelection(projectId: string | null) {
+    setActiveProjectId(projectId);
+    void trackActivationEvent({
+      event: 'activation.create_cta_clicked',
+      stateType: 'admin.select_artist',
+      cta: 'select_artist',
+      entity: 'artist',
+      workspaceId: activeWorkspaceId,
+      projectId,
+      role: activeWorkspaceRole,
+    });
+  }
+
+  async function handleCreateArtist() {
+    if (!activeWorkspaceId) return;
+    if (!newArtistName.trim()) {
+      setMessage('Enter an artist name to continue.');
+      return;
+    }
+
+    setCreatingArtist(true);
+    void trackActivationEvent({
+      event: 'activation.create_cta_clicked',
+      stateType: 'admin.no_artists',
+      cta: 'create_first_artist',
+      entity: 'artist',
+      workspaceId: activeWorkspaceId,
+      role: activeWorkspaceRole,
+    });
+
+    try {
+      const created = await createArtist({ workspaceId: activeWorkspaceId, name: newArtistName.trim(), slug: slugify(newArtistName) });
+      await refreshContext();
+      setActiveProjectId(created.id);
+      setNewArtistName('');
+      setMessage('Artist created. You can now create your first date.');
+      void trackActivationEvent({
+        event: 'activation.create_success',
+        stateType: 'admin.no_artists',
+        entity: 'artist',
+        workspaceId: activeWorkspaceId,
+        projectId: created.id,
+        role: activeWorkspaceRole,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unable to create artist.';
+      setMessage(reason);
+      void trackActivationEvent({
+        event: 'activation.create_failure',
+        stateType: 'admin.no_artists',
+        entity: 'artist',
+        workspaceId: activeWorkspaceId,
+        role: activeWorkspaceRole,
+        reason,
+      });
+    } finally {
+      setCreatingArtist(false);
+    }
   }
 
   function requestConfirmation(options: { title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }) {
@@ -665,8 +746,28 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       }
 
       resetForm('Show created. Form cleared for the next date.');
+      void trackActivationEvent({
+        event: 'activation.create_success',
+        stateType: 'admin.new_date',
+        entity: 'date',
+        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
+        role: activeWorkspaceRole,
+      });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to save show.');
+      const reason = error instanceof Error ? error.message : 'Unable to save show.';
+      setMessage(reason);
+      if (!isEditing) {
+        void trackActivationEvent({
+          event: 'activation.create_failure',
+          stateType: 'admin.new_date',
+          entity: 'date',
+          workspaceId: activeWorkspaceId,
+          projectId: activeProjectId,
+          role: activeWorkspaceRole,
+          reason,
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -674,6 +775,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isEditing) {
+      void trackActivationEvent({
+        event: 'activation.create_cta_clicked',
+        stateType: 'admin.new_date',
+        cta: form.status === 'draft' ? 'save_first_date_draft' : 'create_first_date',
+        entity: 'date',
+        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
+        role: activeWorkspaceRole,
+      });
+    }
     await saveShow(form.status === 'draft' ? 'draft' : 'published');
   }
 
@@ -910,6 +1022,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
 
     setImporting(true);
+    void trackActivationEvent({
+      event: 'activation.create_cta_clicked',
+      stateType: 'admin.import_dates',
+      cta: 'create_draft_dates',
+      entity: 'date',
+      workspaceId: activeWorkspaceId,
+      projectId: activeProjectId,
+      role: activeWorkspaceRole,
+    });
+
     try {
       for (const row of selectedRows) {
         if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
@@ -941,8 +1063,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setImportError('');
       setMessage(`${selectedRows.length} draft date${selectedRows.length === 1 ? '' : 's'} created.`);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
+      void trackActivationEvent({
+        event: 'activation.create_success',
+        stateType: 'admin.import_dates',
+        entity: 'date',
+        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
+        role: activeWorkspaceRole,
+      });
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'Unable to import dates.');
+      const reason = error instanceof Error ? error.message : 'Unable to import dates.';
+      setImportError(reason);
+      void trackActivationEvent({
+        event: 'activation.create_failure',
+        stateType: 'admin.import_dates',
+        entity: 'date',
+        workspaceId: activeWorkspaceId,
+        projectId: activeProjectId,
+        role: activeWorkspaceRole,
+        reason,
+      });
     } finally {
       setImporting(false);
     }
@@ -962,7 +1102,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         body={workspaces.length
           ? 'Choose a workspace to continue with date management.'
           : 'You are signed in, but no workspace memberships were found. Ask an owner to invite you first.'}
-        actions={[{ label: 'Crew View', href: '/', tone: 'ghost' }]}
+        actions={[{ label: 'Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
+        telemetry={{
+          stateType: workspaces.length ? 'admin.no_workspace_selected' : 'admin.no_workspace_access',
+        }}
       />
     );
   }
@@ -976,8 +1119,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           title={projectsForActiveWorkspace.length ? 'No artist selected.' : 'No artists found in this workspace.'}
           body={projectsForActiveWorkspace.length
             ? 'Pick an artist below to activate the admin workflow for this workspace.'
-            : 'Create your first artist in this workspace, then return here to create dates.'}
-          actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost' }]}
+            : canCreateArtistInWorkspace
+              ? 'Create your first artist below, then continue to create the first date.'
+              : 'No artists exist in this workspace yet. Ask an owner/admin/editor to create the first artist.'}
+          actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
+          telemetry={{
+            stateType: projectsForActiveWorkspace.length ? 'admin.no_active_artist' : 'admin.no_artists',
+            workspaceId: activeWorkspaceId,
+            role: activeWorkspaceRole,
+          }}
         />
 
         <div className="grid gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
@@ -985,7 +1135,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace</span>
             <select
               value={activeWorkspaceId}
-              onChange={(event) => setActiveWorkspaceId(event.target.value || null)}
+              onChange={(event) => handleWorkspaceSelection(event.target.value || null)}
               className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
             >
               {workspaces.map((workspace) => (
@@ -998,7 +1148,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artist</span>
             <select
               value=""
-              onChange={(event) => setActiveProjectId(event.target.value || null)}
+              onChange={(event) => handleArtistSelection(event.target.value || null)}
               className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
             >
               <option value="">Select artist…</option>
@@ -1008,6 +1158,29 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </select>
           </label>
         </div>
+
+        {!projectsForActiveWorkspace.length ? (
+          canCreateArtistInWorkspace ? (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first artist</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={newArtistName}
+                  onChange={(event) => setNewArtistName(event.target.value)}
+                  placeholder="Artist name"
+                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+                />
+                <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
+                  {creatingArtist ? 'Creating…' : 'Create Artist'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+              You have viewer access in this workspace. Artist creation is restricted to owner/admin/editor roles.
+            </div>
+          )
+        ) : null}
       </div>
     );
   }
