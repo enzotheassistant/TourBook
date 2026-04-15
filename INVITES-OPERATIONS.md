@@ -1,5 +1,17 @@
 # Invite Operations Setup
 
+## 0) Go-live preflight (recommended first)
+
+Run:
+- `npm run invites:go-live:check`
+
+What it verifies (non-destructive):
+- Required maintenance env (`SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+- Invite provider mode (`resend` vs fallback noop/manual-share)
+- Required Resend env when provider is live (`INVITE_EMAIL_FROM`, `RESEND_API_KEY`)
+- Invite link base URL fallback posture
+- Telemetry directory writability
+
 ## 1) Outbound invite email delivery
 
 Invite creation now triggers best-effort email delivery using an adapter:
