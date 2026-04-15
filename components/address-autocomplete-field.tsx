@@ -55,13 +55,9 @@ export function AddressAutocompleteField({
   const [open, setOpen] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [lookupEnabled, setLookupEnabled] = useState(false);
-  const [preferredCountry, setPreferredCountry] = useState(DEFAULT_BIAS);
+  const [preferredCountry, setPreferredCountry] = useState(() => readBiasState().preferredCountry || DEFAULT_BIAS);
   const abortRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setPreferredCountry(readBiasState().preferredCountry || DEFAULT_BIAS);
-  }, []);
 
   useEffect(() => {
     const target = containerRef.current;
@@ -80,15 +76,7 @@ export function AddressAutocompleteField({
   const cityQuery = useMemo(() => [city.trim(), region.trim()].filter(Boolean).join(', '), [city, region]);
 
   useEffect(() => {
-    if (!lookupEnabled) {
-      setSuggestions([]);
-      setOpen(false);
-      return;
-    }
-
-    if (value.trim().length < 3) {
-      setSuggestions([]);
-      setOpen(false);
+    if (!lookupEnabled || value.trim().length < 3) {
       return;
     }
 

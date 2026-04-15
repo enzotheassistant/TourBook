@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
@@ -389,17 +389,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
+  const loadShows = useCallback(async () => {
+    if (!activeWorkspaceId || !activeProjectId) return;
+    const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+    setShows(nextShows);
+  }, [activeProjectId, activeWorkspaceId]);
+
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
     void loadShows();
-  }, [activeProjectId, activeWorkspaceId, contextLoading]);
+  }, [activeProjectId, activeWorkspaceId, contextLoading, loadShows]);
 
   useEffect(() => {
     if (mode !== 'new') return;
     const stored = readExpandedSectionsPreference();
     setExpandedSections(stored);
     setForm((current) => applyAutoVisibility(current, visibilityModes));
-  }, [mode]);
+  }, [mode, visibilityModes]);
 
   useEffect(() => {
     if (mode !== 'new' || typeof window === 'undefined') return;
@@ -530,12 +536,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       window.history.replaceState({}, '', '/admin');
     }
   }, [mode, searchParams, shows]);
-
-  async function loadShows() {
-    if (!activeWorkspaceId || !activeProjectId) return;
-    const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
-    setShows(nextShows);
-  }
 
   function handleWorkspaceSelection(workspaceId: string | null) {
     setActiveWorkspaceId(workspaceId);
@@ -2277,12 +2277,9 @@ function SelectField({
 
 
 function InlineTourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
-  const [creatingNew, setCreatingNew] = useState(!options.includes(value) && value.trim().length > 0);
-
-  useEffect(() => {
-    setCreatingNew(!options.includes(value) && value.trim().length > 0);
-  }, [options, value]);
-
+  const [forceCreatingNew, setForceCreatingNew] = useState(false);
+  const inferredCreatingNew = !options.includes(value) && value.trim().length > 0;
+  const creatingNew = forceCreatingNew || inferredCreatingNew;
   const selectedValue = creatingNew ? '__new__' : value;
 
   return (
@@ -2295,11 +2292,11 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
             onChange={(event) => {
               const nextValue = event.target.value;
               if (nextValue === '__new__') {
-                setCreatingNew(true);
+                setForceCreatingNew(true);
                 onChange('');
                 return;
               }
-              setCreatingNew(false);
+              setForceCreatingNew(false);
               onChange(nextValue);
             }}
             className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
@@ -2334,12 +2331,9 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
 }
 
 function TourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
-  const [creatingNew, setCreatingNew] = useState(!options.includes(value) && value.trim().length > 0);
-
-  useEffect(() => {
-    setCreatingNew(!options.includes(value) && value.trim().length > 0);
-  }, [options, value]);
-
+  const [forceCreatingNew, setForceCreatingNew] = useState(false);
+  const inferredCreatingNew = !options.includes(value) && value.trim().length > 0;
+  const creatingNew = forceCreatingNew || inferredCreatingNew;
   const selectedValue = creatingNew ? '__new__' : value;
 
   return (
@@ -2352,11 +2346,11 @@ function TourInput({ value, onChange, options }: { value: string; onChange: (val
             onChange={(event) => {
               const nextValue = event.target.value;
               if (nextValue === '__new__') {
-                setCreatingNew(true);
+                setForceCreatingNew(true);
                 onChange('');
                 return;
               }
-              setCreatingNew(false);
+              setForceCreatingNew(false);
               onChange(nextValue);
             }}
             className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
