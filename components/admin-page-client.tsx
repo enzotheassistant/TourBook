@@ -14,6 +14,7 @@ import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { canCreateArtists, getWorkspaceRole } from '@/lib/roles';
+import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
@@ -1112,6 +1113,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   if (!activeProjectId) {
     const projectsForActiveWorkspace = projects.filter((project) => project.workspaceId === activeWorkspaceId);
+    const noArtistGuardrail = getAdminNoArtistsGuardrail(activeWorkspaceRole);
 
     return (
       <div className="space-y-3">
@@ -1119,9 +1121,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           title={projectsForActiveWorkspace.length ? 'No artist selected.' : 'No artists found in this workspace.'}
           body={projectsForActiveWorkspace.length
             ? 'Pick an artist below to activate the admin workflow for this workspace.'
-            : canCreateArtistInWorkspace
-              ? 'Create your first artist below, then continue to create the first date.'
-              : 'No artists exist in this workspace yet. Ask an owner/admin/editor to create the first artist.'}
+            : noArtistGuardrail.emptyBody}
           actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
           telemetry={{
             stateType: projectsForActiveWorkspace.length ? 'admin.no_active_artist' : 'admin.no_artists',
@@ -1160,7 +1160,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
 
         {!projectsForActiveWorkspace.length ? (
-          canCreateArtistInWorkspace ? (
+          noArtistGuardrail.showCreateArtist ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
               <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first artist</p>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1177,7 +1177,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </div>
           ) : (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
-              You have viewer access in this workspace. Artist creation is restricted to owner/admin/editor roles.
+              {noArtistGuardrail.helperText}
             </div>
           )
         ) : null}

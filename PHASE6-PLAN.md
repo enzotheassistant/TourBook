@@ -68,15 +68,21 @@ Reduce first-run drop-off by removing dead-end states in Crew/Admin and guiding 
 
 ## Batch 3 — Hardening + measurement
 **Priority:** P2
+**Status:** Implemented in this branch
 
-### Proposed Scope
-1. Integration tests for first-run context permutations.
-2. Analytics review: where users abandon activation.
-3. Copy and micro-interaction polish based on evidence.
+### Shipped Scope
+1. Activation funnel bootstrap reporting (telemetry pipeline + script).
+   - Added `scripts/activation-funnel-report.mjs` to compute baseline funnel metrics from `var/telemetry/activation.ndjson`.
+   - Supports bootstrap mode when telemetry volume is still zero/low.
+2. Integration-style first-run permutation coverage.
+   - Added `lib/activation/first-run.test.mjs` for owner/admin/editor/viewer permutations across Crew/Admin empty states and CTA visibility expectations.
+3. Activation micro-flow hardening (copy + guardrails, no redesign).
+   - Centralized first-run state policy in `lib/activation/first-run.ts`.
+   - Updated Crew/Admin empty-state copy and actions to clarify next steps and permission boundaries.
 
 ### Acceptance Criteria
-- Test coverage for key first-run states.
-- Documented conversion baseline and follow-up improvements.
+- Test coverage for key first-run states. ✅
+- Documented conversion baseline and follow-up improvements. ✅
 
 ---
 
