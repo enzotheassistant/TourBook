@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
@@ -55,7 +56,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
 }
 
 export function DashboardClient() {
-  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -120,6 +121,38 @@ export function DashboardClient() {
 
   if (contextLoading || loading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
 
+  if (!activeWorkspaceId) {
+    const hasWorkspaceAccess = workspaces.length > 0;
+    return (
+      <ActivationEmptyState
+        title={hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
+        body={hasWorkspaceAccess
+          ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
+          : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
+        actions={[
+          { label: 'Open Admin', href: '/admin', tone: 'primary' },
+          { label: 'Past Dates', href: '/?tab=past' },
+        ]}
+      />
+    );
+  }
+
+  if (!activeProjectId) {
+    const hasAnyProject = projects.length > 0;
+    return (
+      <ActivationEmptyState
+        title={hasAnyProject ? 'No artist is active for this workspace.' : 'No artists found in this workspace.'}
+        body={hasAnyProject
+          ? 'This workspace has no artist selected. Open Admin to pick the correct workspace and artist before viewing dates.'
+          : 'Dates unlock after the first artist is created in this workspace. Open Admin to continue setup.'}
+        actions={[
+          { label: 'Go to Admin', href: '/admin', tone: 'primary' },
+          { label: 'View Past Dates', href: '/?tab=past' },
+        ]}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-5 py-5">
@@ -133,7 +166,13 @@ export function DashboardClient() {
       </div>
 
       {tab === 'past' ? (
-        pastByYear.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No past dates yet.</div> : (
+        pastByYear.length === 0 ? (
+          <ActivationEmptyState
+            title="No past dates yet."
+            body="Past dates will appear here after your first show is added and completed."
+            actions={[{ label: 'Open Admin', href: '/admin', tone: 'primary' }, { label: 'Upcoming Dates', href: '/?tab=upcoming' }]}
+          />
+        ) : (
           <div className="space-y-5">
             {pastByYear.map(([year, items]) => (
               <section key={year} className="space-y-3">
@@ -143,7 +182,13 @@ export function DashboardClient() {
             ))}
           </div>
         )
-      ) : filteredUpcomingShows.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">No upcoming dates yet.</div> : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} tab="upcoming" />)}</div>}
+      ) : filteredUpcomingShows.length === 0 ? (
+        <ActivationEmptyState
+          title="No upcoming dates yet."
+          body="Create your first date in Admin so the crew dashboard has something actionable."
+          actions={[{ label: 'Create First Date', href: '/admin', tone: 'primary' }, { label: 'Past Dates', href: '/?tab=past' }]}
+        />
+      ) : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} tab="upcoming" />)}</div>}
     </div>
   );
 }

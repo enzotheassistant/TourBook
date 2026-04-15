@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
+import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -337,7 +338,16 @@ async function buildImportTextFromFiles(files: File[]) {
 }
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
-  const { activeWorkspaceId, activeProjectId, activeTourId, isLoading: contextLoading } = useAppContext();
+  const {
+    activeWorkspaceId,
+    activeProjectId,
+    activeTourId,
+    isLoading: contextLoading,
+    workspaces,
+    projects,
+    setActiveWorkspaceId,
+    setActiveProjectId,
+  } = useAppContext();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
@@ -945,8 +955,61 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
   }
 
-  if (!activeWorkspaceId || !activeProjectId) {
-    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Select a workspace and artist to manage dates.</div>;
+  if (!activeWorkspaceId) {
+    return (
+      <ActivationEmptyState
+        title={workspaces.length ? 'No workspace selected.' : 'No workspace access yet.'}
+        body={workspaces.length
+          ? 'Choose a workspace to continue with date management.'
+          : 'You are signed in, but no workspace memberships were found. Ask an owner to invite you first.'}
+        actions={[{ label: 'Crew View', href: '/', tone: 'ghost' }]}
+      />
+    );
+  }
+
+  if (!activeProjectId) {
+    const projectsForActiveWorkspace = projects.filter((project) => project.workspaceId === activeWorkspaceId);
+
+    return (
+      <div className="space-y-3">
+        <ActivationEmptyState
+          title={projectsForActiveWorkspace.length ? 'No artist selected.' : 'No artists found in this workspace.'}
+          body={projectsForActiveWorkspace.length
+            ? 'Pick an artist below to activate the admin workflow for this workspace.'
+            : 'Create your first artist in this workspace, then return here to create dates.'}
+          actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost' }]}
+        />
+
+        <div className="grid gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm text-zinc-300">
+            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace</span>
+            <select
+              value={activeWorkspaceId}
+              onChange={(event) => setActiveWorkspaceId(event.target.value || null)}
+              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2 text-sm text-zinc-300">
+            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artist</span>
+            <select
+              value=""
+              onChange={(event) => setActiveProjectId(event.target.value || null)}
+              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+            >
+              <option value="">Select artist…</option>
+              {projectsForActiveWorkspace.map((project) => (
+                <option key={project.id} value={project.id}>{project.name || project.slug || project.id}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+    );
   }
 
   return (

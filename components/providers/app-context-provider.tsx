@@ -101,7 +101,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         ? storedProjectId
         : activeProjects.some((project) => project.id === data.activeProjectId)
           ? data.activeProjectId
-          : activeProjects[0]?.id ?? data.projects[0]?.id ?? null;
+          : activeProjects[0]?.id ?? null;
 
       const activeTours = activeProjectId
         ? data.tours.filter((tour) => tour.projectId === activeProjectId)
