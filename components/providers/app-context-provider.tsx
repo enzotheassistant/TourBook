@@ -84,9 +84,14 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       const storedProjectId = readStoredValue(PROJECT_STORAGE_KEY);
       const storedTourId = readStoredValue(TOUR_STORAGE_KEY);
 
+      const fallbackWorkspaceId =
+        data.workspaces.find((workspace) => data.projects.some((project) => project.workspaceId === workspace.id))?.id
+        ?? data.workspaces[0]?.id
+        ?? null;
+
       const activeWorkspaceId = data.workspaces.some((workspace) => workspace.id === storedWorkspaceId)
         ? storedWorkspaceId
-        : data.activeWorkspaceId;
+        : data.activeWorkspaceId ?? fallbackWorkspaceId;
 
       const activeProjects = activeWorkspaceId
         ? data.projects.filter((project) => project.workspaceId === activeWorkspaceId)
@@ -94,7 +99,9 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
       const activeProjectId = activeProjects.some((project) => project.id === storedProjectId)
         ? storedProjectId
-        : activeProjects[0]?.id ?? data.activeProjectId;
+        : activeProjects.some((project) => project.id === data.activeProjectId)
+          ? data.activeProjectId
+          : activeProjects[0]?.id ?? data.projects[0]?.id ?? null;
 
       const activeTours = activeProjectId
         ? data.tours.filter((tour) => tour.projectId === activeProjectId)
