@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     if (activeWorkspaceId && activeProjectId) {
       const toursResult = await supabase
         .from('tours')
-        .select('id, workspace_id, project_id, name, status, start_date, end_date, created_at')
+        .select('id, workspace_id, project_id, name, created_at')
         .eq('workspace_id', activeWorkspaceId)
         .eq('project_id', activeProjectId)
         .order('created_at', { ascending: true })
