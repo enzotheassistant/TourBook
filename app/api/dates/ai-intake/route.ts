@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
+import { finalizeAuthResponse, requireApiAuthForWorkspaceAdmin, type AuthState } from '@/lib/auth';
 import { runIntake } from '@/lib/ai/intake-provider';
 import type { IntakeImageInput, IntakeScheduleItem } from '@/lib/ai/intake-types';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
@@ -199,14 +199,17 @@ async function parseBodyAsFormData(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authState = await requireApiAuth(request);
-  if (authState instanceof NextResponse) return authState;
+  let authState: AuthState | undefined;
 
   try {
     const contentType = request.headers.get('content-type') || '';
     const parsed = contentType.includes('multipart/form-data')
       ? await parseBodyAsFormData(request)
       : parseBodyAsJson(await request.json().catch(() => ({})));
+
+    const adminAuth = await requireApiAuthForWorkspaceAdmin(request, parsed.workspaceId);
+    if (adminAuth instanceof NextResponse) return adminAuth;
+    authState = adminAuth;
 
     if (!parsed.workspaceId || !parsed.projectId) {
       return finalizeAuthResponse(NextResponse.json({ error: 'workspaceId and projectId are required.' }, { status: 400 }), authState);
