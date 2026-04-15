@@ -1911,7 +1911,7 @@ function InviteManagementSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Temporary manual delivery: create an invite, then copy/share the generated link or token.</p>
+          <p className="mt-1 text-sm text-zinc-400">Create an invite to trigger best-effort email delivery (if configured). Manual link/token sharing remains available as fallback.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/data/server/shared';
 import { createWorkspaceInviteScoped, listWorkspaceInvitesScoped } from '@/lib/data/server/invites';
+import { sendInviteEmailBestEffort } from '@/lib/invites/email-delivery';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   const authState = await requireApiAuth(request);
@@ -34,8 +35,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       expiresAt: body.expiresAt ?? null,
     });
 
+    const origin = request.nextUrl?.origin || request.headers.get('origin') || null;
+    const emailDelivery = await sendInviteEmailBestEffort({
+      invite: created.invite,
+      acceptToken: created.token,
+      requestOrigin: origin,
+    });
+
     return finalizeAuthResponse(
-      NextResponse.json({ invite: created.invite, acceptToken: created.token }, { status: 201 }),
+      NextResponse.json({ invite: created.invite, acceptToken: created.token, emailDelivery }, { status: 201 }),
       authState,
     );
   } catch (error) {

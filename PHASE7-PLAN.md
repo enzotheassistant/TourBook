@@ -51,10 +51,29 @@ Batch 2 interim delivery path (implemented):
 - `npm run build`
 - `npm run lint`
 
-## Monitoring (Batch 2)
+## Batch 3 Scope (Operationalization)
+1. **Outbound invite email integration (safe/incremental)**
+   - Provider-agnostic adapter for invite email delivery.
+   - Concrete provider path via env-selected adapter (`resend`) plus no-op/log adapter fallback.
+   - Trigger best-effort email send on invite creation without blocking invite issuance.
+   - Templated invite email with accept link.
+
+2. **Invite expiry maintenance**
+   - Add idempotent maintenance command to mark expired pending invites.
+   - Document scheduler/cron usage.
+
+3. **Failure visibility / alerting baseline**
+   - Add invite failure report script from `invites.ndjson` for windowed counts + ratio.
+   - Define initial alert thresholds and escalation guidance.
+
+4. **Optional route polish**
+   - Lightweight `/invite/[token]` landing route to normalize deep-link acceptance.
+
+## Monitoring (Batch 2 + Batch 3)
 - `tail -f var/telemetry/invites.ndjson`
 - `grep -o '"event":"[^"]*"' var/telemetry/invites.ndjson | sort | uniq -c`
 - `grep '"event":"invite.failed"' var/telemetry/invites.ndjson | tail -n 20`
+- `npm run invites:failures:report`
 
 ## Rollback
 - Revert Batch 2 UI/telemetry wiring only (safe, no schema changes).
