@@ -342,7 +342,7 @@ async function buildImportTextFromFiles(files: File[]) {
   return textChunks.filter(Boolean).join('\n\n');
 }
 
-export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' | 'team' }) {
+export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' | 'team' | 'projects' }) {
   const {
     activeWorkspaceId,
     activeProjectId,
@@ -359,7 +359,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
   const isTeamMode = mode === 'team';
+  const isProjectsMode = mode === 'projects';
   const statusMessage = searchParams.get('message');
+  const contextProjectId = searchParams.get('contextProjectId');
   const [shows, setShows] = useState<Show[]>([]);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
@@ -387,7 +389,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
   const [newArtistName, setNewArtistName] = useState('');
-  const [renameArtistName, setRenameArtistName] = useState('');
   const [creatingArtist, setCreatingArtist] = useState(false);
   const [renamingArtist, setRenamingArtist] = useState(false);
   const [showManualInviteShare, setShowManualInviteShare] = useState(false);
@@ -403,6 +404,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const formRef = useRef<HTMLDivElement | null>(null);
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
+  const contextInvitePrefillRef = useRef<string | null>(null);
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
   const workspaceProjects = useMemo(
@@ -441,11 +443,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [workspaceProjects]);
 
   useEffect(() => {
-    const current = workspaceProjects.find((project) => project.id === activeProjectId) ?? null;
-    setRenameArtistName(current?.name ?? '');
-  }, [activeProjectId, workspaceProjects]);
-
-  useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
     void loadShows();
   }, [activeProjectId, activeWorkspaceId, contextLoading, loadShows]);
@@ -454,6 +451,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (contextLoading) return;
     void loadInvites();
   }, [contextLoading, loadInvites]);
+
+  useEffect(() => {
+    if (!isTeamMode || !contextProjectId || contextInvitePrefillRef.current === contextProjectId) return;
+    if (!workspaceProjects.some((project) => project.id === contextProjectId)) return;
+    contextInvitePrefillRef.current = contextProjectId;
+    setInviteScopeType('projects');
+    setInviteProjectIds([contextProjectId]);
+    setInviteMessage('Project context loaded. Review scope and create invite when ready.');
+  }, [contextProjectId, isTeamMode, workspaceProjects]);
 
   useEffect(() => {
     if (mode !== 'new') return;
@@ -661,9 +667,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
-  async function handleRenameArtist() {
-    if (!activeWorkspaceId || !activeProjectId || !canManageProjectActions) return;
-    const nextName = renameArtistName.trim();
+  async function handleRenameArtist(projectId: string, nextNameRaw: string) {
+    if (!activeWorkspaceId || !projectId || !canManageProjectActions) return;
+    const nextName = nextNameRaw.trim();
     if (!nextName) {
       setMessage('Enter a new artist name.');
       return;
@@ -671,10 +677,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     setRenamingArtist(true);
     try {
-      const renamed = await renameArtist({ workspaceId: activeWorkspaceId, projectId: activeProjectId, name: nextName });
+      const renamed = await renameArtist({ workspaceId: activeWorkspaceId, projectId, name: nextName });
       await refreshContext();
       setActiveProjectId(renamed.id);
-      setRenameArtistName(renamed.name);
       setMessage('Artist renamed.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to rename artist.');
@@ -1325,6 +1330,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           />
         ) : null}
 
+        {canManageProjectActions && isProjectsMode ? (
+          <ProjectManagementSection
+            projects={workspaceProjects}
+            activeProjectId={activeProjectId}
+            newArtistName={newArtistName}
+            creatingArtist={creatingArtist}
+            renamingArtist={renamingArtist}
+            onNewArtistNameChange={setNewArtistName}
+            onSelectProject={handleArtistSelection}
+            onCreateArtist={() => void handleCreateArtist()}
+            onRenameArtist={(projectId, name) => void handleRenameArtist(projectId, name)}
+          />
+        ) : null}
+
         {!projectsForActiveWorkspace.length ? (
           canManageProjectActions ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
@@ -1632,19 +1651,22 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
           Team
         </Link>
+        <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+          Projects
+        </Link>
       </div>
 
-      {canManageProjectActions ? (
+      {canManageProjectActions && isProjectsMode ? (
         <ProjectManagementSection
-          currentProjectName={workspaceProjects.find((project) => project.id === activeProjectId)?.name ?? null}
+          projects={workspaceProjects}
+          activeProjectId={activeProjectId}
           newArtistName={newArtistName}
-          renameArtistName={renameArtistName}
           creatingArtist={creatingArtist}
           renamingArtist={renamingArtist}
           onNewArtistNameChange={setNewArtistName}
-          onRenameArtistNameChange={setRenameArtistName}
+          onSelectProject={handleArtistSelection}
           onCreateArtist={() => void handleCreateArtist()}
-          onRenameArtist={() => void handleRenameArtist()}
+          onRenameArtist={(projectId, name) => void handleRenameArtist(projectId, name)}
         />
       ) : null}
 
@@ -1964,29 +1986,35 @@ function formatInviteDate(value: string) {
 }
 
 function ProjectManagementSection({
-  currentProjectName,
+  projects,
+  activeProjectId,
   newArtistName,
-  renameArtistName,
   creatingArtist,
   renamingArtist,
   onNewArtistNameChange,
-  onRenameArtistNameChange,
+  onSelectProject,
   onCreateArtist,
   onRenameArtist,
 }: {
-  currentProjectName: string | null;
+  projects: ProjectSummary[];
+  activeProjectId: string | null;
   newArtistName: string;
-  renameArtistName: string;
   creatingArtist: boolean;
   renamingArtist: boolean;
   onNewArtistNameChange: (value: string) => void;
-  onRenameArtistNameChange: (value: string) => void;
+  onSelectProject: (projectId: string | null) => void;
   onCreateArtist: () => void;
-  onRenameArtist: () => void;
+  onRenameArtist: (projectId: string, name: string) => void;
 }) {
+  const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const renameTarget = projects.find((project) => project.id === renameTargetId) ?? null;
+
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project management</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Manage artists</h2>
@@ -2004,16 +2032,79 @@ function ProjectManagementSection({
           </button>
         </div>
 
-        {currentProjectName ? (
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Artists in workspace</p>
+          {projects.length === 0 ? (
+            <p className="text-sm text-zinc-400">No artists yet. Create your first artist above.</p>
+          ) : (
+            <div className="space-y-2">
+              {projects.map((project) => {
+                const isActive = project.id === activeProjectId;
+                return (
+                  <div key={project.id} className={`rounded-xl border px-3 py-2 ${isActive ? 'border-emerald-400/35 bg-emerald-500/10' : 'border-white/10 bg-black/30'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-w-0 flex-1 text-left">
+                        <p className="truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</p>
+                        {isActive ? <p className="text-xs text-emerald-200">Currently selected</p> : null}
+                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setMenuProjectId((current) => (current === project.id ? null : project.id))}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]"
+                          aria-label={`Project options for ${project.name || project.slug || project.id}`}
+                        >
+                          ⋯
+                        </button>
+                        {menuProjectId === project.id ? (
+                          <div className="absolute right-0 z-10 mt-2 min-w-44 rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-lg shadow-black/60">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRenameTargetId(project.id);
+                                setRenameValue(project.name || project.slug || '');
+                                setMenuProjectId(null);
+                              }}
+                              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
+                            >
+                              Rename artist
+                            </button>
+                            <Link
+                              href={`/admin/team?contextProjectId=${encodeURIComponent(project.id)}`}
+                              className="block rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
+                              onClick={() => setMenuProjectId(null)}
+                            >
+                              Invite teammate to this artist
+                            </Link>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {renameTarget ? (
+          <div className="grid gap-2 rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
-              value={renameArtistName}
-              onChange={(event) => onRenameArtistNameChange(event.target.value)}
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
               placeholder="Rename selected artist"
               className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
             />
-            <button type="button" onClick={onRenameArtist} disabled={renamingArtist || !renameArtistName.trim()} className={secondaryButtonClassName()}>
-              {renamingArtist ? 'Renaming…' : 'Rename artist'}
+            <button
+              type="button"
+              onClick={() => onRenameArtist(renameTarget.id, renameValue)}
+              disabled={renamingArtist || !renameValue.trim()}
+              className={secondaryButtonClassName()}
+            >
+              {renamingArtist ? 'Renaming…' : 'Save rename'}
+            </button>
+            <button type="button" onClick={() => { setRenameTargetId(null); setRenameValue(''); }} className={secondaryButtonClassName()}>
+              Cancel
             </button>
           </div>
         ) : null}
@@ -2074,7 +2165,7 @@ function InviteManagementSection({
           <p className="mt-1 text-sm text-zinc-400">Invites are sent to email first. If email fails, you can share a manual link.</p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_180px_auto]">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
@@ -2091,37 +2182,74 @@ function InviteManagementSection({
             <option value="editor">Editor</option>
             <option value="admin">Admin</option>
           </select>
-          <select
-            value={scopeType}
-            onChange={(event) => onScopeTypeChange(event.target.value as 'workspace' | 'projects')}
-            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
-          >
-            <option value="workspace">Workspace-wide</option>
-            <option value="projects">Project-limited</option>
-          </select>
           <button type="button" onClick={onCreateInvite} disabled={creating} className={primaryButtonClassName()}>
             {creating ? 'Creating…' : 'Create invite'}
           </button>
         </div>
 
-        {scopeType === 'projects' ? (
-          <label className="grid gap-2 text-sm text-zinc-300">
-            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project scope (Artists)</span>
-            <select
-              multiple
-              value={scopeProjectIds}
-              onChange={(event) => {
-                const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-                onScopeProjectIdsChange(selected);
-              }}
-              className="min-h-24 rounded-2xl border border-white/10 bg-black/20 px-4 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
-            >
-              {availableProjects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name || project.slug || project.id}</option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
+          <div className="mt-2 space-y-2">
+            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="radio"
+                name="invite-scope"
+                checked={scopeType === 'workspace'}
+                onChange={() => onScopeTypeChange('workspace')}
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
+              />
+              <span>
+                <span className="block font-medium">Workspace-wide</span>
+                <span className="text-xs text-zinc-500">Can access every artist in this workspace.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="radio"
+                name="invite-scope"
+                checked={scopeType === 'projects'}
+                onChange={() => {
+                  if (scopeType !== 'projects') onScopeProjectIdsChange([]);
+                  onScopeTypeChange('projects');
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
+              />
+              <span>
+                <span className="block font-medium">Project-limited</span>
+                <span className="text-xs text-zinc-500">Select specific artists below.</span>
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Projects (Artists)</p>
+            {availableProjects.length === 0 ? (
+              <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
+            ) : (
+              availableProjects.map((project) => {
+                const checked = scopeProjectIds.includes(project.id);
+                return (
+                  <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={scopeType !== 'projects'}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                          ? [...scopeProjectIds, project.id]
+                          : scopeProjectIds.filter((id) => id !== project.id);
+                        onScopeTypeChange('projects');
+                        onScopeProjectIdsChange([...new Set(next)]);
+                      }}
+                      className="h-4 w-4 rounded border-white/20 bg-black/20"
+                    />
+                    <span>{project.name || project.slug || project.id}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
 
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
