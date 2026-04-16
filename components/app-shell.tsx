@@ -30,7 +30,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:max-h-[70vh] sm:w-[340px] sm:rounded-2xl">
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
         <div className="mb-3 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-100">Switch project</p>
@@ -38,7 +38,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
             ×
           </button>
         </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1 sm:max-h-[50vh]">
           {projects.map((project) => {
             const active = project.id === activeProjectId;
             return (
