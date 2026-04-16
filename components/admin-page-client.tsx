@@ -1382,15 +1382,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onCancel={() => closeConfirmation(false)}
       />
       {importOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:p-5">
-            <div className="mb-3 flex items-start gap-3">
-              <button type="button" onClick={closeImportModal} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 px-4 py-4 backdrop-blur-sm sm:flex sm:items-center sm:justify-center sm:py-6">
+          <div className="mx-auto mt-[max(env(safe-area-inset-top),0.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:mt-0 sm:max-h-[calc(100vh-3rem)] sm:p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">AI Intake</p>
                 <h2 className="mt-1 text-lg font-semibold tracking-tight text-zinc-100 sm:text-2xl">Insert text, spreadsheets or images</h2>
                 <p className="mt-1 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
               </div>
+              <button type="button" onClick={closeImportModal} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
 
             <div className="grid gap-4 xl:max-h-[calc(100vh-10rem)] xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:overflow-hidden">
@@ -1590,70 +1590,83 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={async () => {
-            if (mode === 'new') {
-              if (dirty) {
-                const confirmed = await requestConfirmation({
-                  title: 'Discard edits?',
-                  description: isEditing
-                    ? 'You have unsaved edits. Start a new date instead?'
-                    : 'You have unsaved changes. Start a fresh new date?',
-                  confirmLabel: 'Discard',
-                });
-                if (!confirmed) return;
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+          <span>Operations</span>
+          <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              if (mode === 'new') {
+                if (dirty) {
+                  const confirmed = await requestConfirmation({
+                    title: 'Discard edits?',
+                    description: isEditing
+                      ? 'You have unsaved edits. Start a new date instead?'
+                      : 'You have unsaved changes. Start a fresh new date?',
+                    confirmLabel: 'Discard',
+                  });
+                  if (!confirmed) return;
+                }
+                resetForm('Ready to create');
+                return;
               }
-              resetForm('Ready to create');
-              return;
-            }
-            window.location.href = '/admin';
-          }}
-          className={adminTabClassName(mode === 'new' && !isEditing)}
-        >
-          New Date
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (mode === 'new') {
-              if (dirty) {
-                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
-                if (!confirmed) return;
+              window.location.href = '/admin';
+            }}
+            className={adminTabClassName(mode === 'new' && !isEditing)}
+          >
+            New Date
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (mode === 'new') {
+                if (dirty) {
+                  const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
+                  if (!confirmed) return;
+                }
+                window.location.href = '/admin/dates';
+                return;
               }
               window.location.href = '/admin/dates';
-              return;
-            }
-            window.location.href = '/admin/dates';
-          }}
-          className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
-        >
-          Existing Dates
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (mode === 'new') {
-              if (dirty) {
-                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
-                if (!confirmed) return;
+            }}
+            className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
+          >
+            Existing Dates
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (mode === 'new') {
+                if (dirty) {
+                  const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
+                  if (!confirmed) return;
+                }
+                window.location.href = '/admin/drafts';
+                return;
               }
               window.location.href = '/admin/drafts';
-              return;
-            }
-            window.location.href = '/admin/drafts';
-          }}
-          className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
-        >
-          Drafts
-        </button>
-        <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
-          Team
-        </Link>
-        <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
-          Projects
-        </Link>
+            }}
+            className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
+          >
+            Drafts
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+          <span>Workspace</span>
+          <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+            Team
+          </Link>
+          <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+            Projects
+          </Link>
+        </div>
       </div>
 
       {canManageProjectActions && isProjectsMode ? (
@@ -1760,15 +1773,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
-                <div className="grid gap-3 md:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)]">
-                  <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[64px]" />
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[64px]" />
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[72px]" />
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
+                  <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[64px]" />
-                  <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[64px]" />
-                </div>
-                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[64px]" />
+                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[72px]" />
               </div>
             </CollapsibleSection>
 
@@ -2066,15 +2077,15 @@ function ProjectManagementSection({
                                 setMenuProjectId(null);
                               }}
                               className="block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                            >
-                              Rename artist
+>
+                              Rename
                             </button>
                             <Link
                               href={`/admin/team?contextProjectId=${encodeURIComponent(project.id)}`}
                               className="block rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
                               onClick={() => setMenuProjectId(null)}
                             >
-                              Invite teammate to this artist
+                              Invite
                             </Link>
                           </div>
                         ) : null}
