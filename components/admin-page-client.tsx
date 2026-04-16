@@ -75,7 +75,7 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `inline-flex min-h-10 max-w-[72vw] items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-3 py-2 text-sm transition sm:max-w-none sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 
@@ -1738,7 +1738,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               </div>
             ) : <div />}
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <div className="flex w-full items-center justify-end gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:overflow-visible sm:pb-0">
+              <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {isEditingDraft ? (
                   <>
                     <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
@@ -1757,13 +1757,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   </button>
                 ) : (
                   <>
-                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
                       Import
                     </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 shrink-0 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
                       {saving ? 'Saving...' : 'Create Date'}
                     </button>
                   </>

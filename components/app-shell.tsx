@@ -171,6 +171,42 @@ function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
   );
 }
 
+function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; actionLabel: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handle(event: MouseEvent) {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-xl text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]"
+        aria-label="Open account menu"
+      >
+        …
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+          <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+            {actionLabel}
+          </Link>
+          <div className="px-2 py-2">
+            <LogoutButton compact />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppShell({
   children,
   activeTab = 'upcoming',
@@ -201,7 +237,7 @@ export function AppShell({
       <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
         <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-4'} sm:px-6`}>
           <div className={`flex items-start justify-between gap-3 ${mode === 'admin' ? 'pb-3' : 'pb-4'}`}>
-            <div className="min-w-0 space-y-2">
+            <div className="min-w-0 flex-1 space-y-2">
               <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
                 {displayTitle}
               </Link>
@@ -210,7 +246,7 @@ export function AppShell({
             </div>
 
             {isCrewList ? (
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {activeTab === 'past' ? (
                   <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
                     ←
@@ -220,13 +256,19 @@ export function AppShell({
                 <CrewMenu activeTab={activeTab} />
               </div>
             ) : (
-              <div className="flex items-center gap-2 self-start">
-                {mode === 'admin' ? null : <ProjectSwitchControl />}
-                <Link href={actionHref} className={ghostButtonClassName()}>
-                  {actionLabel}
-                </Link>
-                <LogoutButton />
-              </div>
+              <>
+                <div className="flex shrink-0 items-center gap-2 self-start sm:hidden">
+                  {mode === 'admin' ? null : <ProjectSwitchControl />}
+                  <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
+                </div>
+                <div className="hidden shrink-0 items-center gap-2 self-start sm:flex">
+                  {mode === 'admin' ? null : <ProjectSwitchControl />}
+                  <Link href={actionHref} className={ghostButtonClassName()}>
+                    {actionLabel}
+                  </Link>
+                  <LogoutButton />
+                </div>
+              </>
             )}
           </div>
           {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
