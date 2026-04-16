@@ -16,13 +16,28 @@ function iconButtonClassName() {
 }
 
 function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect }: { open: boolean; onClose: () => void; projects: Array<{ id: string; name: string; slug: string | null }>; activeProjectId: string | null; onSelect: (projectId: string) => void; }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose();
     }
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (!panelRef.current) return;
+      const target = event.target as Node | null;
+      if (target && !panelRef.current.contains(target)) {
+        onClose();
+      }
+    }
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -30,7 +45,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
+      <div ref={panelRef} className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
         <div className="mb-3 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-100">Switch project</p>
