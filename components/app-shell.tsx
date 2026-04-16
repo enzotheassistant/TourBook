@@ -60,20 +60,6 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
   );
 }
 
-function CurrentProjectPill() {
-  const { activeWorkspaceId, activeProjectId, projects } = useAppContext();
-  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
-  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? null;
-
-  if (!currentProject) return null;
-
-  return (
-    <span className="inline-flex max-w-[220px] items-center truncate rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300" title={currentProject.name || currentProject.slug || currentProject.id}>
-      <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
-    </span>
-  );
-}
-
 function AdminProjectSelector() {
   const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
   const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
@@ -108,6 +94,7 @@ function ProjectSwitchControl() {
   const [open, setOpen] = useState(false);
   const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
   const showSwitch = canSwitchProject(projects, activeWorkspaceId);
+  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
 
   function handleSelect(projectId: string) {
     const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
@@ -115,18 +102,19 @@ function ProjectSwitchControl() {
     setOpen(false);
   }
 
-  if (!showSwitch) return null;
+  if (!currentProject || !showSwitch) return null;
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 items-center rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100"
+        className="inline-flex h-8 max-w-[220px] items-center gap-1 rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100"
         aria-label="Switch project"
-        title="Switch project"
+        title={currentProject.name || currentProject.slug || currentProject.id}
       >
-        Project
+        <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
+        <span aria-hidden="true" className="text-zinc-500">▾</span>
       </button>
       <ProjectSwitchSheet open={open} onClose={() => setOpen(false)} projects={scopedProjects} activeProjectId={activeProjectId} onSelect={handleSelect} />
     </>
@@ -134,10 +122,8 @@ function ProjectSwitchControl() {
 }
 
 function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
-  const { activeWorkspaceId, projects } = useAppContext();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  const showProjectSwitch = canSwitchProject(projects, activeWorkspaceId);
 
   useEffect(() => {
     function handle(event: MouseEvent) {
@@ -157,11 +143,6 @@ function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
           <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
             {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
           </Link>
-          {showProjectSwitch ? (
-            <div className="border-b border-white/5 px-4 py-2">
-              <ProjectSwitchControl />
-            </div>
-          ) : null}
           <div className="border-b border-white/10" />
           <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
             Admin
@@ -191,9 +172,14 @@ export function AppShell({
   showSubtitle?: boolean;
 }) {
   const pathname = usePathname();
+  const { activeWorkspaceId, activeProjectId, projects } = useAppContext();
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
+  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
+  const displayTitle = mode === 'crew' ? (currentProject?.name || currentProject?.slug || title) : title;
+  const shouldShowSubtitle = mode === 'admin' ? showSubtitle : false;
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -202,10 +188,10 @@ export function AppShell({
           <div className={`flex items-start justify-between gap-3 ${mode === 'admin' ? 'pb-3' : 'pb-4'}`}>
             <div className="min-w-0 space-y-2">
               <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
-                {title}
+                {displayTitle}
               </Link>
-              {showSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
-              {mode === 'admin' ? <AdminProjectSelector /> : <CurrentProjectPill />}
+              {shouldShowSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
+              {mode === 'admin' ? <AdminProjectSelector /> : null}
             </div>
 
             {isCrewList ? (
@@ -215,6 +201,7 @@ export function AppShell({
                     ←
                   </Link>
                 ) : null}
+                <ProjectSwitchControl />
                 <CrewMenu activeTab={activeTab} />
               </div>
             ) : (
