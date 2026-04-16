@@ -30,7 +30,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:rounded-2xl">
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:max-h-[70vh] sm:w-[340px] sm:rounded-2xl">
         <div className="mb-3 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-100">Switch project</p>
@@ -38,7 +38,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
             ×
           </button>
         </div>
-        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {projects.map((project) => {
             const active = project.id === activeProjectId;
             return (
@@ -109,7 +109,7 @@ function ProjectSwitchControl() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 max-w-[220px] items-center gap-1 rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100"
+        className="inline-flex h-9 max-w-[55vw] items-center gap-1 rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100 sm:h-8 sm:max-w-[220px]"
         aria-label="Switch project"
         title={currentProject.name || currentProject.slug || currentProject.id}
       >

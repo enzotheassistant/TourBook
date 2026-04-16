@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ApiError, isMissingRelationError, requireWorkspaceAccess, requireScopedDataClient } from '@/lib/data/server/shared';
+import { ApiError, ensureProjectInWorkspace, isMissingRelationError, requireWorkspaceAccess, requireScopedDataClient } from '@/lib/data/server/shared';
 import type { ProjectSummary } from '@/lib/types/tenant';
 
-function normalizeProjectName(value: string) {
-  return value.trim().replace(/s+/g, ' ');
+export function normalizeProjectName(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
 }
 
 async function assertProjectNameAvailable(
@@ -30,7 +30,7 @@ async function assertProjectNameAvailable(
   const duplicate = (data ?? []).some((row: any) => {
     const sameId = excludeProjectId && String(row.id) === excludeProjectId;
     if (sameId) return false;
-    const rowName = String(row.name ?? '').trim().replace(/s+/g, ' ').toLowerCase();
+    const rowName = String(row.name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
     return rowName === normalized;
   });
 
@@ -171,4 +171,62 @@ export async function renameProjectScoped(
     slug: data.slug ? String(data.slug) : null,
     archivedAt: null,
   };
+}
+
+
+export async function deleteProjectScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  input: { workspaceId: string; projectId: string },
+): Promise<{ ok: true }> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const access = await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner']);
+
+  if (access.scopeType !== 'workspace') {
+    throw new ApiError(403, 'Project-limited members cannot delete artists.');
+  }
+
+  await ensureProjectInWorkspace(supabase, input.workspaceId, input.projectId);
+
+  const [{ count: datesCount, error: datesError }, { count: toursCount, error: toursError }] = await Promise.all([
+    supabase
+      .from('dates')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', input.workspaceId)
+      .eq('project_id', input.projectId),
+    supabase
+      .from('tours')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', input.workspaceId)
+      .eq('project_id', input.projectId),
+  ]);
+
+  if (datesError) {
+    if (isMissingRelationError(datesError)) throw new ApiError(409, 'Dates schema is not ready yet.');
+    throw new ApiError(500, datesError.message);
+  }
+
+  if (toursError) {
+    if (isMissingRelationError(toursError)) throw new ApiError(409, 'Tours schema is not ready yet.');
+    throw new ApiError(500, toursError.message);
+  }
+
+  if ((datesCount ?? 0) > 0 || (toursCount ?? 0) > 0) {
+    throw new ApiError(409, 'This artist cannot be deleted because it still has related dates or tours. Remove related data first.');
+  }
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', input.projectId)
+    .eq('workspace_id', input.workspaceId);
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      throw new ApiError(409, 'Projects schema is not ready yet.');
+    }
+    throw new ApiError(500, error.message);
+  }
+
+  return { ok: true };
 }

@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
@@ -75,7 +75,7 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs transition sm:px-3 sm:py-2 sm:text-sm ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `inline-flex min-h-10 max-w-[72vw] items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-3 py-2 text-sm transition sm:max-w-none sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 
@@ -412,6 +412,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     [projects, activeWorkspaceId],
   );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
+  const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
 
@@ -685,6 +686,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setMessage(error instanceof Error ? error.message : 'Unable to rename artist.');
     } finally {
       setRenamingArtist(false);
+    }
+  }
+
+  async function handleDeleteArtist(project: ProjectSummary) {
+    if (!activeWorkspaceId || !isWorkspaceOwner) return;
+    const projectName = project.name || project.slug || project.id;
+    const confirmed = await requestConfirmation({
+      title: 'Delete artist?',
+      description: `Are you sure you want to delete ${projectName}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteArtist({ workspaceId: activeWorkspaceId, projectId: project.id });
+      await refreshContext();
+      if (activeProjectId === project.id) {
+        const remaining = workspaceProjects.filter((item) => item.id !== project.id);
+        setActiveProjectId(remaining[0]?.id ?? null);
+      }
+      setMessage('Artist deleted.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to delete artist.');
     }
   }
 
@@ -1341,6 +1366,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onSelectProject={handleArtistSelection}
             onCreateArtist={() => void handleCreateArtist()}
             onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
+            canDeleteArtist={isWorkspaceOwner}
+            onDeleteArtist={(project) => void handleDeleteArtist(project)}
           />
         ) : null}
 
@@ -1590,7 +1617,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Operations</span>
         <button
           type="button"
@@ -1671,6 +1698,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onSelectProject={handleArtistSelection}
           onCreateArtist={() => void handleCreateArtist()}
           onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
+          canDeleteArtist={isWorkspaceOwner}
+          onDeleteArtist={(project) => void handleDeleteArtist(project)}
         />
       ) : null}
 
@@ -1997,6 +2026,8 @@ function ProjectManagementSection({
   onSelectProject,
   onCreateArtist,
   onRenameArtist,
+  canDeleteArtist,
+  onDeleteArtist,
 }: {
   projects: ProjectSummary[];
   activeProjectId: string | null;
@@ -2007,12 +2038,38 @@ function ProjectManagementSection({
   onSelectProject: (projectId: string | null) => void;
   onCreateArtist: () => void;
   onRenameArtist: (projectId: string, name: string) => Promise<void>;
+  canDeleteArtist: boolean;
+  onDeleteArtist: (project: ProjectSummary) => void;
 }) {
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const menuRootRef = useRef<HTMLDivElement | null>(null);
 
   const renameTarget = projects.find((project) => project.id === renameTargetId) ?? null;
+
+  useEffect(() => {
+    if (!menuProjectId) return;
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (!menuRootRef.current?.contains(event.target as Node)) {
+        setMenuProjectId(null);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMenuProjectId(null);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuProjectId]);
   const canUseDom = typeof document !== 'undefined';
 
   return (
@@ -2040,7 +2097,7 @@ function ProjectManagementSection({
           {projects.length === 0 ? (
             <p className="text-sm text-zinc-400">No artists yet. Create your first artist above.</p>
           ) : (
-            <div className="space-y-2">
+            <div ref={menuRootRef} className="space-y-2">
               {projects.map((project) => {
                 const isActive = project.id === activeProjectId;
                 return (
@@ -2079,6 +2136,18 @@ function ProjectManagementSection({
                             >
                               Invite
                             </Link>
+                            {canDeleteArtist ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMenuProjectId(null);
+                                  onDeleteArtist(project);
+                                }}
+                                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-200 transition hover:bg-red-500/10"
+                              >
+                                Delete
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>

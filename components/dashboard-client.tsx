@@ -38,7 +38,7 @@ function sortTourNamesForPast(shows: Show[]) {
 
 function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel: string }) {
   return (
-    <div className="relative w-[132px] shrink-0 sm:w-[176px]">
+    <div className="relative w-[146px] shrink-0 sm:w-[176px]">
       <select value={value} aria-label={ariaLabel} onChange={(event) => onChange(event.target.value)} className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/40 focus:bg-white/[0.03]">
         {options.map((option) => <option key={option} value={option}>{option === 'All' ? 'All' : option}</option>)}
       </select>
@@ -51,7 +51,7 @@ function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; 
 
 function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="relative min-w-[220px] flex-1">
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search" aria-label="Search dates" className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40" />
       {value ? <button type="button" onClick={() => onChange('')} className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Clear search">×</button> : null}
     </div>
@@ -250,7 +250,7 @@ export function DashboardClient() {
       <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-5 py-5">
         <div className="space-y-3">
           <span className="block whitespace-nowrap text-[13px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:text-sm sm:tracking-[0.24em]">{tab === 'past' ? 'Past Dates' : 'Upcoming Dates'}</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <SearchInput value={tab === 'past' ? pastSearch : upcomingSearch} onChange={tab === 'past' ? setPastSearch : setUpcomingSearch} />
             <FilterSelect value={tab === 'past' ? pastTour : upcomingTour} onChange={tab === 'past' ? setPastTour : setUpcomingTour} options={tab === 'past' ? pastTours : upcomingTours} ariaLabel={`${tab} dates tour filter`} />
           </div>

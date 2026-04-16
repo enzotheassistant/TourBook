@@ -205,6 +205,13 @@ export async function renameArtist(input: { workspaceId: string; projectId: stri
   });
 }
 
+export async function deleteArtist(input: { workspaceId: string; projectId: string }) {
+  return request<{ ok: boolean }>(`/api/projects/${encodeURIComponent(input.projectId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ workspaceId: input.workspaceId }),
+  });
+}
+
 export async function listWorkspaceInvites(workspaceId: string) {
   const payload = await request<{ invites: WorkspaceInviteSummary[] }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/invites`);
   return payload.invites ?? [];
