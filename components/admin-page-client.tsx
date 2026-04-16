@@ -1590,83 +1590,74 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : null}
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-          <span>Operations</span>
-          <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              if (mode === 'new') {
-                if (dirty) {
-                  const confirmed = await requestConfirmation({
-                    title: 'Discard edits?',
-                    description: isEditing
-                      ? 'You have unsaved edits. Start a new date instead?'
-                      : 'You have unsaved changes. Start a fresh new date?',
-                    confirmLabel: 'Discard',
-                  });
-                  if (!confirmed) return;
-                }
-                resetForm('Ready to create');
-                return;
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Operations</span>
+        <button
+          type="button"
+          onClick={async () => {
+            if (mode === 'new') {
+              if (dirty) {
+                const confirmed = await requestConfirmation({
+                  title: 'Discard edits?',
+                  description: isEditing
+                    ? 'You have unsaved edits. Start a new date instead?'
+                    : 'You have unsaved changes. Start a fresh new date?',
+                  confirmLabel: 'Discard',
+                });
+                if (!confirmed) return;
               }
-              window.location.href = '/admin';
-            }}
-            className={adminTabClassName(mode === 'new' && !isEditing)}
-          >
-            New Date
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              if (mode === 'new') {
-                if (dirty) {
-                  const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
-                  if (!confirmed) return;
-                }
-                window.location.href = '/admin/dates';
-                return;
+              resetForm('Ready to create');
+              return;
+            }
+            window.location.href = '/admin';
+          }}
+          className={adminTabClassName(mode === 'new' && !isEditing)}
+        >
+          New Date
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (mode === 'new') {
+              if (dirty) {
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
+                if (!confirmed) return;
               }
               window.location.href = '/admin/dates';
-            }}
-            className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
-          >
-            Existing Dates
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              if (mode === 'new') {
-                if (dirty) {
-                  const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
-                  if (!confirmed) return;
-                }
-                window.location.href = '/admin/drafts';
-                return;
+              return;
+            }
+            window.location.href = '/admin/dates';
+          }}
+          className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
+        >
+          Existing Dates
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            if (mode === 'new') {
+              if (dirty) {
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
+                if (!confirmed) return;
               }
               window.location.href = '/admin/drafts';
-            }}
-            className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
-          >
-            Drafts
-          </button>
-        </div>
+              return;
+            }
+            window.location.href = '/admin/drafts';
+          }}
+          className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
+        >
+          Drafts
+        </button>
 
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-          <span>Workspace</span>
-          <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
-            Team
-          </Link>
-          <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
-            Projects
-          </Link>
-        </div>
+        <span className="mx-1 h-5 w-px bg-white/10" aria-hidden="true" />
+        <span className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Workspace</span>
+        <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+          Team
+        </Link>
+        <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+          Projects
+        </Link>
       </div>
 
       {canManageProjectActions && isProjectsMode ? (
@@ -2173,7 +2164,6 @@ function InviteManagementSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Invites are sent to email first. If email fails, you can share a manual link.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
