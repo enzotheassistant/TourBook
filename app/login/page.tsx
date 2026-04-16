@@ -150,18 +150,11 @@ export default function LoginPage() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           {mode === "signup" ? "Create account" : mode === "forgot" ? "Reset password" : "Sign in"}
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          {mode === "signup"
-            ? "Use your email and password to create an account."
-            : mode === "forgot"
-              ? "Enter your email to get a password reset link."
-              : "Use your email and password to access your workspace."}
-        </p>
         {inviteToken ? (
           <p className="mt-2 text-xs text-emerald-300">Invite token detected. Complete auth and invite acceptance will continue.</p>
         ) : null}
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/20 p-1">
           <button
             type="button"
             onClick={() => {
@@ -169,7 +162,7 @@ export default function LoginPage() {
               setError("");
               setSuccess("");
             }}
-            className={`rounded-full border px-3 py-1.5 text-xs transition ${mode === "signin" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-300 hover:border-white/20"}`}
+            className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signin" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
           >
             Sign in
           </button>
@@ -180,20 +173,9 @@ export default function LoginPage() {
               setError("");
               setSuccess("");
             }}
-            className={`rounded-full border px-3 py-1.5 text-xs transition ${mode === "signup" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-300 hover:border-white/20"}`}
+            className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signup" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
           >
             Create account
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("forgot");
-              setError("");
-              setSuccess("");
-            }}
-            className={`rounded-full border px-3 py-1.5 text-xs transition ${mode === "forgot" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-300 hover:border-white/20"}`}
-          >
-            Forgot password
           </button>
         </div>
 
@@ -230,8 +212,33 @@ export default function LoginPage() {
                 minLength={8}
                 required
               />
+              {mode === "signin" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("forgot");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className="mt-2 text-xs text-zinc-400 transition hover:text-zinc-200"
+                >
+                  Forgot password?
+                </button>
+              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError("");
+                setSuccess("");
+              }}
+              className="text-xs text-zinc-400 transition hover:text-zinc-200"
+            >
+              Back to sign in
+            </button>
+          )}
 
           {error ? <p className="text-sm text-rose-300">{error}</p> : null}
           {success ? <p className="text-sm text-emerald-300">{success}</p> : null}

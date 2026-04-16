@@ -74,6 +74,35 @@ function CurrentProjectPill() {
   );
 }
 
+function AdminProjectSelector() {
+  const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
+  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
+
+  if (!currentProject) return null;
+
+  return (
+    <div className="pt-1">
+      <label htmlFor="admin-project-selector" className="sr-only">Active project</label>
+      <select
+        id="admin-project-selector"
+        value={currentProject.id}
+        onChange={(event) => {
+          const next = pickNextProjectId(activeProjectId, event.target.value, scopedProjects);
+          if (next !== activeProjectId) setActiveProjectId(next);
+        }}
+        className="h-8 max-w-[260px] rounded-lg border border-white/15 bg-white/[0.03] px-2 text-xs text-zinc-200 outline-none transition hover:border-white/25 focus:border-white/30"
+      >
+        {scopedProjects.map((project) => (
+          <option key={project.id} value={project.id} className="bg-zinc-900 text-zinc-100">
+            {project.name || project.slug || project.id}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function ProjectSwitchControl() {
   const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
   const [open, setOpen] = useState(false);
@@ -163,7 +192,7 @@ export function AppShell({
                 {title}
               </Link>
               {showSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
-              <CurrentProjectPill />
+              {mode === 'admin' ? <AdminProjectSelector /> : <CurrentProjectPill />}
             </div>
 
             {isCrewList ? (
@@ -178,7 +207,7 @@ export function AppShell({
               </div>
             ) : (
               <div className="flex items-center gap-2 self-start">
-                <ProjectSwitchControl />
+                {mode === 'admin' ? null : <ProjectSwitchControl />}
                 <Link href={actionHref} className={ghostButtonClassName()}>
                   {actionLabel}
                 </Link>
