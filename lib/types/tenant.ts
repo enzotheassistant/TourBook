@@ -1,4 +1,5 @@
 export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type WorkspaceScopeType = 'workspace' | 'projects';
 
 export type WorkspaceSummary = {
   id: string;
@@ -12,6 +13,8 @@ export type WorkspaceMemberSummary = {
   workspaceId: string;
   userId: string;
   role: WorkspaceRole;
+  scopeType: WorkspaceScopeType;
+  projectIds: string[];
 };
 
 export type ProjectSummary = {
@@ -46,6 +49,8 @@ export type WorkspaceInviteSummary = {
   workspaceId: string;
   email: string;
   role: WorkspaceInviteRole;
+  scopeType: WorkspaceScopeType;
+  projectIds: string[];
   status: WorkspaceInviteStatus;
   invitedByUserId: string;
   acceptedByUserId: string | null;

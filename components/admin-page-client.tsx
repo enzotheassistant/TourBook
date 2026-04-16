@@ -17,7 +17,7 @@ import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 function slugify(value: string) {
@@ -369,6 +369,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
+  const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects'>('workspace');
+  const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -399,6 +401,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const workspaceProjects = useMemo(
+    () => projects.filter((project) => project.workspaceId === activeWorkspaceId),
+    [projects, activeWorkspaceId],
+  );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
 
@@ -424,6 +430,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInvitesLoading(false);
     }
   }, [activeWorkspaceId, canManageInvitesInWorkspace]);
+
+  useEffect(() => {
+    setInviteProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
+  }, [workspaceProjects]);
 
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
@@ -648,15 +658,28 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
+    if (inviteScopeType === 'projects' && inviteProjectIds.length === 0) {
+      setInviteMessage('Select at least one artist for project-limited access.');
+      return;
+    }
+
     setCreatingInvite(true);
     setInviteMessage('');
     setLastInviteShare(null);
 
     try {
-      const created = await createWorkspaceInvite({ workspaceId: activeWorkspaceId, email: inviteEmail.trim(), role: inviteRole });
+      const created = await createWorkspaceInvite({
+        workspaceId: activeWorkspaceId,
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        scopeType: inviteScopeType,
+        projectIds: inviteScopeType === 'projects' ? inviteProjectIds : [],
+      });
       const inviteLink = `${window.location.origin}/?inviteToken=${encodeURIComponent(created.acceptToken)}`;
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteEmail('');
+      setInviteProjectIds([]);
+      setInviteScopeType('workspace');
       setInvites((current) => [created.invite, ...current]);
       setInviteMessage('Invite created. Copy and share the one-time link below.');
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
@@ -1251,11 +1274,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             loading={invitesLoading}
             email={inviteEmail}
             role={inviteRole}
+            scopeType={inviteScopeType}
+            scopeProjectIds={inviteProjectIds}
+            availableProjects={workspaceProjects}
             message={inviteMessage}
             creating={creatingInvite}
             lastInviteShare={lastInviteShare}
             onEmailChange={setInviteEmail}
             onRoleChange={setInviteRole}
+            onScopeTypeChange={setInviteScopeType}
+            onScopeProjectIdsChange={setInviteProjectIds}
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
             onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -1574,11 +1602,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           loading={invitesLoading}
           email={inviteEmail}
           role={inviteRole}
+          scopeType={inviteScopeType}
+          scopeProjectIds={inviteProjectIds}
+          availableProjects={workspaceProjects}
           message={inviteMessage}
           creating={creatingInvite}
           lastInviteShare={lastInviteShare}
           onEmailChange={setInviteEmail}
           onRoleChange={setInviteRole}
+          onScopeTypeChange={setInviteScopeType}
+          onScopeProjectIdsChange={setInviteProjectIds}
           onCreateInvite={() => void handleCreateInvite()}
           onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
           onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -1881,11 +1914,16 @@ function InviteManagementSection({
   loading,
   email,
   role,
+  scopeType,
+  scopeProjectIds,
+  availableProjects,
   message,
   creating,
   lastInviteShare,
   onEmailChange,
   onRoleChange,
+  onScopeTypeChange,
+  onScopeProjectIdsChange,
   onCreateInvite,
   onRevokeInvite,
   onCopyValue,
@@ -1894,11 +1932,16 @@ function InviteManagementSection({
   loading: boolean;
   email: string;
   role: WorkspaceInviteRole;
+  scopeType: 'workspace' | 'projects';
+  scopeProjectIds: string[];
+  availableProjects: ProjectSummary[];
   message: string;
   creating: boolean;
   lastInviteShare: { token: string; link: string } | null;
   onEmailChange: (value: string) => void;
   onRoleChange: (value: WorkspaceInviteRole) => void;
+  onScopeTypeChange: (value: 'workspace' | 'projects') => void;
+  onScopeProjectIdsChange: (value: string[]) => void;
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
   onCopyValue: (value: string, successMessage: string) => void;
@@ -1914,7 +1957,7 @@ function InviteManagementSection({
           <p className="mt-1 text-sm text-zinc-400">Create an invite to trigger best-effort email delivery (if configured). Manual link/token sharing remains available as fallback.</p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_180px_auto]">
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
@@ -1931,10 +1974,37 @@ function InviteManagementSection({
             <option value="editor">Editor</option>
             <option value="admin">Admin</option>
           </select>
+          <select
+            value={scopeType}
+            onChange={(event) => onScopeTypeChange(event.target.value as 'workspace' | 'projects')}
+            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+          >
+            <option value="workspace">Workspace-wide</option>
+            <option value="projects">Project-limited</option>
+          </select>
           <button type="button" onClick={onCreateInvite} disabled={creating} className={primaryButtonClassName()}>
             {creating ? 'Creating…' : 'Create invite'}
           </button>
         </div>
+
+        {scopeType === 'projects' ? (
+          <label className="grid gap-2 text-sm text-zinc-300">
+            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project scope (Artists)</span>
+            <select
+              multiple
+              value={scopeProjectIds}
+              onChange={(event) => {
+                const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+                onScopeProjectIdsChange(selected);
+              }}
+              className="min-h-24 rounded-2xl border border-white/10 bg-black/20 px-4 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+            >
+              {availableProjects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name || project.slug || project.id}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
@@ -1964,7 +2034,7 @@ function InviteManagementSection({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-sm text-zinc-100">{invite.email}</p>
-                      <p className="text-xs text-zinc-400">{invite.role} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
+                      <p className="text-xs text-zinc-400">{invite.role} • {invite.scopeType === 'workspace' ? 'workspace-wide' : `projects (${invite.projectIds.length})`} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
                     </div>
                     {invite.status === 'pending' ? (
                       <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>

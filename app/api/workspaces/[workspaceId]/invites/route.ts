@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/data/server/shared';
-import { createWorkspaceInviteScoped, listWorkspaceInvitesScoped } from '@/lib/data/server/invites';
+import { createWorkspaceInviteScoped, getProjectNamesForInviteScope, listWorkspaceInvitesScoped } from '@/lib/data/server/invites';
 import { sendInviteEmailBestEffort } from '@/lib/invites/email-delivery';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
@@ -27,18 +27,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { workspaceId } = await params;
 
   try {
-    const body = (await request.json()) as { email?: string; role?: string; expiresAt?: string | null };
+    const body = (await request.json()) as { email?: string; role?: string; scopeType?: string; projectIds?: string[]; expiresAt?: string | null };
     const created = await createWorkspaceInviteScoped(authState.supabase, authState.user.id, {
       workspaceId,
       email: body.email ?? '',
       role: body.role ?? '',
+      scopeType: body.scopeType ?? 'workspace',
+      projectIds: body.projectIds ?? [],
       expiresAt: body.expiresAt ?? null,
     });
+
+    const { data: workspace } = await authState.supabase
+      .from('workspaces')
+      .select('name')
+      .eq('id', workspaceId)
+      .maybeSingle();
+
+    const scopeProjectNames = created.invite.scopeType === 'projects'
+      ? await getProjectNamesForInviteScope(workspaceId, created.invite.projectIds)
+      : [];
 
     const origin = request.nextUrl?.origin || request.headers.get('origin') || null;
     const emailDelivery = await sendInviteEmailBestEffort({
       invite: created.invite,
       acceptToken: created.token,
+      workspaceName: workspace?.name ? String(workspace.name) : null,
+      scopeProjectNames,
       requestOrigin: origin,
     });
 

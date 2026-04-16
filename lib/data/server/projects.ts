@@ -4,14 +4,20 @@ import type { ProjectSummary } from '@/lib/types/tenant';
 
 export async function listProjectsScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string): Promise<ProjectSummary[]> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('projects')
     .select('id, workspace_id, name, slug, created_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true })
     .limit(200);
+
+  if (access.scopeType === 'projects') {
+    query = query.in('id', access.projectIds);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     if (isMissingRelationError(error)) return [];
@@ -33,7 +39,11 @@ export async function createProjectScoped(
   input: { workspaceId: string; name: string; slug?: string | null },
 ): Promise<ProjectSummary> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner', 'admin', 'editor']);
+  const access = await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner', 'admin', 'editor']);
+
+  if (access.scopeType !== 'workspace') {
+    throw new ApiError(403, 'Project-limited members cannot create new artists.');
+  }
 
   const name = input.name.trim();
   if (!name) {

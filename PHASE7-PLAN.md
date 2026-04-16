@@ -75,7 +75,27 @@ Batch 2 interim delivery path (implemented):
 - `grep '"event":"invite.failed"' var/telemetry/invites.ndjson | tail -n 20`
 - `npm run invites:failures:report`
 
+## Batch 4 Scope (Project-scoped permissions + invite clarity)
+1. **Dual-scope membership model**
+   - Add workspace member scope metadata (`workspace` vs `projects`).
+   - Add per-member project grant table for project-limited users.
+   - Backward-compatible default: existing memberships remain workspace-wide.
+
+2. **Invite scope model + acceptance mapping**
+   - Invite creation supports `scopeType` + `projectIds` for project-limited access.
+   - Persist invite project scope intent and apply grants on acceptance.
+   - Enforce deny-by-default when scope metadata is invalid or empty.
+
+3. **Enforcement hardening**
+   - Data-layer guards updated to enforce project scope for projects/tours/dates context.
+   - RLS hardened for read paths via project-access function and scoped policies.
+
+4. **UI + email clarity**
+   - Invite UI includes scope picker and project selector (Artist labels).
+   - Invite email now states workspace-wide vs project-limited target explicitly.
+
 ## Rollback
-- Revert Batch 2 UI/telemetry wiring only (safe, no schema changes).
-- Revert API/routes/module changes from Batch 1 if full invite rollback is needed.
-- Revert migration and re-run down/compensating migration (drop `workspace_invites`) only for full feature removal.
+- Revert Batch 4 app-layer changes (scope-aware API/UI) first.
+- Compensating migration path: drop `workspace_member_projects`, `workspace_invite_projects`, and `scope_type` columns only after app rollback.
+- Restore previous invite dedupe index if scope-aware index is removed.
+- If fully rolling back invite system, follow prior Batch 1 rollback to remove `workspace_invites`.

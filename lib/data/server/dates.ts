@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ensureProjectInWorkspace, ensureTourInScope, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient } from '@/lib/data/server/shared';
+import { ensureProjectAccess, ensureTourInScope, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -188,6 +188,11 @@ async function assertDateReadable(supabase: SupabaseClient, userId: string, work
     throw new ApiError(404, 'Date not found.');
   }
 
+  const projectId = String(data.project_id ?? '');
+  if (!canAccessProject(membership, projectId)) {
+    throw new ApiError(404, 'Date not found.');
+  }
+
   const status = normalizeStatus(data.status);
   if (membership.role === 'viewer' && status !== 'published') {
     throw new ApiError(404, 'Date not found.');
@@ -205,8 +210,7 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
   limit?: number;
 }): Promise<DateRecord[]> {
   const supabase = requireScopedDataClient(supabaseInput);
-  const membership = await requireWorkspaceAccess(supabase, input.userId, input.workspaceId);
-  await ensureProjectInWorkspace(supabase, input.workspaceId, input.projectId);
+  const membership = await ensureProjectAccess(supabase, input.userId, input.workspaceId, input.projectId);
   await ensureTourInScope(supabase, input.workspaceId, input.projectId, input.tourId);
 
     let query = supabase
@@ -276,9 +280,8 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(values.workspace_id ?? '');
   const projectId = String(values.project_id ?? '');
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date);
-  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
   await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id);
 
     const payload = buildDatePayload(values, workspaceId, projectId);
@@ -296,11 +299,10 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
 
 export async function updateDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
   const current = await getDateScoped(supabase, userId, workspaceId, dateId);
   const projectId = String(values.project_id ?? current.project_id);
+  await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date ?? current.date);
-  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
   await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id ?? current.tour_id);
 
     const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
@@ -326,7 +328,8 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
 export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
   await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
-    const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
+  await getDateScoped(supabase, userId, workspaceId, dateId);
+  const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
   if (error) {
     if (isMissingRelationError(error)) {
       throw new ApiError(409, 'Dates schema is not ready yet.');

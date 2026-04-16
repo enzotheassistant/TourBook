@@ -16,6 +16,13 @@ function isMissingRelationError(error: unknown) {
   return maybeCode === '42P01' || maybeMessage.toLowerCase().includes('does not exist');
 }
 
+function normalizeScopeType(value: unknown): 'workspace' | 'projects' | null {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'workspace') return 'workspace';
+  if (raw === 'projects') return 'projects';
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest) {
   try {
     const membershipsResult = await supabase
       .from('workspace_members')
-      .select('id, workspace_id, user_id, role')
+      .select('id, workspace_id, user_id, role, scope_type')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
@@ -50,12 +57,45 @@ export async function GET(request: NextRequest) {
       throw membershipsResult.error;
     }
 
-    const memberships: WorkspaceMemberSummary[] = (membershipsResult.data ?? []).map((row: any) => ({
-      id: String(row.id),
-      workspaceId: String(row.workspace_id),
-      userId: String(row.user_id),
-      role: row.role,
-    }));
+    const membershipRows = membershipsResult.data ?? [];
+    const memberIds = membershipRows.map((row: any) => String(row.id));
+    const memberProjectMap = new Map<string, string[]>();
+
+    if (memberIds.length) {
+      const grantsResult = await supabase
+        .from('workspace_member_projects')
+        .select('workspace_member_id, project_id')
+        .in('workspace_member_id', memberIds);
+
+      if (grantsResult.error && !isMissingRelationError(grantsResult.error)) {
+        throw grantsResult.error;
+      }
+
+      for (const row of grantsResult.data ?? []) {
+        const memberId = String((row as any).workspace_member_id);
+        const list = memberProjectMap.get(memberId) ?? [];
+        list.push(String((row as any).project_id));
+        memberProjectMap.set(memberId, list);
+      }
+    }
+
+    const memberships: WorkspaceMemberSummary[] = membershipRows
+      .map((row: any) => {
+        const scopeType = normalizeScopeType(row.scope_type);
+        if (!scopeType) return null;
+        const projectIds = scopeType === 'projects' ? [...new Set(memberProjectMap.get(String(row.id)) ?? [])] : [];
+        if (scopeType === 'projects' && projectIds.length === 0) return null;
+
+        return {
+          id: String(row.id),
+          workspaceId: String(row.workspace_id),
+          userId: String(row.user_id),
+          role: row.role,
+          scopeType,
+          projectIds,
+        };
+      })
+      .filter(Boolean) as WorkspaceMemberSummary[];
 
     if (!memberships.length) {
       return finalizeAuthResponse(NextResponse.json({ ...baseContext, memberships }), authState);
@@ -90,13 +130,29 @@ export async function GET(request: NextRequest) {
     if (projectsResult.error) {
       if (!isMissingRelationError(projectsResult.error)) throw projectsResult.error;
     } else {
-      allProjects = (projectsResult.data ?? []).map((row: any) => ({
+      const unfiltered = (projectsResult.data ?? []).map((row: any) => ({
         id: String(row.id),
         workspaceId: String(row.workspace_id),
         name: String(row.name ?? ''),
         slug: row.slug ? String(row.slug) : null,
         archivedAt: null,
       }));
+
+      const allowedByWorkspace = memberships.reduce((map: Map<string, Set<string> | null>, membership) => {
+        if (membership.scopeType === 'workspace') {
+          map.set(membership.workspaceId, null);
+        } else if (!map.has(membership.workspaceId)) {
+          map.set(membership.workspaceId, new Set(membership.projectIds));
+        }
+        return map;
+      }, new Map<string, Set<string> | null>());
+
+      allProjects = unfiltered.filter((project) => {
+        const allowed = allowedByWorkspace.get(project.workspaceId);
+        if (allowed === null) return true;
+        if (!allowed) return false;
+        return allowed.has(project.id);
+      });
     }
 
     const workspaceWithProjects = workspaces.find((workspace) =>
@@ -108,7 +164,6 @@ export async function GET(request: NextRequest) {
       ? allProjects.filter((project) => project.workspaceId === activeWorkspaceId)
       : [];
 
-    // Read-only context endpoint: no implicit bootstrap writes.
     const activeProjectId = projectsForActiveWorkspace[0]?.id ?? null;
 
     let tours: TourSummary[] = [];

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ensureProjectInWorkspace, isMissingRelationError, requireWorkspaceAccess, requireScopedDataClient } from '@/lib/data/server/shared';
+import { ensureProjectAccess, isMissingRelationError, requireScopedDataClient } from '@/lib/data/server/shared';
 import type { TourSummary } from '@/lib/types/tenant';
 
 export async function listToursScoped(
@@ -9,8 +9,7 @@ export async function listToursScoped(
   projectId: string,
 ): Promise<TourSummary[]> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId);
-  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
+  await ensureProjectAccess(supabase, userId, workspaceId, projectId);
 
   const { data, error } = await supabase
     .from('tours')

@@ -6,6 +6,7 @@ type SendInviteEmailInput = {
   invite: WorkspaceInviteSummary;
   acceptToken: string;
   workspaceName?: string | null;
+  scopeProjectNames?: string[];
   inviterName?: string | null;
   requestOrigin?: string | null;
 };
@@ -44,13 +45,23 @@ function roleLabel(role: WorkspaceInviteRole) {
 function renderInviteEmail(input: SendInviteEmailInput) {
   const acceptLink = buildAcceptLink(input);
   const appName = process.env.INVITE_EMAIL_APP_NAME?.trim() || 'TourBook';
-  const workspaceName = input.workspaceName?.trim() || 'your workspace';
+  const workspaceName = input.workspaceName?.trim() || '';
   const inviterName = input.inviterName?.trim() || 'A teammate';
   const role = roleLabel(input.invite.role);
+  const projectNames = (input.scopeProjectNames ?? []).map((name) => name.trim()).filter(Boolean);
 
-  const subject = `${inviterName} invited you to ${workspaceName} on ${appName}`;
+  const scopeLabel = input.invite.scopeType === 'projects'
+    ? `projects: ${projectNames.length ? projectNames.join(', ') : 'selected project(s)'}`
+    : `workspace: ${workspaceName || 'your workspace'}`;
+
+  const subjectTarget = input.invite.scopeType === 'projects'
+    ? (projectNames.length ? projectNames.join(', ') : 'selected projects')
+    : (workspaceName || 'your workspace');
+
+  const subject = `${inviterName} invited you to ${subjectTarget} on ${appName}`;
   const text = [
-    `You were invited to join ${workspaceName} on ${appName}.`,
+    `You were invited to join ${appName}.`,
+    `Scope: ${scopeLabel}`,
     `Role: ${role}`,
     `Accept invite: ${acceptLink}`,
     `Invite expires: ${new Date(input.invite.expiresAt).toISOString()}`,
@@ -60,7 +71,8 @@ function renderInviteEmail(input: SendInviteEmailInput) {
 
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
-      <p>You were invited to join <strong>${workspaceName}</strong> on <strong>${appName}</strong>.</p>
+      <p>You were invited to join <strong>${appName}</strong>.</p>
+      <p><strong>Scope:</strong> ${scopeLabel}</p>
       <p><strong>Role:</strong> ${role}</p>
       <p>
         <a href="${acceptLink}" style="display:inline-block;background:#111;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;">Accept invite</a>

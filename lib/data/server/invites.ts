@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { buildInviteExpiry, generateInviteToken, hashInviteToken, normalizeInviteEmail, validateInviteRole, type WorkspaceInviteRole } from '@/lib/invites/security';
+import type { WorkspaceScopeType } from '@/lib/types/tenant';
 
 export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 
@@ -9,6 +10,8 @@ export type WorkspaceInviteSummary = {
   workspaceId: string;
   email: string;
   role: WorkspaceInviteRole;
+  scopeType: WorkspaceScopeType;
+  projectIds: string[];
   status: WorkspaceInviteStatus;
   invitedByUserId: string;
   acceptedByUserId: string | null;
@@ -17,8 +20,14 @@ export type WorkspaceInviteSummary = {
   updatedAt: string;
 };
 
+function normalizeScopeType(value: unknown): WorkspaceScopeType {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'workspace') return 'workspace';
+  if (raw === 'projects') return 'projects';
+  throw new ApiError(400, 'scopeType must be workspace or projects.');
+}
 
-function mapInviteRow(row: any): WorkspaceInviteSummary {
+function mapInviteRow(row: any, projectIds: string[] = []): WorkspaceInviteSummary {
   const now = Date.now();
   const expiresAtMs = new Date(String(row.expires_at)).getTime();
   const status = String(row.status) as WorkspaceInviteStatus;
@@ -29,6 +38,8 @@ function mapInviteRow(row: any): WorkspaceInviteSummary {
     workspaceId: String(row.workspace_id),
     email: String(row.email),
     role: String(row.role) as WorkspaceInviteRole,
+    scopeType: normalizeScopeType(row.scope_type),
+    projectIds,
     status: computedStatus,
     invitedByUserId: String(row.invited_by_user_id),
     acceptedByUserId: row.accepted_by_user_id ? String(row.accepted_by_user_id) : null,
@@ -38,13 +49,63 @@ function mapInviteRow(row: any): WorkspaceInviteSummary {
   };
 }
 
+async function getInviteProjectIds(supabase: SupabaseClient, inviteIds: string[]) {
+  if (!inviteIds.length) return new Map<string, string[]>();
+
+  const { data, error } = await supabase
+    .from('workspace_invite_projects')
+    .select('invite_id, project_id')
+    .in('invite_id', inviteIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) return new Map<string, string[]>();
+    throw new ApiError(500, error.message);
+  }
+
+  return (data ?? []).reduce((map: Map<string, string[]>, row: any) => {
+    const inviteId = String(row.invite_id);
+    const next = map.get(inviteId) ?? [];
+    next.push(String(row.project_id));
+    map.set(inviteId, next);
+    return map;
+  }, new Map<string, string[]>());
+}
+
+async function assertValidScopeProjectIds(supabase: SupabaseClient, workspaceId: string, projectIds: string[]) {
+  const uniqueProjectIds = [...new Set(projectIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (!uniqueProjectIds.length) {
+    throw new ApiError(400, 'At least one projectId is required for project-limited invites.');
+  }
+
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .in('id', uniqueProjectIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      throw new ApiError(409, 'Projects schema is not ready yet.');
+    }
+    throw new ApiError(500, error.message);
+  }
+
+  const foundIds = new Set((data ?? []).map((row: any) => String(row.id)));
+  const missing = uniqueProjectIds.filter((id) => !foundIds.has(id));
+  if (missing.length) {
+    throw new ApiError(400, 'One or more selected projects do not belong to this workspace.');
+  }
+
+  return uniqueProjectIds;
+}
+
 export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
   await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
 
   const { data, error } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, email, role, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
@@ -53,13 +114,15 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
     throw new ApiError(500, error.message);
   }
 
-  return (data ?? []).map(mapInviteRow);
+  const rows = data ?? [];
+  const byInvite = await getInviteProjectIds(supabase, rows.map((row: any) => String(row.id)));
+  return rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? []));
 }
 
 export async function createWorkspaceInviteScoped(
   supabaseInput: SupabaseClient,
   userId: string,
-  input: { workspaceId: string; email: string; role: string; expiresAt?: string | null },
+  input: { workspaceId: string; email: string; role: string; scopeType?: string; projectIds?: string[]; expiresAt?: string | null },
 ) {
   const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(input.workspaceId ?? '').trim();
@@ -70,6 +133,8 @@ export async function createWorkspaceInviteScoped(
   } catch {
     throw new ApiError(400, 'Invite role must be one of: admin, editor, viewer.');
   }
+
+  const scopeType = normalizeScopeType(input.scopeType ?? 'workspace');
 
   if (!workspaceId) {
     throw new ApiError(400, 'workspaceId is required.');
@@ -86,12 +151,17 @@ export async function createWorkspaceInviteScoped(
     throw new ApiError(400, 'expiresAt must be a valid ISO date string.');
   }
 
+  const projectIds = scopeType === 'projects'
+    ? await assertValidScopeProjectIds(supabase, workspaceId, input.projectIds ?? [])
+    : [];
+
   const { data: duplicate, error: duplicateError } = await supabase
     .from('workspace_invites')
     .select('id')
     .eq('workspace_id', workspaceId)
     .eq('email', email)
     .eq('role', role)
+    .eq('scope_type', scopeType)
     .eq('status', 'pending')
     .limit(1)
     .maybeSingle();
@@ -104,7 +174,7 @@ export async function createWorkspaceInviteScoped(
   }
 
   if (duplicate) {
-    throw new ApiError(409, 'An active invite already exists for this user and role.');
+    throw new ApiError(409, 'An active invite already exists for this user, role, and scope.');
   }
 
   const token = generateInviteToken();
@@ -116,12 +186,13 @@ export async function createWorkspaceInviteScoped(
       workspace_id: workspaceId,
       email,
       role,
+      scope_type: scopeType,
       token_hash: tokenHash,
       status: 'pending',
       invited_by_user_id: userId,
       expires_at: expiresAt,
     })
-    .select('id, workspace_id, email, role, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .single();
 
   if (error) {
@@ -134,8 +205,16 @@ export async function createWorkspaceInviteScoped(
     throw new ApiError(500, error.message);
   }
 
+  if (scopeType === 'projects' && projectIds.length) {
+    const grants = projectIds.map((projectId) => ({ invite_id: String(data.id), workspace_id: workspaceId, project_id: projectId }));
+    const { error: grantError } = await supabase.from('workspace_invite_projects').insert(grants);
+    if (grantError) {
+      throw new ApiError(500, grantError.message);
+    }
+  }
+
   return {
-    invite: mapInviteRow(data),
+    invite: mapInviteRow(data, projectIds),
     token,
   };
 }
@@ -182,14 +261,30 @@ export async function revokeWorkspaceInviteScoped(
     .update({ status: 'revoked' })
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
-    .select('id, workspace_id, email, role, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .single();
 
   if (error) {
     throw new ApiError(500, error.message);
   }
 
-  return mapInviteRow(data);
+  const byInvite = await getInviteProjectIds(supabase, [inviteId]);
+  return mapInviteRow(data, byInvite.get(inviteId) ?? []);
+}
+
+export async function getProjectNamesForInviteScope(workspaceId: string, projectIds: string[]) {
+  if (!projectIds.length) return [];
+  const supabase = getPrivilegedDataClient();
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name')
+    .eq('workspace_id', workspaceId)
+    .in('id', projectIds);
+
+  if (error) return [];
+
+  const names = new Map((data ?? []).map((row: any) => [String(row.id), String(row.name ?? '')]));
+  return projectIds.map((id) => names.get(id) ?? id);
 }
 
 export async function acceptWorkspaceInvitePrivileged(input: {
@@ -210,7 +305,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
 
   const { data: inviteRow, error: inviteError } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, email, role, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -225,7 +320,14 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     throw new ApiError(404, 'Invite token is invalid.');
   }
 
-  const invite = mapInviteRow(inviteRow);
+  const scopeType = normalizeScopeType(inviteRow.scope_type);
+  const inviteProjectIdsByInvite = await getInviteProjectIds(supabase, [String(inviteRow.id)]);
+  const inviteProjectIds = inviteProjectIdsByInvite.get(String(inviteRow.id)) ?? [];
+  if (scopeType === 'projects' && !inviteProjectIds.length) {
+    throw new ApiError(409, 'Invite scope is invalid: no projects assigned.');
+  }
+
+  const invite = mapInviteRow(inviteRow, inviteProjectIds);
   if (invite.status === 'revoked') {
     throw new ApiError(409, 'Invite has been revoked.');
   }
@@ -243,7 +345,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from('workspace_members')
-    .select('id, role')
+    .select('id, role, scope_type')
     .eq('workspace_id', invite.workspaceId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -253,13 +355,15 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   let membershipCreated = false;
+  let workspaceMemberId = existingMember?.id ? String(existingMember.id) : '';
 
   if (!existingMember) {
-    const { error: insertMemberError } = await supabase.from('workspace_members').insert({
+    const { data: insertedMember, error: insertMemberError } = await supabase.from('workspace_members').insert({
       workspace_id: invite.workspaceId,
       user_id: userId,
       role: invite.role,
-    });
+      scope_type: scopeType,
+    }).select('id').single();
 
     if (insertMemberError) {
       if (insertMemberError.code !== '23505') {
@@ -267,6 +371,56 @@ export async function acceptWorkspaceInvitePrivileged(input: {
       }
     } else {
       membershipCreated = true;
+      workspaceMemberId = String(insertedMember.id);
+    }
+  }
+
+  if (!workspaceMemberId) {
+    const { data: refreshedMember, error: refreshedMemberError } = await supabase
+      .from('workspace_members')
+      .select('id, scope_type')
+      .eq('workspace_id', invite.workspaceId)
+      .eq('user_id', userId)
+      .single();
+
+    if (refreshedMemberError) throw new ApiError(500, refreshedMemberError.message);
+    workspaceMemberId = String(refreshedMember.id);
+
+    const currentScope = normalizeScopeType(refreshedMember.scope_type);
+    if (currentScope === 'projects' && scopeType === 'workspace') {
+      const { error: widenError } = await supabase
+        .from('workspace_members')
+        .update({ scope_type: 'workspace' })
+        .eq('id', workspaceMemberId);
+      if (widenError) throw new ApiError(500, widenError.message);
+
+      const { error: clearGrantsError } = await supabase
+        .from('workspace_member_projects')
+        .delete()
+        .eq('workspace_member_id', workspaceMemberId);
+      if (clearGrantsError && !isMissingRelationError(clearGrantsError)) {
+        throw new ApiError(500, clearGrantsError.message);
+      }
+    }
+  }
+
+  if (scopeType === 'projects' && inviteProjectIds.length) {
+    const { data: currentMember, error: currentMemberError } = await supabase
+      .from('workspace_members')
+      .select('scope_type')
+      .eq('id', workspaceMemberId)
+      .single();
+
+    if (currentMemberError) throw new ApiError(500, currentMemberError.message);
+
+    if (normalizeScopeType(currentMember.scope_type) === 'projects') {
+      const grantRows = inviteProjectIds.map((projectId) => ({
+        workspace_member_id: workspaceMemberId,
+        workspace_id: invite.workspaceId,
+        project_id: projectId,
+      }));
+      const { error: grantInsertError } = await supabase.from('workspace_member_projects').upsert(grantRows, { onConflict: 'workspace_member_id,project_id' });
+      if (grantInsertError) throw new ApiError(500, grantInsertError.message);
     }
   }
 
@@ -278,7 +432,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     })
     .eq('id', invite.id)
     .eq('status', 'pending')
-    .select('id, workspace_id, email, role, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .maybeSingle();
 
   if (acceptedError) {
@@ -290,7 +444,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   return {
-    invite: mapInviteRow(acceptedRow),
+    invite: mapInviteRow(acceptedRow, inviteProjectIds),
     membershipCreated,
   };
 }

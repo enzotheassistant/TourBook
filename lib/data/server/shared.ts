@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import type { WorkspaceRole } from '@/lib/types/tenant';
+import { canAccessProjectByScope } from '@/lib/data/server/project-scope-utils';
 
 export class ApiError extends Error {
   status: number;
@@ -10,6 +11,16 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export type WorkspaceAccessScopeType = 'workspace' | 'projects';
+
+export type WorkspaceAccess = {
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  scopeType: WorkspaceAccessScopeType;
+  projectIds: string[];
+};
 
 export function isMissingRelationError(error: unknown) {
   if (!error || typeof error !== 'object') return false;
@@ -33,19 +44,26 @@ export function requireScopedDataClient(supabase: SupabaseClient | null | undefi
   return supabase;
 }
 
+function normalizeScopeType(value: unknown): WorkspaceAccessScopeType {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'workspace') return 'workspace';
+  if (raw === 'projects') return 'projects';
+  throw new ApiError(403, 'Workspace membership scope is invalid.');
+}
+
 export async function requireWorkspaceAccess(
   supabase: SupabaseClient,
   userId: string,
   workspaceId: string,
   allowedRoles?: WorkspaceRole[],
-) {
+): Promise<WorkspaceAccess> {
   if (!workspaceId) {
     throw new ApiError(400, 'workspaceId is required.');
   }
 
   const { data, error } = await supabase
     .from('workspace_members')
-    .select('workspace_id, user_id, role')
+    .select('id, workspace_id, user_id, role, scope_type')
     .eq('workspace_id', workspaceId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -66,11 +84,39 @@ export async function requireWorkspaceAccess(
     throw new ApiError(403, 'You do not have permission to perform this action.');
   }
 
+  const scopeType = normalizeScopeType(data.scope_type);
+  let projectIds: string[] = [];
+
+  if (scopeType === 'projects') {
+    const { data: grants, error: grantsError } = await supabase
+      .from('workspace_member_projects')
+      .select('project_id')
+      .eq('workspace_member_id', String(data.id));
+
+    if (grantsError) {
+      if (isMissingRelationError(grantsError)) {
+        throw new ApiError(409, 'Workspace membership scope schema is not ready yet.');
+      }
+      throw new ApiError(500, grantsError.message);
+    }
+
+    projectIds = [...new Set((grants ?? []).map((row: any) => String(row.project_id)))].filter(Boolean);
+    if (!projectIds.length) {
+      throw new ApiError(403, 'You do not have access to any projects in this workspace.');
+    }
+  }
+
   return {
     workspaceId: String(data.workspace_id),
     userId: String(data.user_id),
     role,
+    scopeType,
+    projectIds,
   };
+}
+
+export function canAccessProject(access: WorkspaceAccess, projectId: string) {
+  return canAccessProjectByScope(access.scopeType, access.projectIds, projectId);
 }
 
 export async function ensureProjectInWorkspace(supabase: SupabaseClient, workspaceId: string, projectId: string) {
@@ -95,6 +141,23 @@ export async function ensureProjectInWorkspace(supabase: SupabaseClient, workspa
   if (!data) {
     throw new ApiError(404, 'Project not found in this workspace.');
   }
+}
+
+export async function ensureProjectAccess(
+  supabase: SupabaseClient,
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  allowedRoles?: WorkspaceRole[],
+) {
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId, allowedRoles);
+  await ensureProjectInWorkspace(supabase, workspaceId, projectId);
+
+  if (!canAccessProject(access, projectId)) {
+    throw new ApiError(403, 'You do not have access to this project.');
+  }
+
+  return access;
 }
 
 export async function ensureTourInScope(
