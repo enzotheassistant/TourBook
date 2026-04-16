@@ -45,15 +45,15 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div ref={panelRef} className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
-        <div className="mb-3 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
+      <div ref={panelRef} className="absolute inset-x-3 bottom-3 top-16 flex flex-col rounded-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-auto sm:right-4 sm:top-20 sm:h-auto sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
+        <div className="mb-2 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-zinc-100">Switch project</p>
           <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Close">
             ×
           </button>
         </div>
-        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1 sm:max-h-[50vh]">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 sm:max-h-[50vh] sm:flex-none">
           {projects.map((project) => {
             const active = project.id === activeProjectId;
             return (
