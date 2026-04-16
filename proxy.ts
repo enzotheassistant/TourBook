@@ -18,13 +18,23 @@ export async function proxy(request: NextRequest) {
 
   if (PUBLIC_PATHS.has(pathname)) {
     if (user) {
-      return NextResponse.redirect(new URL("/", request.url));
+      const destination = new URL("/", request.url);
+      const inviteToken = request.nextUrl.searchParams.get("inviteToken")?.trim();
+      if (inviteToken) {
+        destination.searchParams.set("inviteToken", inviteToken);
+      }
+      return NextResponse.redirect(destination);
     }
     return response;
   }
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const destination = new URL("/login", request.url);
+    const inviteToken = request.nextUrl.searchParams.get("inviteToken")?.trim();
+    if (inviteToken) {
+      destination.searchParams.set("inviteToken", inviteToken);
+    }
+    return NextResponse.redirect(destination);
   }
 
   return response;

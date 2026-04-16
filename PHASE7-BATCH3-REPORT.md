@@ -50,3 +50,12 @@ Batch 3 moves invites from manual-only toward operational readiness with safe de
   - invite POST route change
   - new scripts and docs
   - optional `/invite/[token]` route
+
+## Update — Auth onboarding unblocker completed
+- Added self-serve auth onboarding in `app/login/page.tsx`:
+  - sign-in + sign-up + forgot-password request flow
+  - invite token preservation across all auth entry paths
+  - clearer user-facing success/error messaging
+- Added Supabase recovery completion route at `app/reset-password/page.tsx` for password update.
+- Updated `proxy.ts` redirect logic so invite token context survives auth redirects.
+- Result: users can now create accounts and recover passwords without manual intervention, unblocking invite acceptance continuation after auth.
