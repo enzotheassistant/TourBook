@@ -1383,17 +1383,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       />
       {importOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/80">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="max-w-2xl">
+          <div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:p-5">
+            <div className="mb-3 flex items-start gap-3">
+              <button type="button" onClick={closeImportModal} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
+              <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">AI Intake</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">Insert text, spreadsheets or images</h2>
-                <p className="mt-3 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-tight text-zinc-100 sm:text-2xl">Insert text, spreadsheets or images</h2>
+                <p className="mt-1 text-sm text-zinc-400">AI creates reviewable draft rows only. Nothing is saved until you approve it.</p>
               </div>
-              <button type="button" onClick={closeImportModal} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
 
-            <div className="mt-4 grid max-h-[calc(100vh-10rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <div className="grid gap-4 xl:max-h-[calc(100vh-10rem)] xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:overflow-hidden">
               <div className="space-y-4 overflow-y-auto pr-1">
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block">Source text</span>
@@ -1444,7 +1444,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                           onClick={() => importFileInputRef.current?.click()}
                           className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3.5 text-[13px] font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.09]"
                         >
-                          Choose File
+                          Choose file
                         </button>
                       </div>
                     )}
@@ -1761,14 +1761,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             >
               <div className="grid gap-3">
                 <div className="grid gap-3 md:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)]">
-                  <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[56px]" />
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[56px]" />
+                  <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[64px]" />
+                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[64px]" />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[56px]" />
-                  <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
+                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[64px]" />
+                  <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[64px]" />
                 </div>
-                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} />
+                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[64px]" />
               </div>
             </CollapsibleSection>
 
@@ -2473,8 +2473,6 @@ function ShowListSection({
               {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}
             </div>
             <p className="text-sm text-zinc-300">{show.venue_name}</p>
-            {show.venue_address ? <p className="text-xs text-zinc-500">{show.venue_address}</p> : null}
-            {show.tour_name ? <p className="mt-1 text-xs text-emerald-300">{show.tour_name}</p> : null}
           </Link>
 
           <div className="flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
@@ -2830,7 +2828,7 @@ function SelectField({
 }
 
 
-function InlineTourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
+function InlineTourInput({ value, onChange, options, labelWidthClassName }: { value: string; onChange: (value: string) => void; options: string[]; labelWidthClassName?: string }) {
   const [forceCreatingNew, setForceCreatingNew] = useState(false);
   const inferredCreatingNew = !options.includes(value) && value.trim().length > 0;
   const creatingNew = forceCreatingNew || inferredCreatingNew;
@@ -2839,7 +2837,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
   return (
     <div className="space-y-2 text-sm text-zinc-300">
       <label className="flex items-center gap-3 text-sm text-zinc-300">
-        <span className="w-[56px] shrink-0 text-zinc-300">Tour</span>
+        <span className={`${labelWidthClassName ?? 'w-[56px]'} shrink-0 text-zinc-300`}>Tour</span>
         <div className="relative min-w-0 flex-1">
           <select
             value={selectedValue}
@@ -2871,7 +2869,7 @@ function InlineTourInput({ value, onChange, options }: { value: string; onChange
 
       {creatingNew ? (
         <label className="flex items-center gap-3 text-sm text-zinc-300">
-          <span className="w-[56px] shrink-0 text-zinc-300">New tour</span>
+          <span className={`${labelWidthClassName ?? 'w-[56px]'} shrink-0 text-zinc-300`}>New tour</span>
           <input
             value={value}
             onChange={(event) => onChange(event.target.value)}

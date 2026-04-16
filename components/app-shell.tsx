@@ -119,8 +119,14 @@ function ProjectSwitchControl() {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={iconButtonClassName()} aria-label="Switch project" title="Switch project">
-        ⇄
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex h-8 items-center rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100"
+        aria-label="Switch project"
+        title="Switch project"
+      >
+        Project
       </button>
       <ProjectSwitchSheet open={open} onClose={() => setOpen(false)} projects={scopedProjects} activeProjectId={activeProjectId} onSelect={handleSelect} />
     </>
@@ -128,8 +134,10 @@ function ProjectSwitchControl() {
 }
 
 function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
+  const { activeWorkspaceId, projects } = useAppContext();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const showProjectSwitch = canSwitchProject(projects, activeWorkspaceId);
 
   useEffect(() => {
     function handle(event: MouseEvent) {
@@ -149,6 +157,11 @@ function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
           <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
             {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
           </Link>
+          {showProjectSwitch ? (
+            <div className="border-b border-white/5 px-4 py-2">
+              <ProjectSwitchControl />
+            </div>
+          ) : null}
           <div className="border-b border-white/10" />
           <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
             Admin
@@ -202,7 +215,6 @@ export function AppShell({
                     ←
                   </Link>
                 ) : null}
-                <ProjectSwitchControl />
                 <CrewMenu activeTab={activeTab} />
               </div>
             ) : (
