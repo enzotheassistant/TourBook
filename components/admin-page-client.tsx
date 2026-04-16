@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
@@ -342,7 +342,7 @@ async function buildImportTextFromFiles(files: File[]) {
   return textChunks.filter(Boolean).join('\n\n');
 }
 
-export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' }) {
+export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' | 'team' }) {
   const {
     activeWorkspaceId,
     activeProjectId,
@@ -358,6 +358,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
+  const isTeamMode = mode === 'team';
   const statusMessage = searchParams.get('message');
   const [shows, setShows] = useState<Show[]>([]);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
@@ -386,7 +387,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
   const [newArtistName, setNewArtistName] = useState('');
+  const [renameArtistName, setRenameArtistName] = useState('');
   const [creatingArtist, setCreatingArtist] = useState(false);
+  const [renamingArtist, setRenamingArtist] = useState(false);
+  const [showManualInviteShare, setShowManualInviteShare] = useState(false);
   const [importSourceText, setImportSourceText] = useState('');
   const [importRows, setImportRows] = useState<ParsedImportRow[]>([]);
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -406,6 +410,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     [projects, activeWorkspaceId],
   );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
+  const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
 
   const loadShows = useCallback(async () => {
@@ -434,6 +439,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   useEffect(() => {
     setInviteProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
   }, [workspaceProjects]);
+
+  useEffect(() => {
+    const current = workspaceProjects.find((project) => project.id === activeProjectId) ?? null;
+    setRenameArtistName(current?.name ?? '');
+  }, [activeProjectId, workspaceProjects]);
 
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
@@ -605,7 +615,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function handleCreateArtist() {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceId || !canManageProjectActions) return;
     if (!newArtistName.trim()) {
       setMessage('Enter an artist name to continue.');
       return;
@@ -651,6 +661,28 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
+  async function handleRenameArtist() {
+    if (!activeWorkspaceId || !activeProjectId || !canManageProjectActions) return;
+    const nextName = renameArtistName.trim();
+    if (!nextName) {
+      setMessage('Enter a new artist name.');
+      return;
+    }
+
+    setRenamingArtist(true);
+    try {
+      const renamed = await renameArtist({ workspaceId: activeWorkspaceId, projectId: activeProjectId, name: nextName });
+      await refreshContext();
+      setActiveProjectId(renamed.id);
+      setRenameArtistName(renamed.name);
+      setMessage('Artist renamed.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to rename artist.');
+    } finally {
+      setRenamingArtist(false);
+    }
+  }
+
   async function handleCreateInvite() {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
     if (!inviteEmail.trim()) {
@@ -666,6 +698,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setCreatingInvite(true);
     setInviteMessage('');
     setLastInviteShare(null);
+    setShowManualInviteShare(false);
 
     try {
       const created = await createWorkspaceInvite({
@@ -681,7 +714,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInviteProjectIds([]);
       setInviteScopeType('workspace');
       setInvites((current) => [created.invite, ...current]);
-      setInviteMessage('Invite created. Copy and share the one-time link below.');
+      setInviteMessage(created.emailDelivery?.attempted ? 'Invite created and emailed. Use manual sharing only if needed.' : 'Invite created. Email delivery unavailable—use manual sharing below.');
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to create invite.';
@@ -1268,7 +1301,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </label>
         </div>
 
-        {canManageInvitesInWorkspace ? (
+        {isTeamMode && canManageInvitesInWorkspace ? (
           <InviteManagementSection
             invites={invites}
             loading={invitesLoading}
@@ -1280,6 +1313,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             message={inviteMessage}
             creating={creatingInvite}
             lastInviteShare={lastInviteShare}
+            showManualShare={showManualInviteShare}
+            onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
             onEmailChange={setInviteEmail}
             onRoleChange={setInviteRole}
             onScopeTypeChange={setInviteScopeType}
@@ -1291,7 +1326,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         ) : null}
 
         {!projectsForActiveWorkspace.length ? (
-          noArtistGuardrail.showCreateArtist ? (
+          canManageProjectActions ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
               <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first artist</p>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1594,9 +1629,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         >
           Drafts
         </button>
+        <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+          Team
+        </Link>
       </div>
 
-      {canManageInvitesInWorkspace ? (
+      {canManageProjectActions ? (
+        <ProjectManagementSection
+          currentProjectName={workspaceProjects.find((project) => project.id === activeProjectId)?.name ?? null}
+          newArtistName={newArtistName}
+          renameArtistName={renameArtistName}
+          creatingArtist={creatingArtist}
+          renamingArtist={renamingArtist}
+          onNewArtistNameChange={setNewArtistName}
+          onRenameArtistNameChange={setRenameArtistName}
+          onCreateArtist={() => void handleCreateArtist()}
+          onRenameArtist={() => void handleRenameArtist()}
+        />
+      ) : null}
+
+      {isTeamMode && canManageInvitesInWorkspace ? (
         <InviteManagementSection
           invites={invites}
           loading={invitesLoading}
@@ -1608,6 +1660,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           message={inviteMessage}
           creating={creatingInvite}
           lastInviteShare={lastInviteShare}
+          showManualShare={showManualInviteShare}
+          onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
           onEmailChange={setInviteEmail}
           onRoleChange={setInviteRole}
           onScopeTypeChange={setInviteScopeType}
@@ -1828,7 +1882,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </form>
         </section>
         </div>
-      ) : (
+      ) : mode === 'dates' || mode === 'drafts' ? (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           {message ? <div className="mb-3 text-xs text-emerald-300/90">{message}</div> : null}
           {isDraftsMode ? (
@@ -1898,7 +1952,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </>
           )}
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1907,6 +1961,65 @@ function formatInviteDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
+}
+
+function ProjectManagementSection({
+  currentProjectName,
+  newArtistName,
+  renameArtistName,
+  creatingArtist,
+  renamingArtist,
+  onNewArtistNameChange,
+  onRenameArtistNameChange,
+  onCreateArtist,
+  onRenameArtist,
+}: {
+  currentProjectName: string | null;
+  newArtistName: string;
+  renameArtistName: string;
+  creatingArtist: boolean;
+  renamingArtist: boolean;
+  onNewArtistNameChange: (value: string) => void;
+  onRenameArtistNameChange: (value: string) => void;
+  onCreateArtist: () => void;
+  onRenameArtist: () => void;
+}) {
+  return (
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project management</p>
+          <h2 className="mt-1 text-base font-semibold text-zinc-100">Manage artists</h2>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <input
+            value={newArtistName}
+            onChange={(event) => onNewArtistNameChange(event.target.value)}
+            placeholder="New artist name"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+          />
+          <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
+            {creatingArtist ? 'Creating…' : 'Create artist'}
+          </button>
+        </div>
+
+        {currentProjectName ? (
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input
+              value={renameArtistName}
+              onChange={(event) => onRenameArtistNameChange(event.target.value)}
+              placeholder="Rename selected artist"
+              className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            />
+            <button type="button" onClick={onRenameArtist} disabled={renamingArtist || !renameArtistName.trim()} className={secondaryButtonClassName()}>
+              {renamingArtist ? 'Renaming…' : 'Rename artist'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 function InviteManagementSection({
@@ -1920,6 +2033,8 @@ function InviteManagementSection({
   message,
   creating,
   lastInviteShare,
+  showManualShare,
+  onToggleManualShare,
   onEmailChange,
   onRoleChange,
   onScopeTypeChange,
@@ -1938,6 +2053,8 @@ function InviteManagementSection({
   message: string;
   creating: boolean;
   lastInviteShare: { token: string; link: string } | null;
+  showManualShare: boolean;
+  onToggleManualShare: () => void;
   onEmailChange: (value: string) => void;
   onRoleChange: (value: WorkspaceInviteRole) => void;
   onScopeTypeChange: (value: 'workspace' | 'projects') => void;
@@ -1954,7 +2071,7 @@ function InviteManagementSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Create an invite to trigger best-effort email delivery (if configured). Manual link/token sharing remains available as fallback.</p>
+          <p className="mt-1 text-sm text-zinc-400">Invites are sent to email first. If email fails, you can share a manual link.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_180px_auto]">
@@ -2010,14 +2127,21 @@ function InviteManagementSection({
 
         {lastInviteShare ? (
           <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm text-emerald-100">
-            <p className="mb-2">Share this invite (interim manual flow):</p>
-            <div className="space-y-2">
-              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 break-all">{lastInviteShare.link}</div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => onCopyValue(lastInviteShare.link, 'Invite link copied.')} className={secondaryButtonClassName()}>Copy link</button>
-                <button type="button" onClick={() => onCopyValue(lastInviteShare.token, 'Invite token copied.')} className={secondaryButtonClassName()}>Copy token</button>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p>Invite created. Email delivery is the default path.</p>
+              <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>
+                {showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}
+              </button>
             </div>
+            {showManualShare ? (
+              <div className="mt-3 space-y-2">
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 break-all">{lastInviteShare.link}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => onCopyValue(lastInviteShare.link, 'Invite link copied.')} className={secondaryButtonClassName()}>Copy link</button>
+                  <button type="button" onClick={() => onCopyValue(lastInviteShare.token, 'Invite token copied.')} className={secondaryButtonClassName()}>Copy token</button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

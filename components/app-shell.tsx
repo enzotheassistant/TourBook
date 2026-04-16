@@ -69,7 +69,6 @@ function CurrentProjectPill() {
 
   return (
     <span className="inline-flex max-w-[220px] items-center truncate rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300" title={currentProject.name || currentProject.slug || currentProject.id}>
-      <span className="mr-1 text-zinc-500">Project:</span>
       <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
     </span>
   );

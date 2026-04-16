@@ -195,13 +195,23 @@ export async function createArtist(input: { workspaceId: string; name: string; s
   });
 }
 
+export async function renameArtist(input: { workspaceId: string; projectId: string; name: string }) {
+  return request<ProjectSummary>(`/api/projects/${encodeURIComponent(input.projectId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      workspaceId: input.workspaceId,
+      name: input.name,
+    }),
+  });
+}
+
 export async function listWorkspaceInvites(workspaceId: string) {
   const payload = await request<{ invites: WorkspaceInviteSummary[] }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/invites`);
   return payload.invites ?? [];
 }
 
 export async function createWorkspaceInvite(input: { workspaceId: string; email: string; role: WorkspaceInviteRole; scopeType: 'workspace' | 'projects'; projectIds?: string[] }) {
-  return request<{ invite: WorkspaceInviteSummary; acceptToken: string }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
+  return request<{ invite: WorkspaceInviteSummary; acceptToken: string; emailDelivery?: { attempted?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
     method: 'POST',
     body: JSON.stringify({ email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [] }),
   });
