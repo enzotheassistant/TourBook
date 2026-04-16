@@ -75,7 +75,7 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `rounded-full border px-3 py-2 text-sm transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `whitespace-nowrap rounded-full border px-2.5 py-1.5 text-xs transition sm:px-3 sm:py-2 sm:text-sm ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 
@@ -1340,7 +1340,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onNewArtistNameChange={setNewArtistName}
             onSelectProject={handleArtistSelection}
             onCreateArtist={() => void handleCreateArtist()}
-            onRenameArtist={(projectId, name) => void handleRenameArtist(projectId, name)}
+            onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
           />
         ) : null}
 
@@ -1590,8 +1590,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Operations</span>
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Operations</span>
         <button
           type="button"
           onClick={async () => {
@@ -1650,8 +1650,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           Drafts
         </button>
 
-        <span className="mx-1 h-5 w-px bg-white/10" aria-hidden="true" />
-        <span className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Workspace</span>
+        <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
+        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
         <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
           Team
         </Link>
@@ -1670,7 +1670,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onNewArtistNameChange={setNewArtistName}
           onSelectProject={handleArtistSelection}
           onCreateArtist={() => void handleCreateArtist()}
-          onRenameArtist={(projectId, name) => void handleRenameArtist(projectId, name)}
+          onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
         />
       ) : null}
 
@@ -2006,13 +2006,14 @@ function ProjectManagementSection({
   onNewArtistNameChange: (value: string) => void;
   onSelectProject: (projectId: string | null) => void;
   onCreateArtist: () => void;
-  onRenameArtist: (projectId: string, name: string) => void;
+  onRenameArtist: (projectId: string, name: string) => Promise<void>;
 }) {
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const renameTarget = projects.find((project) => project.id === renameTargetId) ?? null;
+  const canUseDom = typeof document !== 'undefined';
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
@@ -2043,11 +2044,11 @@ function ProjectManagementSection({
               {projects.map((project) => {
                 const isActive = project.id === activeProjectId;
                 return (
-                  <div key={project.id} className={`rounded-xl border px-3 py-2 ${isActive ? 'border-emerald-400/35 bg-emerald-500/10' : 'border-white/10 bg-black/30'}`}>
+                  <div key={project.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <button type="button" onClick={() => onSelectProject(project.id)} className="min-w-0 flex-1 text-left">
                         <p className="truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</p>
-                        {isActive ? <p className="text-xs text-emerald-200">Currently selected</p> : null}
+                        {isActive ? <p className="text-xs text-zinc-400">Currently selected</p> : null}
                       </button>
                       <div className="relative">
                         <button
@@ -2089,27 +2090,52 @@ function ProjectManagementSection({
           )}
         </div>
 
-        {renameTarget ? (
-          <div className="grid gap-2 rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <input
-              value={renameValue}
-              onChange={(event) => setRenameValue(event.target.value)}
-              placeholder="Rename selected artist"
-              className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
-            />
-            <button
-              type="button"
-              onClick={() => onRenameArtist(renameTarget.id, renameValue)}
-              disabled={renamingArtist || !renameValue.trim()}
-              className={secondaryButtonClassName()}
-            >
-              {renamingArtist ? 'Renaming…' : 'Save rename'}
-            </button>
-            <button type="button" onClick={() => { setRenameTargetId(null); setRenameValue(''); }} className={secondaryButtonClassName()}>
-              Cancel
-            </button>
-          </div>
-        ) : null}
+        {renameTarget && canUseDom
+          ? createPortal(
+              <div
+                className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 px-4"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Rename artist"
+                onClick={() => {
+                  setRenameTargetId(null);
+                  setRenameValue('');
+                }}
+              >
+                <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                  <div className="mb-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename artist</p>
+                    <h3 className="mt-1 text-base font-semibold text-zinc-100">Update artist name</h3>
+                  </div>
+                  <input
+                    value={renameValue}
+                    onChange={(event) => setRenameValue(event.target.value)}
+                    placeholder="Artist name"
+                    className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+                    autoFocus
+                  />
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await onRenameArtist(renameTarget.id, renameValue);
+                        setRenameTargetId(null);
+                        setRenameValue('');
+                      }}
+                      disabled={renamingArtist || !renameValue.trim()}
+                      className={primaryButtonClassName()}
+                    >
+                      {renamingArtist ? 'Saving…' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => { setRenameTargetId(null); setRenameValue(''); }} className={secondaryButtonClassName()}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
     </section>
   );
