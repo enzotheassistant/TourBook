@@ -20,55 +20,55 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
 
   useEffect(() => {
     if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose();
     }
-    function handlePointerDown(event: MouseEvent | TouchEvent) {
-      if (!panelRef.current) return;
-      const target = event.target as Node | null;
-      if (target && !panelRef.current.contains(target)) {
-        onClose();
-      }
-    }
+
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
+      document.body.style.overflow = previousOverflow;
     };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-start sm:justify-end sm:p-4" role="dialog" aria-modal="true" aria-label="Switch project">
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div ref={panelRef} className="relative z-10 w-full max-h-[78dvh] overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:mt-16 sm:w-[340px] sm:max-h-[70vh] sm:rounded-2xl">
-        <div className="mb-2 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-semibold text-zinc-100">Switch project</p>
-          <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Close">
-            ×
-          </button>
-        </div>
-        <div className="min-h-0 space-y-2 overflow-y-auto pr-1 max-h-[calc(78dvh-120px)] sm:max-h-[calc(70vh-120px)]">
-          {projects.map((project) => {
-            const active = project.id === activeProjectId;
-            return (
-              <button
-                key={project.id}
-                type="button"
-                onClick={() => onSelect(project.id)}
-                className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
-                aria-pressed={active}
-              >
-                <span className="min-w-0 truncate">{project.name || project.slug || project.id}</span>
-                {active ? <span className="ml-2 text-xs font-semibold uppercase tracking-wide">Current</span> : null}
-              </button>
-            );
-          })}
+      <div className="absolute inset-x-0 bottom-0 flex justify-center px-0 pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:right-4 sm:top-20 sm:block sm:w-[340px] sm:px-0 sm:pb-0">
+        <div
+          ref={panelRef}
+          className="relative z-10 flex w-full max-h-[82svh] min-h-0 flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:max-h-[70vh] sm:rounded-2xl"
+        >
+          <div className="mb-2 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-zinc-100">Switch project</p>
+            <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Close">
+              ×
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1 overscroll-contain">
+            {projects.map((project) => {
+              const active = project.id === activeProjectId;
+              return (
+                <button
+                  key={project.id}
+                  type="button"
+                  onClick={() => onSelect(project.id)}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
+                  aria-pressed={active}
+                >
+                  <span className="min-w-0 truncate">{project.name || project.slug || project.id}</span>
+                  {active ? <span className="ml-2 text-xs font-semibold uppercase tracking-wide">Current</span> : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
