@@ -1,13 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useEffect, useRef, useState } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
-
-function tabClassName(active = false) {
-  return `inline-flex h-11 items-center rounded-full border px-4 text-sm font-medium transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.08)]' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`;
-}
+import { useAppContext } from '@/hooks/use-app-context';
+import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
@@ -15,6 +13,90 @@ function ghostButtonClassName() {
 
 function iconButtonClassName() {
   return 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
+}
+
+function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect }: { open: boolean; onClose: () => void; projects: Array<{ id: string; name: string; slug: string | null }>; activeProjectId: string | null; onSelect: (projectId: string) => void; }) {
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Switch project">
+      <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
+      <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-6 pt-4 shadow-2xl sm:left-auto sm:right-4 sm:top-20 sm:w-[340px] sm:rounded-2xl">
+        <div className="mb-3 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-zinc-100">Switch project</p>
+          <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+          {projects.map((project) => {
+            const active = project.id === activeProjectId;
+            return (
+              <button
+                key={project.id}
+                type="button"
+                onClick={() => onSelect(project.id)}
+                className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
+                aria-pressed={active}
+              >
+                <span className="min-w-0 truncate">{project.name || project.slug || project.id}</span>
+                {active ? <span className="ml-2 text-xs font-semibold uppercase tracking-wide">Current</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CurrentProjectPill() {
+  const { activeWorkspaceId, activeProjectId, projects } = useAppContext();
+  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? null;
+
+  if (!currentProject) return null;
+
+  return (
+    <span className="inline-flex max-w-[220px] items-center truncate rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300" title={currentProject.name || currentProject.slug || currentProject.id}>
+      <span className="mr-1 text-zinc-500">Project:</span>
+      <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
+    </span>
+  );
+}
+
+function ProjectSwitchControl() {
+  const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
+  const [open, setOpen] = useState(false);
+  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+  const showSwitch = canSwitchProject(projects, activeWorkspaceId);
+
+  function handleSelect(projectId: string) {
+    const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
+    if (next !== activeProjectId) setActiveProjectId(next);
+    setOpen(false);
+  }
+
+  if (!showSwitch) return null;
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={iconButtonClassName()} aria-label="Switch project" title="Switch project">
+        ⇄
+      </button>
+      <ProjectSwitchSheet open={open} onClose={() => setOpen(false)} projects={scopedProjects} activeProjectId={activeProjectId} onSelect={handleSelect} />
+    </>
+  );
 }
 
 function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
@@ -68,7 +150,6 @@ export function AppShell({
   showSubtitle?: boolean;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
@@ -78,11 +159,12 @@ export function AppShell({
       <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
         <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-4'} sm:px-6`}>
           <div className={`flex items-start justify-between gap-3 ${mode === 'admin' ? 'pb-3' : 'pb-4'}`}>
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-2">
               <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
                 {title}
               </Link>
               {showSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
+              <CurrentProjectPill />
             </div>
 
             {isCrewList ? (
@@ -92,10 +174,12 @@ export function AppShell({
                     ←
                   </Link>
                 ) : null}
+                <ProjectSwitchControl />
                 <CrewMenu activeTab={activeTab} />
               </div>
             ) : (
               <div className="flex items-center gap-2 self-start">
+                <ProjectSwitchControl />
                 <Link href={actionHref} className={ghostButtonClassName()}>
                   {actionLabel}
                 </Link>
