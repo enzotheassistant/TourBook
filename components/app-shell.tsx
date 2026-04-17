@@ -43,7 +43,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
       <div className="absolute inset-x-0 bottom-0 flex justify-center px-0 pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:right-4 sm:top-20 sm:block sm:w-[340px] sm:px-0 sm:pb-0">
         <div
           ref={panelRef}
-          className="relative z-10 flex w-full max-h-[82svh] min-h-0 flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:max-h-[70vh] sm:rounded-2xl"
+          className="relative z-10 flex w-full max-h-[calc(82svh-env(safe-area-inset-top))] min-h-0 flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:max-h-[70vh] sm:rounded-2xl"
         >
           <div className="mb-2 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
           <div className="mb-3 flex items-center justify-between">
@@ -123,13 +123,15 @@ function ProjectSwitchControl() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex h-9 max-w-[55vw] items-center gap-1 rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100 sm:h-8 sm:max-w-[220px]"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex h-8 max-w-[58vw] items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.03] px-2.5 text-xs font-medium text-zinc-200 transition hover:border-white/25 hover:bg-white/[0.06] hover:text-zinc-100 sm:h-8 sm:max-w-[220px] sm:rounded-full sm:border-white/10 sm:bg-transparent sm:px-3 sm:text-xs sm:text-zinc-300 sm:hover:border-white/20 sm:hover:bg-white/[0.05]"
         aria-label="Switch project"
+        aria-expanded={open}
+        aria-haspopup="dialog"
         title={currentProject.name || currentProject.slug || currentProject.id}
       >
+        <span aria-hidden="true" className={`text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
         <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
-        <span aria-hidden="true" className="text-zinc-500">▾</span>
       </button>
       <ProjectSwitchSheet open={open} onClose={() => setOpen(false)} projects={scopedProjects} activeProjectId={activeProjectId} onSelect={handleSelect} />
     </>
@@ -234,12 +236,12 @@ export function AppShell({
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
-      <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
-        <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-4'} sm:px-6`}>
+      <header className={`sticky top-0 z-20 bg-zinc-950/94 backdrop-blur ${mode === 'crew' ? 'pt-[env(safe-area-inset-top)] sm:pt-0' : ''}`}>
+        <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-2 sm:pt-4'} sm:px-6`}>
           {mode === 'crew' ? (
             <>
-              <div className="pb-4 sm:hidden">
-                <div className="flex items-center gap-2">
+              <div className="pb-3 sm:hidden">
+                <div className="flex items-center gap-1.5">
                   <div className="min-w-0 flex-1">
                     <ProjectSwitchControl />
                   </div>
@@ -256,7 +258,7 @@ export function AppShell({
                     <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
                   )}
                 </div>
-                <div className="mt-3 min-w-0">
+                <div className="mt-2 min-w-0">
                   <Link href="/" className="block truncate text-xl font-semibold tracking-tight text-zinc-50">
                     {displayTitle}
                   </Link>
