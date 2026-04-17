@@ -6,18 +6,21 @@ import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 type AuthMode = "signin" | "signup" | "forgot";
 
 function mapAuthError(message?: string) {
-  const text = (message || "").toLowerCase();
+  const raw = (message || "").trim();
+  const text = raw.toLowerCase();
 
-  if (!text) return "Something went wrong. Please try again.";
-  if (text.includes("invalid login credentials")) return "Invalid email or password.";
-  if (text.includes("already registered") || text.includes("user already registered")) {
-    return "An account with this email already exists. Try signing in instead.";
+  if (!text || text === '{}' || text === '[object object]') {
+    return 'Unable to complete authentication right now. Please try again, or sign in if this email already has an account.';
   }
-  if (text.includes("password") && text.includes("weak")) {
-    return "Password is too weak. Use at least 8 characters with a stronger mix.";
+  if (text.includes('invalid login credentials')) return 'Invalid email or password.';
+  if (text.includes('already registered') || text.includes('user already registered')) {
+    return 'An account with this email already exists. Try signing in instead.';
+  }
+  if (text.includes('password') && text.includes('weak')) {
+    return 'Password is too weak. Use at least 8 characters with a stronger mix.';
   }
 
-  return message || "Something went wrong. Please try again.";
+  return raw || 'Something went wrong. Please try again.';
 }
 
 export default function LoginPage() {
