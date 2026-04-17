@@ -236,41 +236,80 @@ export function AppShell({
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
       <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
         <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-4'} sm:px-6`}>
-          <div className={`flex items-start justify-between gap-3 ${mode === 'admin' ? 'pb-3' : 'pb-4'}`}>
-            <div className="min-w-0 flex-1 space-y-2">
-              <Link href={mode === 'admin' ? '/admin' : '/'} className="text-2xl font-semibold tracking-tight text-zinc-50">
-                {displayTitle}
-              </Link>
-              {shouldShowSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
-              {mode === 'admin' ? <AdminProjectSelector /> : null}
-            </div>
-
-            {isCrewList ? (
-              <div className="flex shrink-0 items-center gap-2">
-                {activeTab === 'past' ? (
-                  <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
-                    ←
+          {mode === 'crew' ? (
+            <>
+              <div className="pb-4 sm:hidden">
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <ProjectSwitchControl />
+                  </div>
+                  {isCrewList ? (
+                    <>
+                      {activeTab === 'past' ? (
+                        <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
+                          ←
+                        </Link>
+                      ) : null}
+                      <CrewMenu activeTab={activeTab} />
+                    </>
+                  ) : (
+                    <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
+                  )}
+                </div>
+                <div className="mt-3 min-w-0">
+                  <Link href="/" className="block truncate text-xl font-semibold tracking-tight text-zinc-50">
+                    {displayTitle}
                   </Link>
-                ) : null}
-                <ProjectSwitchControl />
-                <CrewMenu activeTab={activeTab} />
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="flex shrink-0 items-center gap-2 self-start sm:hidden">
-                  {mode === 'admin' ? null : <ProjectSwitchControl />}
-                  <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
-                </div>
-                <div className="hidden shrink-0 items-center gap-2 self-start sm:flex">
-                  {mode === 'admin' ? null : <ProjectSwitchControl />}
-                  <Link href={actionHref} className={ghostButtonClassName()}>
-                    {actionLabel}
+
+              <div className="hidden items-start justify-between gap-3 pb-4 sm:flex">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Link href="/" className="text-2xl font-semibold tracking-tight text-zinc-50">
+                    {displayTitle}
                   </Link>
-                  <LogoutButton />
                 </div>
-              </>
-            )}
-          </div>
+                {isCrewList ? (
+                  <div className="flex shrink-0 items-center gap-2">
+                    {activeTab === 'past' ? (
+                      <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
+                        ←
+                      </Link>
+                    ) : null}
+                    <ProjectSwitchControl />
+                    <CrewMenu activeTab={activeTab} />
+                  </div>
+                ) : (
+                  <div className="flex shrink-0 items-center gap-2 self-start">
+                    <ProjectSwitchControl />
+                    <Link href={actionHref} className={ghostButtonClassName()}>
+                      {actionLabel}
+                    </Link>
+                    <LogoutButton />
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-start justify-between gap-3 pb-3">
+              <div className="min-w-0 flex-1 space-y-2">
+                <Link href="/admin" className="text-2xl font-semibold tracking-tight text-zinc-50">
+                  {displayTitle}
+                </Link>
+                {shouldShowSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
+                <AdminProjectSelector />
+              </div>
+              <div className="flex shrink-0 items-center gap-2 self-start sm:hidden">
+                <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
+              </div>
+              <div className="hidden shrink-0 items-center gap-2 self-start sm:flex">
+                <Link href={actionHref} className={ghostButtonClassName()}>
+                  {actionLabel}
+                </Link>
+                <LogoutButton />
+              </div>
+            </div>
+          )}
           {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
           {mode === 'admin' ? <div className="py-2" /> : null}
         </div>
