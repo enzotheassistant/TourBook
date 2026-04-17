@@ -235,7 +235,7 @@ export function AppShell({
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
       <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
-        <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-[max(env(safe-area-inset-top),1rem)] sm:pt-4'} sm:px-6`}>
+        <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-[max(calc(env(safe-area-inset-top)+0.35rem),1.25rem)] sm:pt-4'} sm:px-6`}>
           {mode === 'crew' ? (
             <>
               <div className="pb-4 sm:hidden">
