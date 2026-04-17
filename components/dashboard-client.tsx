@@ -6,7 +6,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
-import { acceptWorkspaceInvite, listShows } from '@/lib/data-client';
+import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows } from '@/lib/data-client';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
@@ -122,6 +122,93 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
   );
 }
 
+function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<void> }) {
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [artistName, setArtistName] = useState('');
+  const [skipTour, setSkipTour] = useState(true);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [message, setMessage] = useState('Create your workspace and first artist to get started.');
+
+  async function handleSubmit() {
+    const cleanWorkspace = workspaceName.trim();
+    const cleanArtist = artistName.trim();
+
+    if (!cleanWorkspace) {
+      setStatus('error');
+      setMessage('Workspace name is required.');
+      return;
+    }
+
+    if (!cleanArtist) {
+      setStatus('error');
+      setMessage('First artist name is required.');
+      return;
+    }
+
+    setStatus('loading');
+    setMessage('Creating your workspace…');
+
+    try {
+      const workspace = await createWorkspace({ name: cleanWorkspace });
+      await createArtist({ workspaceId: workspace.id, name: cleanArtist });
+      setMessage(skipTour
+        ? 'Setup complete. Tour setup can be done later in Admin.'
+        : 'Setup complete. Continue in Admin to create your first tour.');
+      await onCompleted();
+    } catch (error) {
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : 'Unable to complete setup.');
+    }
+  }
+
+  return (
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">Welcome to TourBook</h2>
+        <p className="text-sm text-zinc-400">Start with one workspace and one artist. You can add team members, tours, and more artists later.</p>
+        <label className="block text-sm text-zinc-300">
+          <span className="mb-1 block">Workspace name</span>
+          <input
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+            placeholder="e.g. Northbound Touring"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+          />
+        </label>
+        <label className="block text-sm text-zinc-300">
+          <span className="mb-1 block">First artist</span>
+          <input
+            value={artistName}
+            onChange={(event) => setArtistName(event.target.value)}
+            placeholder="e.g. The Midnight Echoes"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={skipTour}
+            onChange={(event) => setSkipTour(event.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-black/30"
+          />
+          Skip tour setup for now
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={status === 'loading'}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60"
+          >
+            {status === 'loading' ? 'Setting up…' : 'Create workspace and artist'}
+          </button>
+        </div>
+        <p className={`text-sm ${status === 'error' ? 'text-rose-300' : 'text-zinc-400'}`}>{message}</p>
+      </div>
+    </section>
+  );
+}
+
 export function DashboardClient() {
   const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
@@ -204,22 +291,28 @@ export function DashboardClient() {
 
   if (!activeWorkspaceId) {
     const hasWorkspaceAccess = workspaces.length > 0;
+    const isFirstRun = memberships.length === 0 && workspaces.length === 0;
+
     return (
       <div className="space-y-3">
         {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
-        <ActivationEmptyState
-          title={hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
-          body={hasWorkspaceAccess
-            ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
-            : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
-          actions={[
-            { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
-            { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
-          ]}
-          telemetry={{
-            stateType: hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
-          }}
-        />
+        {isFirstRun ? (
+          <SelfServeOnboardingPanel onCompleted={refreshContext} />
+        ) : (
+          <ActivationEmptyState
+            title={hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
+            body={hasWorkspaceAccess
+              ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
+              : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
+            actions={[
+              { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+              { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+            ]}
+            telemetry={{
+              stateType: hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
+            }}
+          />
+        )}
       </div>
     );
   }

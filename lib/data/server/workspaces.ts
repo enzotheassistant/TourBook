@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isMissingRelationError, requireWorkspaceAccess, requireScopedDataClient } from '@/lib/data/server/shared';
+import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import type { WorkspaceMemberSummary, WorkspaceSummary } from '@/lib/types/tenant';
 
 function normalizeScopeType(value: unknown): 'workspace' | 'projects' {
@@ -7,6 +7,44 @@ function normalizeScopeType(value: unknown): 'workspace' | 'projects' {
   if (!raw || raw === 'workspace') return 'workspace';
   if (raw === 'projects') return 'projects';
   return 'projects';
+}
+
+function normalizeWorkspaceName(value: string) {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function slugifyWorkspaceName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60);
+}
+
+async function resolveAvailableWorkspaceSlug(supabase: SupabaseClient, baseSlug: string) {
+  const seed = baseSlug || 'workspace';
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate = attempt === 0 ? seed : `${seed}-${attempt + 1}`;
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('slug', candidate)
+      .limit(1);
+
+    if (error) {
+      if (isMissingRelationError(error)) {
+        throw new ApiError(409, 'Workspaces schema is not ready yet.');
+      }
+      throw new ApiError(500, error.message);
+    }
+
+    if (!data?.length) return candidate;
+  }
+
+  throw new ApiError(409, 'Unable to allocate workspace slug. Try another workspace name.');
 }
 
 export async function listWorkspaceMembershipsForUser(
@@ -84,6 +122,69 @@ export async function listWorkspacesForUser(supabaseInput: SupabaseClient, userI
     slug: String(row.slug ?? ''),
     ownerUserId: row.owner_user_id ? String(row.owner_user_id) : null,
   }));
+}
+
+export async function createWorkspaceForUser(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  input: { name: string; slug?: string | null },
+): Promise<WorkspaceSummary> {
+  const supabase = requireScopedDataClient(supabaseInput);
+
+  const name = normalizeWorkspaceName(input.name);
+  if (!name) {
+    throw new ApiError(400, 'Workspace name is required.');
+  }
+
+  if (name.length > 120) {
+    throw new ApiError(400, 'Workspace name must be 120 characters or fewer.');
+  }
+
+  const requestedSlug = String(input.slug ?? '').trim().toLowerCase();
+  const baseSlug = requestedSlug || slugifyWorkspaceName(name) || 'workspace';
+  const slug = await resolveAvailableWorkspaceSlug(supabase, baseSlug);
+
+  const { data: workspace, error: workspaceError } = await supabase
+    .from('workspaces')
+    .insert({
+      name,
+      slug,
+      owner_user_id: userId,
+    })
+    .select('id, name, slug, owner_user_id, created_at')
+    .single();
+
+  if (workspaceError) {
+    if (isMissingRelationError(workspaceError)) {
+      throw new ApiError(409, 'Workspaces schema is not ready yet.');
+    }
+    throw new ApiError(500, workspaceError.message);
+  }
+
+  const workspaceId = String(workspace.id);
+
+  const { error: memberError } = await supabase
+    .from('workspace_members')
+    .insert({
+      workspace_id: workspaceId,
+      user_id: userId,
+      role: 'owner',
+      scope_type: 'workspace',
+    });
+
+  if (memberError) {
+    if (isMissingRelationError(memberError)) {
+      throw new ApiError(409, 'Workspace membership schema is not ready yet.');
+    }
+    throw new ApiError(500, memberError.message);
+  }
+
+  return {
+    id: workspaceId,
+    name: String(workspace.name ?? ''),
+    slug: String(workspace.slug ?? ''),
+    ownerUserId: workspace.owner_user_id ? String(workspace.owner_user_id) : null,
+  };
 }
 
 export async function canUserAccessWorkspace(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
