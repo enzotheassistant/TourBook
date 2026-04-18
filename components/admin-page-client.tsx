@@ -1409,7 +1409,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onCancel={() => closeConfirmation(false)}
       />
       {importOpen ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 px-4 py-4 backdrop-blur-sm sm:flex sm:items-center sm:justify-center sm:py-6">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 px-4 py-4 backdrop-blur-sm sm:flex sm:items-start sm:justify-center sm:py-6">
           <div className="mx-auto mt-[max(env(safe-area-inset-top),0.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:mt-0 sm:max-h-[calc(100vh-3rem)] sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
