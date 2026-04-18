@@ -744,7 +744,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInviteProjectIds([]);
       setInviteScopeType('workspace');
       setInvites((current) => [created.invite, ...current]);
-      setInviteMessage(created.emailDelivery?.attempted ? 'Invite created and emailed. Use manual sharing only if needed.' : 'Invite created. Email delivery unavailable—use manual sharing below.');
+      setInviteMessage(created.emailDelivery?.attempted ? 'An email invite has been sent to your recipient(s).' : 'Invite sent.');
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to create invite.';
@@ -2352,7 +2352,7 @@ function InviteManagementSection({
         {lastInviteShare ? (
           <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm text-emerald-100">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p>Invite created. Email delivery is the default path.</p>
+              <p>Invite sent.</p>
               <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>
                 {showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}
               </button>
