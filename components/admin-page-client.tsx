@@ -1485,7 +1485,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/10 bg-black/20 p-3">
+              <div className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-black/20 p-3">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-medium text-zinc-200">Review</h3>
@@ -1506,7 +1506,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   </div>
                 ) : null}
 
-                <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                   {importRows.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">No results yet</div>
                   ) : (
