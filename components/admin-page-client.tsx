@@ -1420,7 +1420,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <button type="button" onClick={closeImportModal} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Close import">×</button>
             </div>
 
-            <div className="grid gap-4 xl:max-h-[calc(100vh-10rem)] xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:overflow-hidden">
+            <div className="grid gap-4 xl:max-h-[calc(100vh-10rem)] xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
               <div className="space-y-4 overflow-y-auto pr-1">
                 <label className="block text-sm text-zinc-300">
                   <span className="mb-2 block">Source text</span>
