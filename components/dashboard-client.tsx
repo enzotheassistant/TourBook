@@ -96,7 +96,7 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Workspace Invite</h2>
-        <p className="text-sm text-zinc-400">Accept from the invite link token, or paste a token manually if the link was shared directly.</p>
+
         <label className="block text-sm text-zinc-300">
           <span className="mb-1 block">Invite token</span>
           <input
