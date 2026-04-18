@@ -95,6 +95,21 @@ function normalizeAiImportDate(value: string, options?: { forcedYear?: number | 
       return tryParts(forcedYear, month, day) || '';
     }
 
+    // AI can over-eagerly output stale years for yearless source rows (e.g. 2024).
+    // If returned year is not this/next year, normalize to this year or next year
+    // based on whether the month/day has already passed.
+    if (year !== currentYear && year !== currentYear + 1) {
+      const thisYearCandidate = tryParts(currentYear, month, day);
+      if (thisYearCandidate) {
+        const thisYearDate = new Date(`${thisYearCandidate}T00:00:00`);
+        if (!Number.isNaN(thisYearDate.getTime())) {
+          return thisYearDate < today
+            ? tryParts(currentYear + 1, month, day) || thisYearCandidate
+            : thisYearCandidate;
+        }
+      }
+    }
+
     // AI can over-eagerly roll all yearless dates to next year.
     // If we get next-year for a month/day that is still upcoming this year,
     // normalize back to current year.
