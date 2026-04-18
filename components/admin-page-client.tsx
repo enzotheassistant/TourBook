@@ -744,7 +744,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInviteProjectIds([]);
       setInviteScopeType('workspace');
       setInvites((current) => [created.invite, ...current]);
-      setInviteMessage(created.emailDelivery?.attempted ? 'An email invite has been sent to your recipient(s).' : 'Invite sent.');
+      setInviteMessage('An email invite has been sent to your recipient(s).');
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to create invite.';
