@@ -253,6 +253,19 @@ export async function listWorkspaceMembers(workspaceId: string) {
   return payload.members ?? [];
 }
 
+export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; role: 'admin' | 'editor' | 'viewer'; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
+  const payload = await request<{ member: WorkspaceMemberDirectoryEntry }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      role: input.role,
+      scopeType: input.scopeType,
+      projectIds: input.projectIds ?? [],
+      tourIds: input.tourIds ?? [],
+    }),
+  });
+  return payload.member;
+}
+
 export async function removeWorkspaceMember(input: { workspaceId: string; memberId: string }) {
   return request<{ ok: boolean }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'DELETE',

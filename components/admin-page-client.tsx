@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
@@ -92,6 +92,7 @@ type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommo
 type VisibilityKey = keyof ShowFormValues['visibility'];
 type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
 type ExpandedSections = Record<SectionKey, boolean>;
+type EditableWorkspaceMemberRole = Exclude<WorkspaceMemberDirectoryEntry['role'], 'owner'>;
 
 const EXPANDED_SECTIONS_STORAGE_KEY = 'tourbook:new-date-expanded-sections';
 
@@ -379,6 +380,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
   const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberDirectoryEntry[]>([]);
+  const [editingMember, setEditingMember] = useState<WorkspaceMemberDirectoryEntry | null>(null);
+  const [editingMemberRole, setEditingMemberRole] = useState<EditableWorkspaceMemberRole>('viewer');
+  const [editingMemberScopeType, setEditingMemberScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
+  const [editingMemberProjectIds, setEditingMemberProjectIds] = useState<string[]>([]);
+  const [editingMemberTourIds, setEditingMemberTourIds] = useState<string[]>([]);
+  const [savingMemberEdit, setSavingMemberEdit] = useState(false);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -426,6 +433,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     const allowedProjects = new Set(inviteProjectIds);
     return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
   }, [inviteProjectIds, inviteScopeType, workspaceTours]);
+  const editAvailableTours = useMemo(() => {
+    if (editingMemberScopeType !== 'tours') return workspaceTours;
+    if (editingMemberProjectIds.length === 0) return workspaceTours;
+    const allowedProjects = new Set(editingMemberProjectIds);
+    return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
+  }, [editingMemberProjectIds, editingMemberScopeType, workspaceTours]);
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
@@ -478,6 +491,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   useEffect(() => {
     setInviteTourIds((current) => current.filter((id) => inviteAvailableTours.some((tour) => tour.id === id)));
   }, [inviteAvailableTours]);
+
+  useEffect(() => {
+    setEditingMemberProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
+  }, [workspaceProjects]);
+
+  useEffect(() => {
+    setEditingMemberTourIds((current) => current.filter((id) => editAvailableTours.some((tour) => tour.id === id)));
+  }, [editAvailableTours]);
 
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
@@ -816,6 +837,55 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
+  function handleStartEditMember(member: WorkspaceMemberDirectoryEntry) {
+    if (member.role === 'owner') return;
+    setEditingMember(member);
+    setEditingMemberRole(member.role);
+    setEditingMemberScopeType(member.scopeType);
+    setEditingMemberProjectIds(member.projectIds);
+    setEditingMemberTourIds(member.tourIds);
+    setInviteMessage('');
+  }
+
+  function closeMemberEditor() {
+    setEditingMember(null);
+    setEditingMemberRole('viewer');
+    setEditingMemberScopeType('workspace');
+    setEditingMemberProjectIds([]);
+    setEditingMemberTourIds([]);
+    setSavingMemberEdit(false);
+  }
+
+  async function handleSaveMemberEdit() {
+    if (!activeWorkspaceId || !editingMember || !canManageInvitesInWorkspace) return;
+    if (editingMemberScopeType === 'projects' && editingMemberProjectIds.length === 0) {
+      setInviteMessage('Select at least one artist for project-scoped access.');
+      return;
+    }
+    if (editingMemberScopeType === 'tours' && editingMemberTourIds.length === 0) {
+      setInviteMessage('Select at least one tour for tour-scoped access.');
+      return;
+    }
+
+    setSavingMemberEdit(true);
+    try {
+      const updated = await updateWorkspaceMember({
+        workspaceId: activeWorkspaceId,
+        memberId: editingMember.id,
+        role: editingMemberRole,
+        scopeType: editingMemberScopeType,
+        projectIds: editingMemberScopeType === 'projects' ? editingMemberProjectIds : editingMemberScopeType === 'tours' ? editingMemberProjectIds : [],
+        tourIds: editingMemberScopeType === 'tours' ? editingMemberTourIds : [],
+      });
+      setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setInviteMessage('Member access updated.');
+      closeMemberEditor();
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to update member.');
+      setSavingMemberEdit(false);
+    }
+  }
+
   async function handleRemoveMember(member: WorkspaceMemberDirectoryEntry) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
     const label = member.email || member.userId;
@@ -825,6 +895,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     try {
       await removeWorkspaceMember({ workspaceId: activeWorkspaceId, memberId: member.id });
       setMembers((current) => current.filter((item) => item.id !== member.id));
+      if (editingMember?.id === member.id) closeMemberEditor();
       setInviteMessage('Member removed.');
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to remove member.');
@@ -1462,6 +1533,24 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   return (
     <div className="space-y-3">
+      <EditMemberDialog
+        open={Boolean(editingMember)}
+        member={editingMember}
+        role={editingMemberRole}
+        scopeType={editingMemberScopeType}
+        projectIds={editingMemberProjectIds}
+        tourIds={editingMemberTourIds}
+        availableProjects={workspaceProjects}
+        availableTours={editAvailableTours}
+        canAssignAdmin={isWorkspaceOwner}
+        saving={savingMemberEdit}
+        onClose={closeMemberEditor}
+        onRoleChange={setEditingMemberRole}
+        onScopeTypeChange={setEditingMemberScopeType}
+        onProjectIdsChange={setEditingMemberProjectIds}
+        onTourIdsChange={setEditingMemberTourIds}
+        onSave={() => void handleSaveMemberEdit()}
+      />
       <ConfirmDialog
         open={confirmState.open}
         title={confirmState.title}
@@ -1772,6 +1861,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           loading={membersLoading}
           projects={workspaceProjects}
           tours={workspaceTours}
+          onEditMember={handleStartEditMember}
           onRemoveMember={(member) => void handleRemoveMember(member)}
           contextProjectId={contextProjectId || activeProjectId}
         />
@@ -2424,108 +2514,17 @@ function InviteManagementSection({
           </button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
-          <div className="mt-2 space-y-2">
-            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-              <input type="radio" name="invite-scope" checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
-              <span><span className="block font-medium">Full workspace</span><span className="text-xs text-zinc-500">All artists and tours in this workspace.</span></span>
-            </label>
-            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="radio"
-                name="invite-scope"
-                checked={scopeType === 'projects'}
-                onChange={() => {
-                  if (scopeType !== 'projects') {
-                    onScopeProjectIdsChange([]);
-                    onScopeTourIdsChange([]);
-                  }
-                  onScopeTypeChange('projects');
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
-              />
-              <span><span className="block font-medium">Selected artists</span><span className="text-xs text-zinc-500">Access only the artists checked below.</span></span>
-            </label>
-            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="radio"
-                name="invite-scope"
-                checked={scopeType === 'tours'}
-                onChange={() => {
-                  if (scopeType !== 'tours') {
-                    onScopeProjectIdsChange([]);
-                    onScopeTourIdsChange([]);
-                  }
-                  onScopeTypeChange('tours');
-                }}
-                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
-              />
-              <span><span className="block font-medium">Selected tours</span><span className="text-xs text-zinc-500">Restrict access to specific tours only.</span></span>
-            </label>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
-            {availableProjects.length === 0 ? (
-              <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
-            ) : (
-              availableProjects.map((project) => {
-                const checked = scopeProjectIds.includes(project.id);
-                return (
-                  <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' || scopeType === 'tours' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={scopeType === 'workspace'}
-                      onChange={(event) => {
-                        const next = event.target.checked ? [...scopeProjectIds, project.id] : scopeProjectIds.filter((id) => id !== project.id);
-                        if (!event.target.checked && scopeType === 'tours') {
-                          onScopeTourIdsChange(scopeTourIds.filter((id) => availableTours.some((tour) => tour.id === id && tour.projectId !== project.id)));
-                        }
-                        if (scopeType === 'workspace') onScopeTypeChange('projects');
-                        onScopeProjectIdsChange([...new Set(next)]);
-                      }}
-                      className="h-4 w-4 rounded border-white/20 bg-black/20"
-                    />
-                    <span>{project.name || project.slug || project.id}</span>
-                  </label>
-                );
-              })
-            )}
-          </div>
-
-          {scopeType === 'tours' ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
-              {availableTours.length === 0 ? (
-                <p className="text-sm text-zinc-400">No tours available for the selected artist scope yet.</p>
-              ) : (
-                availableTours.map((tour) => {
-                  const checked = scopeTourIds.includes(tour.id);
-                  return (
-                    <label key={tour.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          const next = event.target.checked ? [...scopeTourIds, tour.id] : scopeTourIds.filter((id) => id !== tour.id);
-                          onScopeTypeChange('tours');
-                          onScopeTourIdsChange([...new Set(next)]);
-                          if (!scopeProjectIds.includes(tour.projectId)) {
-                            onScopeProjectIdsChange([...new Set([...scopeProjectIds, tour.projectId])]);
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-white/20 bg-black/20"
-                      />
-                      <span>{tour.name || tour.id}</span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
-        </div>
+        <TeamScopeEditor
+          prefix="invite"
+          scopeType={scopeType}
+          scopeProjectIds={scopeProjectIds}
+          scopeTourIds={scopeTourIds}
+          availableProjects={availableProjects}
+          availableTours={availableTours}
+          onScopeTypeChange={onScopeTypeChange}
+          onScopeProjectIdsChange={onScopeProjectIdsChange}
+          onScopeTourIdsChange={onScopeTourIdsChange}
+        />
 
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
@@ -2612,11 +2611,221 @@ function InviteManagementSection({
   );
 }
 
+function TeamScopeEditor({
+  prefix,
+  scopeType,
+  scopeProjectIds,
+  scopeTourIds,
+  availableProjects,
+  availableTours,
+  onScopeTypeChange,
+  onScopeProjectIdsChange,
+  onScopeTourIdsChange,
+}: {
+  prefix: string;
+  scopeType: 'workspace' | 'projects' | 'tours';
+  scopeProjectIds: string[];
+  scopeTourIds: string[];
+  availableProjects: ProjectSummary[];
+  availableTours: TourSummary[];
+  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
+  onScopeProjectIdsChange: (value: string[]) => void;
+  onScopeTourIdsChange: (value: string[]) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+      <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
+      <div className="mt-2 space-y-2">
+        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+          <input type="radio" name={`${prefix}-scope`} checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
+          <span><span className="block font-medium">Full workspace</span><span className="text-xs text-zinc-500">All artists and tours in this workspace.</span></span>
+        </label>
+        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+          <input
+            type="radio"
+            name={`${prefix}-scope`}
+            checked={scopeType === 'projects'}
+            onChange={() => {
+              if (scopeType !== 'projects') {
+                onScopeProjectIdsChange([]);
+                onScopeTourIdsChange([]);
+              }
+              onScopeTypeChange('projects');
+            }}
+            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
+          />
+          <span><span className="block font-medium">Selected artists</span><span className="text-xs text-zinc-500">Access only the artists checked below.</span></span>
+        </label>
+        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+          <input
+            type="radio"
+            name={`${prefix}-scope`}
+            checked={scopeType === 'tours'}
+            onChange={() => {
+              if (scopeType !== 'tours') {
+                onScopeProjectIdsChange([]);
+                onScopeTourIdsChange([]);
+              }
+              onScopeTypeChange('tours');
+            }}
+            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
+          />
+          <span><span className="block font-medium">Selected tours</span><span className="text-xs text-zinc-500">Restrict access to specific tours only.</span></span>
+        </label>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
+        {availableProjects.length === 0 ? (
+          <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
+        ) : (
+          availableProjects.map((project) => {
+            const checked = scopeProjectIds.includes(project.id);
+            return (
+              <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' || scopeType === 'tours' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={scopeType === 'workspace'}
+                  onChange={(event) => {
+                    const next = event.target.checked ? [...scopeProjectIds, project.id] : scopeProjectIds.filter((id) => id !== project.id);
+                    if (!event.target.checked && scopeType === 'tours') {
+                      onScopeTourIdsChange(scopeTourIds.filter((id) => availableTours.some((tour) => tour.id === id && tour.projectId !== project.id)));
+                    }
+                    if (scopeType === 'workspace') onScopeTypeChange('projects');
+                    onScopeProjectIdsChange([...new Set(next)]);
+                  }}
+                  className="h-4 w-4 rounded border-white/20 bg-black/20"
+                />
+                <span>{project.name || project.slug || project.id}</span>
+              </label>
+            );
+          })
+        )}
+      </div>
+
+      {scopeType === 'tours' ? (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
+          {availableTours.length === 0 ? (
+            <p className="text-sm text-zinc-400">No tours available for the selected artist scope yet.</p>
+          ) : (
+            availableTours.map((tour) => {
+              const checked = scopeTourIds.includes(tour.id);
+              return (
+                <label key={tour.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      const next = event.target.checked ? [...scopeTourIds, tour.id] : scopeTourIds.filter((id) => id !== tour.id);
+                      onScopeTypeChange('tours');
+                      onScopeTourIdsChange([...new Set(next)]);
+                      if (!scopeProjectIds.includes(tour.projectId)) {
+                        onScopeProjectIdsChange([...new Set([...scopeProjectIds, tour.projectId])]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-white/20 bg-black/20"
+                  />
+                  <span>{tour.name || tour.id}</span>
+                </label>
+              );
+            })
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditMemberDialog({
+  open,
+  member,
+  role,
+  scopeType,
+  projectIds,
+  tourIds,
+  availableProjects,
+  availableTours,
+  canAssignAdmin,
+  saving,
+  onClose,
+  onRoleChange,
+  onScopeTypeChange,
+  onProjectIdsChange,
+  onTourIdsChange,
+  onSave,
+}: {
+  open: boolean;
+  member: WorkspaceMemberDirectoryEntry | null;
+  role: EditableWorkspaceMemberRole;
+  scopeType: 'workspace' | 'projects' | 'tours';
+  projectIds: string[];
+  tourIds: string[];
+  availableProjects: ProjectSummary[];
+  availableTours: TourSummary[];
+  canAssignAdmin: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onRoleChange: (value: EditableWorkspaceMemberRole) => void;
+  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
+  onProjectIdsChange: (value: string[]) => void;
+  onTourIdsChange: (value: string[]) => void;
+  onSave: () => void;
+}) {
+  if (!open || !member || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 px-4 pb-6 pt-12 sm:items-center" role="dialog" aria-modal="true" aria-label="Edit team member" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Edit member</p>
+            <h3 className="mt-1 text-base font-semibold text-zinc-100">{member.email || member.userId}</h3>
+            <p className="mt-1 text-sm text-zinc-400">Update role and access scope without resending an invite.</p>
+          </div>
+          <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Close</button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+          <label className="text-sm font-medium text-zinc-200">Role</label>
+          <select value={role} onChange={(event) => onRoleChange(event.target.value as EditableWorkspaceMemberRole)} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40">
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+            {canAssignAdmin ? <option value="admin">Admin</option> : null}
+          </select>
+        </div>
+
+        <div className="mt-4">
+          <TeamScopeEditor
+            prefix="edit-member"
+            scopeType={scopeType}
+            scopeProjectIds={projectIds}
+            scopeTourIds={tourIds}
+            availableProjects={availableProjects}
+            availableTours={availableTours}
+            onScopeTypeChange={onScopeTypeChange}
+            onScopeProjectIdsChange={onProjectIdsChange}
+            onScopeTourIdsChange={onTourIdsChange}
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={onSave} disabled={saving} className={primaryButtonClassName()}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Cancel</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function TeamMembersSection({
   members,
   loading,
   projects,
   tours,
+  onEditMember,
   onRemoveMember,
   contextProjectId,
 }: {
@@ -2624,6 +2833,7 @@ function TeamMembersSection({
   loading: boolean;
   projects: ProjectSummary[];
   tours: TourSummary[];
+  onEditMember: (member: WorkspaceMemberDirectoryEntry) => void;
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
 }) {
@@ -2663,7 +2873,12 @@ function TeamMembersSection({
                   subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
                   detail={scope.detail}
                   contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
-                  action={member.role !== 'owner' ? <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button> : null}
+                  action={member.role !== 'owner' ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>Edit</button>
+                      <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button>
+                    </div>
+                  ) : null}
                 />
               );
             })}
