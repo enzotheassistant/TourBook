@@ -13,7 +13,7 @@
     "invites:failures:report": "node scripts/invite-failures-report.mjs --hours=24",
     "invites:go-live:check": "node scripts/invites-go-live-check.mjs",
     "test:authz": "node --test --experimental-strip-types lib/data/server/authorization.test.mjs",
-    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node lib/data/server/authorization.test.mjs lib/data/server/invites.test.mjs lib/data/server/invite-scope-utils.test.mjs lib/data/server/project-scope.test.mjs lib/data/server/projects.test.mjs lib/config/legacy-flags.test.mjs app/api/ai-intake/auth-parity.test.mjs lib/activation/first-run.test.mjs lib/ui/project-context.test.mjs"
+    "test:unit": "node --test --experimental-strip-types --experimental-specifier-resolution=node lib/data/server/authorization.test.mjs lib/data/server/invites.test.mjs lib/data/server/invite-scope-utils.test.mjs lib/data/server/project-scope.test.mjs lib/data/server/projects.test.mjs lib/config/legacy-flags.test.mjs app/api/ai-intake/auth-parity.test.mjs lib/activation/first-run.test.mjs lib/ui/project-context.test.mjs lib/ui/team-directory.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.102.1",

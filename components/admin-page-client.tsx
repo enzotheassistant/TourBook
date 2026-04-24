@@ -19,6 +19,7 @@ import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
+import { describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -1410,6 +1411,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onScopeTypeChange={setInviteScopeType}
             onScopeProjectIdsChange={setInviteProjectIds}
             onScopeTourIdsChange={setInviteTourIds}
+            contextProjectId={contextProjectId || activeProjectId}
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
             onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -1771,6 +1773,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           projects={workspaceProjects}
           tours={workspaceTours}
           onRemoveMember={(member) => void handleRemoveMember(member)}
+          contextProjectId={contextProjectId || activeProjectId}
         />
       ) : null}
 
@@ -1795,6 +1798,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onScopeTypeChange={setInviteScopeType}
           onScopeProjectIdsChange={setInviteProjectIds}
           onScopeTourIdsChange={setInviteTourIds}
+          contextProjectId={contextProjectId || activeProjectId}
           onCreateInvite={() => void handleCreateInvite()}
           onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
           onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -2284,6 +2288,56 @@ function ProjectManagementSection({
   );
 }
 
+function roleBadgeClassName(role: 'owner' | 'admin' | 'editor' | 'viewer') {
+  if (role === 'owner') return 'border-amber-400/30 bg-amber-500/10 text-amber-100';
+  if (role === 'admin') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
+  if (role === 'editor') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100';
+  return 'border-white/10 bg-white/[0.06] text-zinc-200';
+}
+
+function inviteStatusBadgeClassName(status: WorkspaceInviteSummary['status']) {
+  if (status === 'pending') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100';
+  if (status === 'accepted') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
+  if (status === 'revoked') return 'border-red-400/30 bg-red-500/10 text-red-100';
+  return 'border-white/10 bg-white/[0.06] text-zinc-300';
+}
+
+function TeamDirectoryCard({
+  title,
+  subtitle,
+  detail,
+  role,
+  status,
+  contextLabel,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  detail?: string | null;
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  status?: WorkspaceInviteSummary['status'] | null;
+  contextLabel?: string | null;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-medium text-zinc-100">{title}</p>
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span>
+            {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
+            {contextLabel ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-300">{contextLabel}</span> : null}
+          </div>
+          <p className="mt-1 text-sm text-zinc-300">{subtitle}</p>
+          {detail ? <p className="mt-1 text-xs text-zinc-500">{detail}</p> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function InviteManagementSection({
   invites,
   loading,
@@ -2307,6 +2361,7 @@ function InviteManagementSection({
   onCreateInvite,
   onRevokeInvite,
   onCopyValue,
+  contextProjectId,
 }: {
   invites: WorkspaceInviteSummary[];
   loading: boolean;
@@ -2330,8 +2385,13 @@ function InviteManagementSection({
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
   onCopyValue: (value: string, successMessage: string) => void;
+  contextProjectId?: string | null;
 }) {
   const recentInvites = invites.slice(0, 12);
+  const inviteGroups = splitInvitesByStatus(recentInvites);
+  const projectNameById = new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id]));
+  const toursById = new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
+  const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
@@ -2339,6 +2399,7 @@ function InviteManagementSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
+          <p className="mt-1 text-sm text-zinc-400">Pending invites now use the same access language as accepted members, so the whole team reads like one directory instead of two different systems.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
@@ -2367,17 +2428,8 @@ function InviteManagementSection({
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
           <div className="mt-2 space-y-2">
             <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-              <input
-                type="radio"
-                name="invite-scope"
-                checked={scopeType === 'workspace'}
-                onChange={() => onScopeTypeChange('workspace')}
-                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
-              />
-              <span>
-                <span className="block font-medium">Workspace-wide</span>
-                <span className="text-xs text-zinc-500">Can access every artist in this workspace.</span>
-              </span>
+              <input type="radio" name="invite-scope" checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
+              <span><span className="block font-medium">Full workspace</span><span className="text-xs text-zinc-500">All artists and tours in this workspace.</span></span>
             </label>
             <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
               <input
@@ -2393,10 +2445,7 @@ function InviteManagementSection({
                 }}
                 className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
               />
-              <span>
-                <span className="block font-medium">Project-limited</span>
-                <span className="text-xs text-zinc-500">Select specific artists below.</span>
-              </span>
+              <span><span className="block font-medium">Selected artists</span><span className="text-xs text-zinc-500">Access only the artists checked below.</span></span>
             </label>
             <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
               <input
@@ -2412,15 +2461,12 @@ function InviteManagementSection({
                 }}
                 className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
               />
-              <span>
-                <span className="block font-medium">Tour-limited</span>
-                <span className="text-xs text-zinc-500">Restrict access to specific tours only.</span>
-              </span>
+              <span><span className="block font-medium">Selected tours</span><span className="text-xs text-zinc-500">Restrict access to specific tours only.</span></span>
             </label>
           </div>
 
           <div className="mt-3 space-y-2">
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Projects (Artists)</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
             {availableProjects.length === 0 ? (
               <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
             ) : (
@@ -2433,9 +2479,7 @@ function InviteManagementSection({
                       checked={checked}
                       disabled={scopeType === 'workspace'}
                       onChange={(event) => {
-                        const next = event.target.checked
-                          ? [...scopeProjectIds, project.id]
-                          : scopeProjectIds.filter((id) => id !== project.id);
+                        const next = event.target.checked ? [...scopeProjectIds, project.id] : scopeProjectIds.filter((id) => id !== project.id);
                         if (!event.target.checked && scopeType === 'tours') {
                           onScopeTourIdsChange(scopeTourIds.filter((id) => availableTours.some((tour) => tour.id === id && tour.projectId !== project.id)));
                         }
@@ -2465,9 +2509,7 @@ function InviteManagementSection({
                         type="checkbox"
                         checked={checked}
                         onChange={(event) => {
-                          const next = event.target.checked
-                            ? [...scopeTourIds, tour.id]
-                            : scopeTourIds.filter((id) => id !== tour.id);
+                          const next = event.target.checked ? [...scopeTourIds, tour.id] : scopeTourIds.filter((id) => id !== tour.id);
                           onScopeTypeChange('tours');
                           onScopeTourIdsChange([...new Set(next)]);
                           if (!scopeProjectIds.includes(tour.projectId)) {
@@ -2491,9 +2533,7 @@ function InviteManagementSection({
           <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm text-emerald-100">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p>Invite sent.</p>
-              <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>
-                {showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}
-              </button>
+              <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>{showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}</button>
             </div>
             {showManualShare ? (
               <div className="mt-3 space-y-2">
@@ -2508,28 +2548,62 @@ function InviteManagementSection({
         ) : null}
 
         <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Pending / recent invites</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
+              <p className="text-sm text-zinc-300">Pending invites are separated from historical invite activity for easier scanning.</p>
+            </div>
+            <div className="text-xs text-zinc-500">{inviteGroups.pending.length} pending · {inviteGroups.history.length} recent</div>
+          </div>
           {loading ? (
-            <p className="text-sm text-zinc-400">Loading invites…</p>
+            <p className="mt-3 text-sm text-zinc-400">Loading invites…</p>
           ) : recentInvites.length === 0 ? (
-            <p className="text-sm text-zinc-400">No invites yet.</p>
+            <p className="mt-3 text-sm text-zinc-400">No invites yet.</p>
           ) : (
-            <div className="space-y-2">
-              {recentInvites.map((invite) => (
-                <div key={invite.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm text-zinc-100">{invite.email}</p>
-                      <p className="text-xs text-zinc-400">{invite.role} • {invite.scopeType === 'workspace' ? 'workspace-wide' : invite.scopeType === 'tours' ? `tours (${invite.tourIds.length})` : `projects (${invite.projectIds.length})`} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
-                    </div>
-                    {invite.status === 'pending' ? (
-                      <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>
-                        Revoke
-                      </button>
-                    ) : null}
-                  </div>
+            <div className="mt-3 space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
+                {inviteGroups.pending.length === 0 ? (
+                  <p className="text-sm text-zinc-400">No pending invites.</p>
+                ) : (
+                  inviteGroups.pending.map((invite) => {
+                    const scope = describeTeamScope(invite, { projectNameById, toursById });
+                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
+                    return (
+                      <TeamDirectoryCard
+                        key={invite.id}
+                        title={invite.email}
+                        role={invite.role}
+                        status={invite.status}
+                        subtitle={`${scope.label} · expires ${formatInviteDate(invite.expiresAt)}`}
+                        detail={scope.detail}
+                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                        action={<button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>Revoke</button>}
+                      />
+                    );
+                  })
+                )}
+              </div>
+              {inviteGroups.history.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
+                  {inviteGroups.history.map((invite) => {
+                    const scope = describeTeamScope(invite, { projectNameById, toursById });
+                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
+                    return (
+                      <TeamDirectoryCard
+                        key={invite.id}
+                        title={invite.email}
+                        role={invite.role}
+                        status={invite.status}
+                        subtitle={`${scope.label} · updated ${formatInviteDate(invite.updatedAt)}`}
+                        detail={scope.detail}
+                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                      />
+                    );
+                  })}
                 </div>
-              ))}
+              ) : null}
             </div>
           )}
         </div>
@@ -2544,30 +2618,32 @@ function TeamMembersSection({
   projects,
   tours,
   onRemoveMember,
+  contextProjectId,
 }: {
   members: WorkspaceMemberDirectoryEntry[];
   loading: boolean;
   projects: ProjectSummary[];
   tours: TourSummary[];
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
+  contextProjectId?: string | null;
 }) {
   const projectNameById = new Map(projects.map((project) => [project.id, project.name || project.slug || project.id]));
-  const tourNameById = new Map(tours.map((tour) => [tour.id, tour.name || tour.id]));
-
-  function describeScope(member: WorkspaceMemberDirectoryEntry) {
-    if (member.scopeType === 'workspace') return 'workspace-wide';
-    if (member.scopeType === 'projects') {
-      return `projects: ${member.projectIds.map((id) => projectNameById.get(id) ?? id).join(', ') || 'selected artists'}`;
-    }
-    return `tours: ${member.tourIds.map((id) => tourNameById.get(id) ?? id).join(', ') || 'selected tours'}`;
-  }
+  const toursById = new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
+  const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
+  const sortedMembers = [...members].sort((a, b) => {
+    const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
+    const bInContext = matchesProjectContext(b, contextProjectId, toursById) ? 1 : 0;
+    if (aInContext !== bInContext) return bInContext - aInContext;
+    return (a.email || a.userId).localeCompare(b.email || b.userId);
+  });
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-3">
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Members</p>
-          <h2 className="mt-1 text-base font-semibold text-zinc-100">Current team members</h2>
+          <h2 className="mt-1 text-base font-semibold text-zinc-100">Accepted team members</h2>
+          <p className="mt-1 text-sm text-zinc-400">Same access labels as invites, with current-artist matches sorted first when you arrive here from an artist context.</p>
         </div>
 
         {loading ? (
@@ -2576,21 +2652,21 @@ function TeamMembersSection({
           <p className="text-sm text-zinc-400">No team members found yet.</p>
         ) : (
           <div className="space-y-2">
-            {members.map((member) => (
-              <div key={member.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm text-zinc-100">{member.email || member.userId}</p>
-                    <p className="text-xs text-zinc-400">{member.role} • {describeScope(member)}</p>
-                  </div>
-                  {member.role !== 'owner' ? (
-                    <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
+            {sortedMembers.map((member) => {
+              const scope = describeTeamScope(member, { projectNameById, toursById });
+              const inContext = matchesProjectContext(member, contextProjectId, toursById);
+              return (
+                <TeamDirectoryCard
+                  key={member.id}
+                  title={member.email || member.userId}
+                  role={member.role}
+                  subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
+                  detail={scope.detail}
+                  contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
+                  action={member.role !== 'owner' ? <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button> : null}
+                />
+              );
+            })}
           </div>
         )}
       </div>
