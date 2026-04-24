@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { buildInviteExpiry, generateInviteToken, hashInviteToken, normalizeInviteEmail, validateInviteRole, type WorkspaceInviteRole } from '@/lib/invites/security';
 import type { WorkspaceScopeType } from '@/lib/types/tenant';
+import { hasExactTourInviteSet, normalizeScopeTypeValue, resolveScopePrecedence } from '@/lib/data/server/invite-scope-utils';
 
 export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 
@@ -21,11 +22,9 @@ export type WorkspaceInviteSummary = {
   updatedAt: string;
 };
 
-function normalizeScopeType(value: unknown): WorkspaceScopeType {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (!raw || raw === 'workspace') return 'workspace';
-  if (raw === 'projects') return 'projects';
-  if (raw === 'tours') return 'tours';
+export function normalizeScopeType(value: unknown): WorkspaceScopeType {
+  const normalized = normalizeScopeTypeValue(value);
+  if (normalized) return normalized;
   throw new ApiError(400, 'scopeType must be workspace, projects, or tours.');
 }
 
@@ -240,8 +239,7 @@ export async function createWorkspaceInviteScoped(
   if (scopeType === 'tours' && (duplicateRows ?? []).length > 0) {
     const duplicateIds = (duplicateRows ?? []).map((row: any) => String(row.id));
     const existingTourIds = await getInviteTourIds(supabase, duplicateIds);
-    const requestedKey = [...tourIds].sort().join(',');
-    const exactDuplicate = duplicateIds.some((inviteId) => [...(existingTourIds.get(inviteId) ?? [])].sort().join(',') === requestedKey);
+    const exactDuplicate = duplicateIds.some((inviteId) => hasExactTourInviteSet(existingTourIds.get(inviteId) ?? [], tourIds));
     if (exactDuplicate) {
       throw new ApiError(409, 'An active invite already exists for this user, role, and tour scope.');
     }
@@ -495,8 +493,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   if (currentMemberError) throw new ApiError(500, currentMemberError.message);
 
   const currentScope = normalizeScopeType(currentMember.scope_type);
-  const precedence = { tours: 1, projects: 2, workspace: 3 } as const;
-  const nextScope = precedence[scopeType] > precedence[currentScope] ? scopeType : currentScope;
+  const nextScope = resolveScopePrecedence(currentScope, scopeType);
 
   if (nextScope !== currentScope) {
     const { error: widenError } = await supabase
