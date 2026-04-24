@@ -109,7 +109,9 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
       const activeTourId = activeTours.some((tour) => tour.id === storedTourId)
         ? storedTourId
-        : null;
+        : activeTours.some((tour) => tour.id === data.activeTourId)
+          ? data.activeTourId
+          : activeTours[0]?.id ?? null;
 
       setBootstrap({
         ...data,

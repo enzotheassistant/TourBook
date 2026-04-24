@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ensureProjectAccess, ensureTourInScope, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject } from '@/lib/data/server/shared';
+import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -198,7 +198,12 @@ async function assertDateReadable(supabase: SupabaseClient, userId: string, work
     throw new ApiError(404, 'Date not found.');
   }
 
-  return { row: data, role: membership.role };
+  const tourId = data.tour_id ? String(data.tour_id) : null;
+  if (!canAccessTour(membership, projectId, tourId)) {
+    throw new ApiError(404, 'Date not found.');
+  }
+
+  return { row: data, role: membership.role, access: membership };
 }
 
 export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
@@ -222,7 +227,10 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
     .order('created_at', { ascending: true });
 
   if (input.tourId) {
+    await ensureTourAccess(supabase, input.userId, input.workspaceId, input.projectId, input.tourId, ['owner', 'admin', 'editor', 'viewer']);
     query = query.eq('tour_id', input.tourId);
+  } else if (membership.scopeType === 'tours') {
+    query = query.in('tour_id', membership.tourIds);
   }
 
   if (membership.role === 'viewer' || !input.includeDrafts) {
@@ -280,9 +288,15 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(values.workspace_id ?? '');
   const projectId = String(values.project_id ?? '');
-  await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
+  const access = await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date);
   await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id);
+  if (access.scopeType === 'tours' && !values.tour_id) {
+    throw new ApiError(403, 'Tour-scoped members can only create dates inside an assigned tour.');
+  }
+  if (values.tour_id) {
+    await ensureTourAccess(supabase, userId, workspaceId, projectId, String(values.tour_id), ['owner', 'admin', 'editor']);
+  }
 
     const payload = buildDatePayload(values, workspaceId, projectId);
   const { data, error } = await supabase.from('dates').insert(payload).select('*').single();
@@ -301,9 +315,16 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
   const supabase = requireScopedDataClient(supabaseInput);
   const current = await getDateScoped(supabase, userId, workspaceId, dateId);
   const projectId = String(values.project_id ?? current.project_id);
-  await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
+  const access = await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date ?? current.date);
-  await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id ?? current.tour_id);
+  const effectiveTourId = values.tour_id ?? current.tour_id;
+  await ensureTourInScope(supabase, workspaceId, projectId, effectiveTourId);
+  if (access.scopeType === 'tours' && !effectiveTourId) {
+    throw new ApiError(403, 'Tour-scoped members can only update dates inside an assigned tour.');
+  }
+  if (effectiveTourId) {
+    await ensureTourAccess(supabase, userId, workspaceId, projectId, String(effectiveTourId), ['owner', 'admin', 'editor']);
+  }
 
     const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
   const { data, error } = await supabase

@@ -372,7 +372,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
-  const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects'>('workspace');
+  const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
@@ -2235,7 +2235,7 @@ function InviteManagementSection({
   loading: boolean;
   email: string;
   role: WorkspaceInviteRole;
-  scopeType: 'workspace' | 'projects';
+  scopeType: 'workspace' | 'projects' | 'tours';
   scopeProjectIds: string[];
   availableProjects: ProjectSummary[];
   message: string;
@@ -2245,7 +2245,7 @@ function InviteManagementSection({
   onToggleManualShare: () => void;
   onEmailChange: (value: string) => void;
   onRoleChange: (value: WorkspaceInviteRole) => void;
-  onScopeTypeChange: (value: 'workspace' | 'projects') => void;
+  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
   onScopeProjectIdsChange: (value: string[]) => void;
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;

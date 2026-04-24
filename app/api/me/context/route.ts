@@ -16,10 +16,11 @@ function isMissingRelationError(error: unknown) {
   return maybeCode === '42P01' || maybeMessage.toLowerCase().includes('does not exist');
 }
 
-function normalizeScopeType(value: unknown): 'workspace' | 'projects' | null {
+function normalizeScopeType(value: unknown): 'workspace' | 'projects' | 'tours' | null {
   const raw = String(value ?? '').trim().toLowerCase();
   if (!raw || raw === 'workspace') return 'workspace';
   if (raw === 'projects') return 'projects';
+  if (raw === 'tours') return 'tours';
   return null;
 }
 
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
     const membershipRows = membershipsResult.data ?? [];
     const memberIds = membershipRows.map((row: any) => String(row.id));
     const memberProjectMap = new Map<string, string[]>();
+    const memberTourMap = new Map<string, string[]>();
 
     if (memberIds.length) {
       const grantsResult = await supabase
@@ -77,14 +79,35 @@ export async function GET(request: NextRequest) {
         list.push(String((row as any).project_id));
         memberProjectMap.set(memberId, list);
       }
+
+      const tourGrantsResult = await supabase
+        .from('workspace_member_tours')
+        .select('workspace_member_id, project_id, tour_id')
+        .in('workspace_member_id', memberIds);
+
+      if (tourGrantsResult.error && !isMissingRelationError(tourGrantsResult.error)) {
+        throw tourGrantsResult.error;
+      }
+
+      for (const row of tourGrantsResult.data ?? []) {
+        const memberId = String((row as any).workspace_member_id);
+        const tours = memberTourMap.get(memberId) ?? [];
+        tours.push(String((row as any).tour_id));
+        memberTourMap.set(memberId, tours);
+        const projects = memberProjectMap.get(memberId) ?? [];
+        projects.push(String((row as any).project_id));
+        memberProjectMap.set(memberId, projects);
+      }
     }
 
     const memberships: WorkspaceMemberSummary[] = membershipRows
       .map((row: any) => {
         const scopeType = normalizeScopeType(row.scope_type);
         if (!scopeType) return null;
-        const projectIds = scopeType === 'projects' ? [...new Set(memberProjectMap.get(String(row.id)) ?? [])] : [];
+        const projectIds = scopeType === 'workspace' ? [] : [...new Set(memberProjectMap.get(String(row.id)) ?? [])];
+        const tourIds = scopeType === 'tours' ? [...new Set(memberTourMap.get(String(row.id)) ?? [])] : [];
         if (scopeType === 'projects' && projectIds.length === 0) return null;
+        if (scopeType === 'tours' && tourIds.length === 0) return null;
 
         return {
           id: String(row.id),
@@ -93,6 +116,7 @@ export async function GET(request: NextRequest) {
           role: row.role,
           scopeType,
           projectIds,
+          tourIds,
         };
       })
       .filter(Boolean) as WorkspaceMemberSummary[];
@@ -143,6 +167,11 @@ export async function GET(request: NextRequest) {
           map.set(membership.workspaceId, null);
         } else if (!map.has(membership.workspaceId)) {
           map.set(membership.workspaceId, new Set(membership.projectIds));
+        } else {
+          const existing = map.get(membership.workspaceId);
+          if (existing) {
+            membership.projectIds.forEach((projectId) => existing.add(projectId));
+          }
         }
         return map;
       }, new Map<string, Set<string> | null>());
@@ -167,27 +196,44 @@ export async function GET(request: NextRequest) {
     const activeProjectId = projectsForActiveWorkspace[0]?.id ?? null;
 
     let tours: TourSummary[] = [];
-    if (activeWorkspaceId && activeProjectId) {
+    if (activeWorkspaceId) {
       const toursResult = await supabase
         .from('tours')
-        .select('id, workspace_id, project_id, name, created_at')
+        .select('id, workspace_id, project_id, name, status, start_date, end_date, created_at')
         .eq('workspace_id', activeWorkspaceId)
-        .eq('project_id', activeProjectId)
         .order('created_at', { ascending: true })
         .limit(200);
 
       if (toursResult.error) {
         if (!isMissingRelationError(toursResult.error)) throw toursResult.error;
       } else {
-        tours = (toursResult.data ?? []).map((row: any) => ({
-          id: String(row.id),
-          workspaceId: String(row.workspace_id),
-          projectId: String(row.project_id),
-          name: String(row.name ?? ''),
-          status: String(row.status ?? ''),
-          startDate: row.start_date ? String(row.start_date) : null,
-          endDate: row.end_date ? String(row.end_date) : null,
-        }));
+        const workspaceMemberships = memberships.filter((membership) => membership.workspaceId === activeWorkspaceId);
+        const allowedProjectIds = new Set(
+          workspaceMemberships.flatMap((membership) => membership.scopeType === 'workspace' ? [] : membership.projectIds),
+        );
+        const allowedTourIds = new Set(
+          workspaceMemberships.flatMap((membership) => membership.scopeType === 'tours' ? membership.tourIds : []),
+        );
+        const hasWorkspaceScope = workspaceMemberships.some((membership) => membership.scopeType === 'workspace');
+        const hasProjectScope = workspaceMemberships.some((membership) => membership.scopeType === 'projects');
+
+        tours = (toursResult.data ?? [])
+          .filter((row: any) => {
+            if (hasWorkspaceScope) return true;
+            const rowProjectId = String(row.project_id);
+            const rowTourId = String(row.id);
+            if (hasProjectScope && allowedProjectIds.has(rowProjectId)) return true;
+            return allowedTourIds.has(rowTourId);
+          })
+          .map((row: any) => ({
+            id: String(row.id),
+            workspaceId: String(row.workspace_id),
+            projectId: String(row.project_id),
+            name: String(row.name ?? ''),
+            status: String(row.status ?? ''),
+            startDate: row.start_date ? String(row.start_date) : null,
+            endDate: row.end_date ? String(row.end_date) : null,
+          }));
       }
     }
 
@@ -195,6 +241,9 @@ export async function GET(request: NextRequest) {
       debugInfo.readOnly = true;
       debugInfo.projectCount = allProjects.length;
     }
+
+    const activeToursForProject = activeProjectId ? tours.filter((tour) => tour.projectId === activeProjectId) : [];
+    const activeTourId = activeToursForProject[0]?.id ?? null;
 
     return finalizeAuthResponse(NextResponse.json({
       user,
@@ -204,7 +253,7 @@ export async function GET(request: NextRequest) {
       tours,
       activeWorkspaceId,
       activeProjectId,
-      activeTourId: null,
+      activeTourId,
       ...(debug ? { _debug: debugInfo } : {}),
     }), authState);
   } catch (error) {

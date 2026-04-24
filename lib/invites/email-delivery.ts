@@ -52,11 +52,15 @@ function renderInviteEmail(input: SendInviteEmailInput) {
 
   const scopeLabel = input.invite.scopeType === 'projects'
     ? `projects: ${projectNames.length ? projectNames.join(', ') : 'selected project(s)'}`
-    : `workspace: ${workspaceName || 'your workspace'}`;
+    : input.invite.scopeType === 'tours'
+      ? `tours: ${projectNames.length ? projectNames.join(', ') : 'selected tour(s)'}`
+      : `workspace: ${workspaceName || 'your workspace'}`;
 
   const subjectTarget = input.invite.scopeType === 'projects'
     ? (projectNames.length ? projectNames.join(', ') : 'selected projects')
-    : (workspaceName || 'your workspace');
+    : input.invite.scopeType === 'tours'
+      ? (projectNames.length ? projectNames.join(', ') : 'selected tours')
+      : (workspaceName || 'your workspace');
 
   const subject = `${inviterName} invited you to ${subjectTarget} on ${appName}`;
   const text = [

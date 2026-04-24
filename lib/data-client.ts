@@ -227,10 +227,10 @@ export async function listWorkspaceInvites(workspaceId: string) {
   return payload.invites ?? [];
 }
 
-export async function createWorkspaceInvite(input: { workspaceId: string; email: string; role: WorkspaceInviteRole; scopeType: 'workspace' | 'projects'; projectIds?: string[] }) {
+export async function createWorkspaceInvite(input: { workspaceId: string; email: string; role: WorkspaceInviteRole; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
   return request<{ invite: WorkspaceInviteSummary; acceptToken: string; emailDelivery?: { attempted?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
     method: 'POST',
-    body: JSON.stringify({ email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [] }),
+    body: JSON.stringify({ email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [], tourIds: input.tourIds ?? [] }),
   });
 }
 

@@ -2,10 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import type { WorkspaceMemberSummary, WorkspaceSummary } from '@/lib/types/tenant';
 
-function normalizeScopeType(value: unknown): 'workspace' | 'projects' {
+function normalizeScopeType(value: unknown): 'workspace' | 'projects' | 'tours' {
   const raw = String(value ?? '').trim().toLowerCase();
   if (!raw || raw === 'workspace') return 'workspace';
   if (raw === 'projects') return 'projects';
+  if (raw === 'tours') return 'tours';
   return 'projects';
 }
 
@@ -66,6 +67,7 @@ export async function listWorkspaceMembershipsForUser(
   const rows = data ?? [];
   const memberIds = rows.map((row: any) => String(row.id));
   const projectMap = new Map<string, string[]>();
+  const tourMap = new Map<string, string[]>();
 
   if (memberIds.length) {
     const { data: grants, error: grantsError } = await supabase
@@ -83,6 +85,25 @@ export async function listWorkspaceMembershipsForUser(
       next.push(String((row as any).project_id));
       projectMap.set(memberId, next);
     }
+
+    const { data: tourGrants, error: tourGrantsError } = await supabase
+      .from('workspace_member_tours')
+      .select('workspace_member_id, project_id, tour_id')
+      .in('workspace_member_id', memberIds);
+
+    if (tourGrantsError && !isMissingRelationError(tourGrantsError)) {
+      throw new Error(tourGrantsError.message);
+    }
+
+    for (const row of tourGrants ?? []) {
+      const memberId = String((row as any).workspace_member_id);
+      const nextTours = tourMap.get(memberId) ?? [];
+      nextTours.push(String((row as any).tour_id));
+      tourMap.set(memberId, nextTours);
+      const nextProjects = projectMap.get(memberId) ?? [];
+      nextProjects.push(String((row as any).project_id));
+      projectMap.set(memberId, nextProjects);
+    }
   }
 
   return rows.map((row: any) => {
@@ -93,7 +114,8 @@ export async function listWorkspaceMembershipsForUser(
       userId: String(row.user_id),
       role: row.role,
       scopeType,
-      projectIds: scopeType === 'projects' ? [...new Set(projectMap.get(String(row.id)) ?? [])] : [],
+      projectIds: scopeType === 'workspace' ? [] : [...new Set(projectMap.get(String(row.id)) ?? [])],
+      tourIds: scopeType === 'tours' ? [...new Set(tourMap.get(String(row.id)) ?? [])] : [],
     };
   });
 }

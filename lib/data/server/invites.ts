@@ -12,6 +12,7 @@ export type WorkspaceInviteSummary = {
   role: WorkspaceInviteRole;
   scopeType: WorkspaceScopeType;
   projectIds: string[];
+  tourIds: string[];
   status: WorkspaceInviteStatus;
   invitedByUserId: string;
   acceptedByUserId: string | null;
@@ -24,10 +25,11 @@ function normalizeScopeType(value: unknown): WorkspaceScopeType {
   const raw = String(value ?? '').trim().toLowerCase();
   if (!raw || raw === 'workspace') return 'workspace';
   if (raw === 'projects') return 'projects';
-  throw new ApiError(400, 'scopeType must be workspace or projects.');
+  if (raw === 'tours') return 'tours';
+  throw new ApiError(400, 'scopeType must be workspace, projects, or tours.');
 }
 
-function mapInviteRow(row: any, projectIds: string[] = []): WorkspaceInviteSummary {
+function mapInviteRow(row: any, projectIds: string[] = [], tourIds: string[] = []): WorkspaceInviteSummary {
   const now = Date.now();
   const expiresAtMs = new Date(String(row.expires_at)).getTime();
   const status = String(row.status) as WorkspaceInviteStatus;
@@ -40,6 +42,7 @@ function mapInviteRow(row: any, projectIds: string[] = []): WorkspaceInviteSumma
     role: String(row.role) as WorkspaceInviteRole,
     scopeType: normalizeScopeType(row.scope_type),
     projectIds,
+    tourIds,
     status: computedStatus,
     invitedByUserId: String(row.invited_by_user_id),
     acceptedByUserId: row.accepted_by_user_id ? String(row.accepted_by_user_id) : null,
@@ -66,6 +69,28 @@ async function getInviteProjectIds(supabase: SupabaseClient, inviteIds: string[]
     const inviteId = String(row.invite_id);
     const next = map.get(inviteId) ?? [];
     next.push(String(row.project_id));
+    map.set(inviteId, next);
+    return map;
+  }, new Map<string, string[]>());
+}
+
+async function getInviteTourIds(supabase: SupabaseClient, inviteIds: string[]) {
+  if (!inviteIds.length) return new Map<string, string[]>();
+
+  const { data, error } = await supabase
+    .from('workspace_invite_tours')
+    .select('invite_id, tour_id')
+    .in('invite_id', inviteIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) return new Map<string, string[]>();
+    throw new ApiError(500, error.message);
+  }
+
+  return (data ?? []).reduce((map: Map<string, string[]>, row: any) => {
+    const inviteId = String(row.invite_id);
+    const next = map.get(inviteId) ?? [];
+    next.push(String(row.tour_id));
     map.set(inviteId, next);
     return map;
   }, new Map<string, string[]>());
@@ -99,6 +124,36 @@ async function assertValidScopeProjectIds(supabase: SupabaseClient, workspaceId:
   return uniqueProjectIds;
 }
 
+async function assertValidScopeTourIds(supabase: SupabaseClient, workspaceId: string, tourIds: string[]) {
+  const uniqueTourIds = [...new Set(tourIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (!uniqueTourIds.length) {
+    throw new ApiError(400, 'At least one tourId is required for tour-limited invites.');
+  }
+
+  const { data, error } = await supabase
+    .from('tours')
+    .select('id, project_id')
+    .eq('workspace_id', workspaceId)
+    .in('id', uniqueTourIds);
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      throw new ApiError(409, 'Tours schema is not ready yet.');
+    }
+    throw new ApiError(500, error.message);
+  }
+
+  const rows = data ?? [];
+  const foundIds = new Set(rows.map((row: any) => String(row.id)));
+  const missing = uniqueTourIds.filter((id) => !foundIds.has(id));
+  if (missing.length) {
+    throw new ApiError(400, 'One or more selected tours do not belong to this workspace.');
+  }
+
+  const projectIds = [...new Set(rows.map((row: any) => String(row.project_id)).filter(Boolean))];
+  return { tourIds: uniqueTourIds, projectIds };
+}
+
 export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
   await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
@@ -115,14 +170,16 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
   }
 
   const rows = data ?? [];
-  const byInvite = await getInviteProjectIds(supabase, rows.map((row: any) => String(row.id)));
-  return rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? []));
+  const inviteIds = rows.map((row: any) => String(row.id));
+  const byInvite = await getInviteProjectIds(supabase, inviteIds);
+  const tourByInvite = await getInviteTourIds(supabase, inviteIds);
+  return rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? [], tourByInvite.get(String(row.id)) ?? []));
 }
 
 export async function createWorkspaceInviteScoped(
   supabaseInput: SupabaseClient,
   userId: string,
-  input: { workspaceId: string; email: string; role: string; scopeType?: string; projectIds?: string[]; expiresAt?: string | null },
+  input: { workspaceId: string; email: string; role: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null },
 ) {
   const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(input.workspaceId ?? '').trim();
@@ -151,20 +208,23 @@ export async function createWorkspaceInviteScoped(
     throw new ApiError(400, 'expiresAt must be a valid ISO date string.');
   }
 
-  const projectIds = scopeType === 'projects'
+  const validatedProjectIds = scopeType === 'projects'
     ? await assertValidScopeProjectIds(supabase, workspaceId, input.projectIds ?? [])
     : [];
+  const validatedTours = scopeType === 'tours'
+    ? await assertValidScopeTourIds(supabase, workspaceId, input.tourIds ?? [])
+    : { tourIds: [], projectIds: [] };
+  const projectIds = scopeType === 'tours' ? validatedTours.projectIds : validatedProjectIds;
+  const tourIds = validatedTours.tourIds;
 
-  const { data: duplicate, error: duplicateError } = await supabase
+  const { data: duplicateRows, error: duplicateError } = await supabase
     .from('workspace_invites')
     .select('id')
     .eq('workspace_id', workspaceId)
     .eq('email', email)
     .eq('role', role)
     .eq('scope_type', scopeType)
-    .eq('status', 'pending')
-    .limit(1)
-    .maybeSingle();
+    .eq('status', 'pending');
 
   if (duplicateError) {
     if (isMissingRelationError(duplicateError)) {
@@ -173,8 +233,18 @@ export async function createWorkspaceInviteScoped(
     throw new ApiError(500, duplicateError.message);
   }
 
-  if (duplicate) {
+  if (scopeType !== 'tours' && (duplicateRows ?? []).length > 0) {
     throw new ApiError(409, 'An active invite already exists for this user, role, and scope.');
+  }
+
+  if (scopeType === 'tours' && (duplicateRows ?? []).length > 0) {
+    const duplicateIds = (duplicateRows ?? []).map((row: any) => String(row.id));
+    const existingTourIds = await getInviteTourIds(supabase, duplicateIds);
+    const requestedKey = [...tourIds].sort().join(',');
+    const exactDuplicate = duplicateIds.some((inviteId) => [...(existingTourIds.get(inviteId) ?? [])].sort().join(',') === requestedKey);
+    if (exactDuplicate) {
+      throw new ApiError(409, 'An active invite already exists for this user, role, and tour scope.');
+    }
   }
 
   const token = generateInviteToken();
@@ -213,8 +283,31 @@ export async function createWorkspaceInviteScoped(
     }
   }
 
+  if (scopeType === 'tours' && tourIds.length) {
+    const grants = tourIds.map((tourId) => ({ invite_id: String(data.id), workspace_id: workspaceId, project_id: projectIds[0] ?? null, tour_id: tourId }));
+    const { data: toursData, error: toursReadError } = await supabase
+      .from('tours')
+      .select('id, project_id')
+      .eq('workspace_id', workspaceId)
+      .in('id', tourIds);
+    if (toursReadError) {
+      throw new ApiError(500, toursReadError.message);
+    }
+    const projectByTour = new Map((toursData ?? []).map((row: any) => [String(row.id), String(row.project_id)]));
+    const grantRows = tourIds.map((tourId) => ({
+      invite_id: String(data.id),
+      workspace_id: workspaceId,
+      project_id: projectByTour.get(tourId) ?? projectIds[0],
+      tour_id: tourId,
+    }));
+    const { error: grantError } = await supabase.from('workspace_invite_tours').insert(grantRows);
+    if (grantError) {
+      throw new ApiError(500, grantError.message);
+    }
+  }
+
   return {
-    invite: mapInviteRow(data, projectIds),
+    invite: mapInviteRow(data, projectIds, tourIds),
     token,
   };
 }
@@ -269,7 +362,8 @@ export async function revokeWorkspaceInviteScoped(
   }
 
   const byInvite = await getInviteProjectIds(supabase, [inviteId]);
-  return mapInviteRow(data, byInvite.get(inviteId) ?? []);
+  const tourByInvite = await getInviteTourIds(supabase, [inviteId]);
+  return mapInviteRow(data, byInvite.get(inviteId) ?? [], tourByInvite.get(inviteId) ?? []);
 }
 
 export async function getProjectNamesForInviteScope(workspaceId: string, projectIds: string[]) {
@@ -321,13 +415,19 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   const scopeType = normalizeScopeType(inviteRow.scope_type);
-  const inviteProjectIdsByInvite = await getInviteProjectIds(supabase, [String(inviteRow.id)]);
-  const inviteProjectIds = inviteProjectIdsByInvite.get(String(inviteRow.id)) ?? [];
+  const inviteId = String(inviteRow.id);
+  const inviteProjectIdsByInvite = await getInviteProjectIds(supabase, [inviteId]);
+  const inviteTourIdsByInvite = await getInviteTourIds(supabase, [inviteId]);
+  const inviteProjectIds = inviteProjectIdsByInvite.get(inviteId) ?? [];
+  const inviteTourIds = inviteTourIdsByInvite.get(inviteId) ?? [];
   if (scopeType === 'projects' && !inviteProjectIds.length) {
     throw new ApiError(409, 'Invite scope is invalid: no projects assigned.');
   }
+  if (scopeType === 'tours' && !inviteTourIds.length) {
+    throw new ApiError(409, 'Invite scope is invalid: no tours assigned.');
+  }
 
-  const invite = mapInviteRow(inviteRow, inviteProjectIds);
+  const invite = mapInviteRow(inviteRow, inviteProjectIds, inviteTourIds);
   if (invite.status === 'revoked') {
     throw new ApiError(409, 'Invite has been revoked.');
   }
@@ -385,43 +485,80 @@ export async function acceptWorkspaceInvitePrivileged(input: {
 
     if (refreshedMemberError) throw new ApiError(500, refreshedMemberError.message);
     workspaceMemberId = String(refreshedMember.id);
+  }
 
-    const currentScope = normalizeScopeType(refreshedMember.scope_type);
-    if (currentScope === 'projects' && scopeType === 'workspace') {
-      const { error: widenError } = await supabase
-        .from('workspace_members')
-        .update({ scope_type: 'workspace' })
-        .eq('id', workspaceMemberId);
-      if (widenError) throw new ApiError(500, widenError.message);
+  const { data: currentMember, error: currentMemberError } = await supabase
+    .from('workspace_members')
+    .select('scope_type')
+    .eq('id', workspaceMemberId)
+    .single();
 
-      const { error: clearGrantsError } = await supabase
-        .from('workspace_member_projects')
-        .delete()
-        .eq('workspace_member_id', workspaceMemberId);
-      if (clearGrantsError && !isMissingRelationError(clearGrantsError)) {
-        throw new ApiError(500, clearGrantsError.message);
-      }
+  if (currentMemberError) throw new ApiError(500, currentMemberError.message);
+
+  const currentScope = normalizeScopeType(currentMember.scope_type);
+  const precedence = { tours: 1, projects: 2, workspace: 3 } as const;
+  const nextScope = precedence[scopeType] > precedence[currentScope] ? scopeType : currentScope;
+
+  if (nextScope !== currentScope) {
+    const { error: widenError } = await supabase
+      .from('workspace_members')
+      .update({ scope_type: nextScope })
+      .eq('id', workspaceMemberId);
+    if (widenError) throw new ApiError(500, widenError.message);
+  }
+
+  if (nextScope === 'workspace') {
+    const { error: clearProjectGrantsError } = await supabase
+      .from('workspace_member_projects')
+      .delete()
+      .eq('workspace_member_id', workspaceMemberId);
+    if (clearProjectGrantsError && !isMissingRelationError(clearProjectGrantsError)) {
+      throw new ApiError(500, clearProjectGrantsError.message);
+    }
+
+    const { error: clearTourGrantsError } = await supabase
+      .from('workspace_member_tours')
+      .delete()
+      .eq('workspace_member_id', workspaceMemberId);
+    if (clearTourGrantsError && !isMissingRelationError(clearTourGrantsError)) {
+      throw new ApiError(500, clearTourGrantsError.message);
     }
   }
 
-  if (scopeType === 'projects' && inviteProjectIds.length) {
-    const { data: currentMember, error: currentMemberError } = await supabase
-      .from('workspace_members')
-      .select('scope_type')
-      .eq('id', workspaceMemberId)
-      .single();
-
-    if (currentMemberError) throw new ApiError(500, currentMemberError.message);
-
-    if (normalizeScopeType(currentMember.scope_type) === 'projects') {
-      const grantRows = inviteProjectIds.map((projectId) => ({
-        workspace_member_id: workspaceMemberId,
-        workspace_id: invite.workspaceId,
-        project_id: projectId,
-      }));
-      const { error: grantInsertError } = await supabase.from('workspace_member_projects').upsert(grantRows, { onConflict: 'workspace_member_id,project_id' });
-      if (grantInsertError) throw new ApiError(500, grantInsertError.message);
+  if (scopeType === 'projects' && inviteProjectIds.length && nextScope === 'projects') {
+    const { error: clearTourGrantsError } = await supabase
+      .from('workspace_member_tours')
+      .delete()
+      .eq('workspace_member_id', workspaceMemberId);
+    if (clearTourGrantsError && !isMissingRelationError(clearTourGrantsError)) {
+      throw new ApiError(500, clearTourGrantsError.message);
     }
+
+    const grantRows = inviteProjectIds.map((projectId) => ({
+      workspace_member_id: workspaceMemberId,
+      workspace_id: invite.workspaceId,
+      project_id: projectId,
+    }));
+    const { error: grantInsertError } = await supabase.from('workspace_member_projects').upsert(grantRows, { onConflict: 'workspace_member_id,project_id' });
+    if (grantInsertError) throw new ApiError(500, grantInsertError.message);
+  }
+
+  if (scopeType === 'tours' && inviteTourIds.length && nextScope === 'tours') {
+    const { data: toursData, error: toursReadError } = await supabase
+      .from('tours')
+      .select('id, project_id')
+      .eq('workspace_id', invite.workspaceId)
+      .in('id', inviteTourIds);
+    if (toursReadError) throw new ApiError(500, toursReadError.message);
+
+    const grantRows = (toursData ?? []).map((row: any) => ({
+      workspace_member_id: workspaceMemberId,
+      workspace_id: invite.workspaceId,
+      project_id: String(row.project_id),
+      tour_id: String(row.id),
+    }));
+    const { error: grantInsertError } = await supabase.from('workspace_member_tours').upsert(grantRows, { onConflict: 'workspace_member_id,tour_id' });
+    if (grantInsertError) throw new ApiError(500, grantInsertError.message);
   }
 
   const { data: acceptedRow, error: acceptedError } = await supabase
@@ -444,7 +581,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   return {
-    invite: mapInviteRow(acceptedRow, inviteProjectIds),
+    invite: mapInviteRow(acceptedRow, inviteProjectIds, inviteTourIds),
     membershipCreated,
   };
 }
