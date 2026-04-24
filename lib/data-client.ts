@@ -3,7 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
-import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -245,5 +245,16 @@ export async function acceptWorkspaceInvite(token: string) {
   return request<{ invite: WorkspaceInviteSummary; membershipCreated: boolean }>('/api/workspaces/invites/accept', {
     method: 'POST',
     body: JSON.stringify({ token }),
+  });
+}
+
+export async function listWorkspaceMembers(workspaceId: string) {
+  const payload = await request<{ members: WorkspaceMemberDirectoryEntry[] }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`);
+  return payload.members ?? [];
+}
+
+export async function removeWorkspaceMember(input: { workspaceId: string; memberId: string }) {
+  return request<{ ok: boolean }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
+    method: 'DELETE',
   });
 }

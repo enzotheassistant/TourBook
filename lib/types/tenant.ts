@@ -18,6 +18,18 @@ export type WorkspaceMemberSummary = {
   tourIds: string[];
 };
 
+export type WorkspaceMemberDirectoryEntry = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  email: string | null;
+  role: WorkspaceRole;
+  scopeType: WorkspaceScopeType;
+  projectIds: string[];
+  tourIds: string[];
+  createdAt: string | null;
+};
+
 export type ProjectSummary = {
   id: string;
   workspaceId: string;

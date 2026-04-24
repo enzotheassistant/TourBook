@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
@@ -17,7 +17,7 @@ import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 function slugify(value: string) {
@@ -371,11 +371,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
   const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
   const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
+  const [members, setMembers] = useState<WorkspaceMemberDirectoryEntry[]>([]);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -451,6 +453,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }, [activeWorkspaceId, canManageInvitesInWorkspace]);
 
+  const loadMembers = useCallback(async () => {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) {
+      setMembers([]);
+      return;
+    }
+
+    setMembersLoading(true);
+    try {
+      const nextMembers = await listWorkspaceMembers(activeWorkspaceId);
+      setMembers(nextMembers);
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to load team members.');
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [activeWorkspaceId, canManageInvitesInWorkspace]);
+
   useEffect(() => {
     setInviteProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
   }, [workspaceProjects]);
@@ -467,7 +486,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   useEffect(() => {
     if (contextLoading) return;
     void loadInvites();
-  }, [contextLoading, loadInvites]);
+    void loadMembers();
+  }, [contextLoading, loadInvites, loadMembers]);
 
   useEffect(() => {
     if (!isTeamMode || !contextProjectId || contextInvitePrefillRef.current === contextProjectId) return;
@@ -792,6 +812,21 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const reason = error instanceof Error ? error.message : 'Unable to revoke invite.';
       setInviteMessage(reason);
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId, inviteId: invite.id, reason });
+    }
+  }
+
+  async function handleRemoveMember(member: WorkspaceMemberDirectoryEntry) {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
+    const label = member.email || member.userId;
+    const confirmed = await requestConfirmation({ title: 'Remove member?', description: `Remove ${label} from this workspace?`, confirmLabel: 'Remove', tone: 'danger' });
+    if (!confirmed) return;
+
+    try {
+      await removeWorkspaceMember({ workspaceId: activeWorkspaceId, memberId: member.id });
+      setMembers((current) => current.filter((item) => item.id !== member.id));
+      setInviteMessage('Member removed.');
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to remove member.');
     }
   }
 
@@ -1730,6 +1765,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
+        <TeamMembersSection
+          members={members}
+          loading={membersLoading}
+          projects={workspaceProjects}
+          tours={workspaceTours}
+          onRemoveMember={(member) => void handleRemoveMember(member)}
+        />
+      ) : null}
+
+      {isTeamMode && canManageInvitesInWorkspace ? (
         <InviteManagementSection
           invites={invites}
           loading={invitesLoading}
@@ -2488,6 +2533,66 @@ function InviteManagementSection({
             </div>
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TeamMembersSection({
+  members,
+  loading,
+  projects,
+  tours,
+  onRemoveMember,
+}: {
+  members: WorkspaceMemberDirectoryEntry[];
+  loading: boolean;
+  projects: ProjectSummary[];
+  tours: TourSummary[];
+  onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
+}) {
+  const projectNameById = new Map(projects.map((project) => [project.id, project.name || project.slug || project.id]));
+  const tourNameById = new Map(tours.map((tour) => [tour.id, tour.name || tour.id]));
+
+  function describeScope(member: WorkspaceMemberDirectoryEntry) {
+    if (member.scopeType === 'workspace') return 'workspace-wide';
+    if (member.scopeType === 'projects') {
+      return `projects: ${member.projectIds.map((id) => projectNameById.get(id) ?? id).join(', ') || 'selected artists'}`;
+    }
+    return `tours: ${member.tourIds.map((id) => tourNameById.get(id) ?? id).join(', ') || 'selected tours'}`;
+  }
+
+  return (
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <div className="space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Members</p>
+          <h2 className="mt-1 text-base font-semibold text-zinc-100">Current team members</h2>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-zinc-400">Loading members…</p>
+        ) : members.length === 0 ? (
+          <p className="text-sm text-zinc-400">No team members found yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {members.map((member) => (
+              <div key={member.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm text-zinc-100">{member.email || member.userId}</p>
+                    <p className="text-xs text-zinc-400">{member.role} • {describeScope(member)}</p>
+                  </div>
+                  {member.role !== 'owner' ? (
+                    <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
