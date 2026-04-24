@@ -17,7 +17,7 @@ import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 
 function slugify(value: string) {
@@ -350,6 +350,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     isLoading: contextLoading,
     workspaces,
     projects,
+    tours,
     setActiveWorkspaceId,
     setActiveProjectId,
     memberships,
@@ -374,6 +375,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
   const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
+  const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -411,6 +413,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     () => projects.filter((project) => project.workspaceId === activeWorkspaceId),
     [projects, activeWorkspaceId],
   );
+  const workspaceTours = useMemo(
+    () => tours.filter((tour) => tour.workspaceId === activeWorkspaceId),
+    [tours, activeWorkspaceId],
+  );
+  const inviteAvailableTours = useMemo(() => {
+    if (inviteScopeType !== 'tours') return workspaceTours;
+    if (inviteProjectIds.length === 0) return workspaceTours;
+    const allowedProjects = new Set(inviteProjectIds);
+    return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
+  }, [inviteProjectIds, inviteScopeType, workspaceTours]);
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
@@ -442,6 +454,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   useEffect(() => {
     setInviteProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
   }, [workspaceProjects]);
+
+  useEffect(() => {
+    setInviteTourIds((current) => current.filter((id) => inviteAvailableTours.some((tour) => tour.id === id)));
+  }, [inviteAvailableTours]);
 
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
@@ -725,6 +741,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
+    if (inviteScopeType === 'tours' && inviteTourIds.length === 0) {
+      setInviteMessage('Select at least one tour for tour-limited access.');
+      return;
+    }
+
     setCreatingInvite(true);
     setInviteMessage('');
     setLastInviteShare(null);
@@ -737,11 +758,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         role: inviteRole,
         scopeType: inviteScopeType,
         projectIds: inviteScopeType === 'projects' ? inviteProjectIds : [],
+        tourIds: inviteScopeType === 'tours' ? inviteTourIds : [],
       });
       const inviteLink = `${window.location.origin}/?inviteToken=${encodeURIComponent(created.acceptToken)}`;
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteEmail('');
       setInviteProjectIds([]);
+      setInviteTourIds([]);
       setInviteScopeType('workspace');
       setInvites((current) => [created.invite, ...current]);
       setInviteMessage('An email invite has been sent to your recipient(s).');
@@ -1339,7 +1362,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             role={inviteRole}
             scopeType={inviteScopeType}
             scopeProjectIds={inviteProjectIds}
+            scopeTourIds={inviteTourIds}
             availableProjects={workspaceProjects}
+            availableTours={inviteAvailableTours}
             message={inviteMessage}
             creating={creatingInvite}
             lastInviteShare={lastInviteShare}
@@ -1349,6 +1374,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onRoleChange={setInviteRole}
             onScopeTypeChange={setInviteScopeType}
             onScopeProjectIdsChange={setInviteProjectIds}
+            onScopeTourIdsChange={setInviteTourIds}
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
             onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -1711,7 +1737,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           role={inviteRole}
           scopeType={inviteScopeType}
           scopeProjectIds={inviteProjectIds}
+          scopeTourIds={inviteTourIds}
           availableProjects={workspaceProjects}
+          availableTours={inviteAvailableTours}
           message={inviteMessage}
           creating={creatingInvite}
           lastInviteShare={lastInviteShare}
@@ -1721,6 +1749,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onRoleChange={setInviteRole}
           onScopeTypeChange={setInviteScopeType}
           onScopeProjectIdsChange={setInviteProjectIds}
+          onScopeTourIdsChange={setInviteTourIds}
           onCreateInvite={() => void handleCreateInvite()}
           onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
           onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
@@ -2217,7 +2246,9 @@ function InviteManagementSection({
   role,
   scopeType,
   scopeProjectIds,
+  scopeTourIds,
   availableProjects,
+  availableTours,
   message,
   creating,
   lastInviteShare,
@@ -2227,6 +2258,7 @@ function InviteManagementSection({
   onRoleChange,
   onScopeTypeChange,
   onScopeProjectIdsChange,
+  onScopeTourIdsChange,
   onCreateInvite,
   onRevokeInvite,
   onCopyValue,
@@ -2237,7 +2269,9 @@ function InviteManagementSection({
   role: WorkspaceInviteRole;
   scopeType: 'workspace' | 'projects' | 'tours';
   scopeProjectIds: string[];
+  scopeTourIds: string[];
   availableProjects: ProjectSummary[];
+  availableTours: TourSummary[];
   message: string;
   creating: boolean;
   lastInviteShare: { token: string; link: string } | null;
@@ -2247,6 +2281,7 @@ function InviteManagementSection({
   onRoleChange: (value: WorkspaceInviteRole) => void;
   onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
   onScopeProjectIdsChange: (value: string[]) => void;
+  onScopeTourIdsChange: (value: string[]) => void;
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
   onCopyValue: (value: string, successMessage: string) => void;
@@ -2305,7 +2340,10 @@ function InviteManagementSection({
                 name="invite-scope"
                 checked={scopeType === 'projects'}
                 onChange={() => {
-                  if (scopeType !== 'projects') onScopeProjectIdsChange([]);
+                  if (scopeType !== 'projects') {
+                    onScopeProjectIdsChange([]);
+                    onScopeTourIdsChange([]);
+                  }
                   onScopeTypeChange('projects');
                 }}
                 className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
@@ -2313,6 +2351,25 @@ function InviteManagementSection({
               <span>
                 <span className="block font-medium">Project-limited</span>
                 <span className="text-xs text-zinc-500">Select specific artists below.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+              <input
+                type="radio"
+                name="invite-scope"
+                checked={scopeType === 'tours'}
+                onChange={() => {
+                  if (scopeType !== 'tours') {
+                    onScopeProjectIdsChange([]);
+                    onScopeTourIdsChange([]);
+                  }
+                  onScopeTypeChange('tours');
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
+              />
+              <span>
+                <span className="block font-medium">Tour-limited</span>
+                <span className="text-xs text-zinc-500">Restrict access to specific tours only.</span>
               </span>
             </label>
           </div>
@@ -2325,16 +2382,19 @@ function InviteManagementSection({
               availableProjects.map((project) => {
                 const checked = scopeProjectIds.includes(project.id);
                 return (
-                  <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
+                  <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' || scopeType === 'tours' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
                     <input
                       type="checkbox"
                       checked={checked}
-                      disabled={scopeType !== 'projects'}
+                      disabled={scopeType === 'workspace'}
                       onChange={(event) => {
                         const next = event.target.checked
                           ? [...scopeProjectIds, project.id]
                           : scopeProjectIds.filter((id) => id !== project.id);
-                        onScopeTypeChange('projects');
+                        if (!event.target.checked && scopeType === 'tours') {
+                          onScopeTourIdsChange(scopeTourIds.filter((id) => availableTours.some((tour) => tour.id === id && tour.projectId !== project.id)));
+                        }
+                        if (scopeType === 'workspace') onScopeTypeChange('projects');
                         onScopeProjectIdsChange([...new Set(next)]);
                       }}
                       className="h-4 w-4 rounded border-white/20 bg-black/20"
@@ -2345,6 +2405,39 @@ function InviteManagementSection({
               })
             )}
           </div>
+
+          {scopeType === 'tours' ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
+              {availableTours.length === 0 ? (
+                <p className="text-sm text-zinc-400">No tours available for the selected artist scope yet.</p>
+              ) : (
+                availableTours.map((tour) => {
+                  const checked = scopeTourIds.includes(tour.id);
+                  return (
+                    <label key={tour.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...scopeTourIds, tour.id]
+                            : scopeTourIds.filter((id) => id !== tour.id);
+                          onScopeTypeChange('tours');
+                          onScopeTourIdsChange([...new Set(next)]);
+                          if (!scopeProjectIds.includes(tour.projectId)) {
+                            onScopeProjectIdsChange([...new Set([...scopeProjectIds, tour.projectId])]);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-white/20 bg-black/20"
+                      />
+                      <span>{tour.name || tour.id}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
         </div>
 
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
@@ -2382,7 +2475,7 @@ function InviteManagementSection({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-sm text-zinc-100">{invite.email}</p>
-                      <p className="text-xs text-zinc-400">{invite.role} • {invite.scopeType === 'workspace' ? 'workspace-wide' : `projects (${invite.projectIds.length})`} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
+                      <p className="text-xs text-zinc-400">{invite.role} • {invite.scopeType === 'workspace' ? 'workspace-wide' : invite.scopeType === 'tours' ? `tours (${invite.tourIds.length})` : `projects (${invite.projectIds.length})`} • {invite.status} • expires {formatInviteDate(invite.expiresAt)}</p>
                     </div>
                     {invite.status === 'pending' ? (
                       <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>

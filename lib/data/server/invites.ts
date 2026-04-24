@@ -284,7 +284,6 @@ export async function createWorkspaceInviteScoped(
   }
 
   if (scopeType === 'tours' && tourIds.length) {
-    const grants = tourIds.map((tourId) => ({ invite_id: String(data.id), workspace_id: workspaceId, project_id: projectIds[0] ?? null, tour_id: tourId }));
     const { data: toursData, error: toursReadError } = await supabase
       .from('tours')
       .select('id, project_id')
