@@ -2399,6 +2399,10 @@ function inviteStatusBadgeClassName(status: WorkspaceInviteSummary['status']) {
   return 'border-white/10 bg-white/[0.06] text-zinc-300';
 }
 
+function directoryViewButtonClassName(active: boolean) {
+  return `inline-flex h-9 items-center justify-center rounded-full border px-3 text-xs font-medium transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100' : 'border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
+}
+
 function TeamDirectoryCard({
   title,
   subtitle,
@@ -2489,6 +2493,20 @@ function InviteManagementSection({
   const projectNameById = new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id]));
   const toursById = new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
+  const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
+
+  useEffect(() => {
+    if (!contextProjectName) setViewMode('workspace');
+  }, [contextProjectName]);
+
+  const visiblePendingInvites = useMemo(
+    () => viewMode === 'workspace' || !contextProjectId ? inviteGroups.pending : inviteGroups.pending.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
+    [contextProjectId, inviteGroups.pending, toursById, viewMode],
+  );
+  const visibleHistoryInvites = useMemo(
+    () => viewMode === 'workspace' || !contextProjectId ? inviteGroups.history : inviteGroups.history.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
+    [contextProjectId, inviteGroups.history, toursById, viewMode],
+  );
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
@@ -2559,20 +2577,31 @@ function InviteManagementSection({
               <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
               <p className="text-sm text-zinc-300">Pending invites are separated from historical invite activity for easier scanning.</p>
             </div>
-            <div className="text-xs text-zinc-500">{inviteGroups.pending.length} pending · {inviteGroups.history.length} recent</div>
+            <div className="text-xs text-zinc-500">{visiblePendingInvites.length} pending · {visibleHistoryInvites.length} recent</div>
           </div>
+          {contextProjectName ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
+              <p className="px-2 text-xs text-zinc-400">Viewing {viewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} invites.</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(viewMode === 'context')}>Current artist</button>
+                <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(viewMode === 'workspace')}>Full workspace</button>
+              </div>
+            </div>
+          ) : null}
           {loading ? (
             <p className="mt-3 text-sm text-zinc-400">Loading invites…</p>
           ) : recentInvites.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-400">No invites yet.</p>
+          ) : visiblePendingInvites.length === 0 && visibleHistoryInvites.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-400">No invites match this view yet.</p>
           ) : (
             <div className="mt-3 space-y-4">
               <div className="space-y-2">
                 <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
-                {inviteGroups.pending.length === 0 ? (
+                {visiblePendingInvites.length === 0 ? (
                   <p className="text-sm text-zinc-400">No pending invites.</p>
                 ) : (
-                  inviteGroups.pending.map((invite) => {
+                  visiblePendingInvites.map((invite) => {
                     const scope = describeTeamScope(invite, { projectNameById, toursById });
                     const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
@@ -2590,10 +2619,10 @@ function InviteManagementSection({
                   })
                 )}
               </div>
-              {inviteGroups.history.length > 0 ? (
+              {visibleHistoryInvites.length > 0 ? (
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
-                  {inviteGroups.history.map((invite) => {
+                  {visibleHistoryInvites.map((invite) => {
                     const scope = describeTeamScope(invite, { projectNameById, toursById });
                     const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
@@ -2847,12 +2876,21 @@ function TeamMembersSection({
   const projectNameById = new Map(projects.map((project) => [project.id, project.name || project.slug || project.id]));
   const toursById = new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
+  const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
+
+  useEffect(() => {
+    if (!contextProjectName) setViewMode('workspace');
+  }, [contextProjectName]);
+
   const sortedMembers = [...members].sort((a, b) => {
     const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
     const bInContext = matchesProjectContext(b, contextProjectId, toursById) ? 1 : 0;
     if (aInContext !== bInContext) return bInContext - aInContext;
     return (a.email || a.userId).localeCompare(b.email || b.userId);
   });
+  const visibleMembers = viewMode === 'workspace' || !contextProjectId
+    ? sortedMembers
+    : sortedMembers.filter((member) => matchesProjectContext(member, contextProjectId, toursById));
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
@@ -2860,16 +2898,28 @@ function TeamMembersSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Members</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Accepted team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Same access labels as invites, with current-artist matches sorted first when you arrive here from an artist context.</p>
+          <p className="mt-1 text-sm text-zinc-400">Same access labels as invites, with a cleaner switch between current artist and full workspace views.</p>
         </div>
+
+        {contextProjectName ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
+            <p className="px-2 text-xs text-zinc-400">Viewing {viewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} members.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(viewMode === 'context')}>Current artist</button>
+              <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(viewMode === 'workspace')}>Full workspace</button>
+            </div>
+          </div>
+        ) : null}
 
         {loading ? (
           <p className="text-sm text-zinc-400">Loading members…</p>
         ) : members.length === 0 ? (
           <p className="text-sm text-zinc-400">No team members found yet.</p>
+        ) : visibleMembers.length === 0 ? (
+          <p className="text-sm text-zinc-400">No accepted members match this view yet.</p>
         ) : (
           <div className="space-y-2">
-            {sortedMembers.map((member) => {
+            {visibleMembers.map((member) => {
               const scope = describeTeamScope(member, { projectNameById, toursById });
               const inContext = matchesProjectContext(member, contextProjectId, toursById);
               return (
