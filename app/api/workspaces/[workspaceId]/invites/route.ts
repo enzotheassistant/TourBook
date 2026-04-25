@@ -27,9 +27,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { workspaceId } = await params;
 
   try {
-    const body = (await request.json()) as { email?: string; role?: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null };
+    const body = (await request.json()) as { name?: string | null; email?: string; role?: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null };
     const created = await createWorkspaceInviteScoped(authState.supabase, authState.user.id, {
       workspaceId,
+      name: body.name ?? null,
       email: body.email ?? '',
       role: body.role ?? '',
       scopeType: body.scopeType ?? 'workspace',

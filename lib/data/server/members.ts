@@ -54,23 +54,33 @@ async function getMemberTourIds(supabase: SupabaseClient, memberIds: string[]) {
   }, new Map<string, string[]>());
 }
 
-async function getEmailsByUserId(userIds: string[]) {
+function deriveDisplayName(user: any) {
+  const meta = user?.user_metadata ?? user?.raw_user_meta_data ?? {};
+  const fullName = String(meta.full_name ?? meta.name ?? meta.display_name ?? '').trim();
+  if (fullName) return fullName;
+  const first = String(meta.first_name ?? '').trim();
+  const last = String(meta.last_name ?? '').trim();
+  const combined = [first, last].filter(Boolean).join(' ').trim();
+  return combined || null;
+}
+
+async function getUserDirectoryInfoByUserId(userIds: string[]) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
-  if (!uniqueUserIds.length) return new Map<string, string | null>();
+  if (!uniqueUserIds.length) return new Map<string, { email: string | null; name: string | null }>();
 
   try {
     const supabase = getPrivilegedDataClient();
     const entries = await Promise.all(uniqueUserIds.map(async (userId) => {
       try {
         const response = await supabase.auth.admin.getUserById(userId);
-        return [userId, response.data.user?.email ?? null] as const;
+        return [userId, { email: response.data.user?.email ?? null, name: deriveDisplayName(response.data.user) }] as const;
       } catch {
-        return [userId, null] as const;
+        return [userId, { email: null, name: null }] as const;
       }
     }));
     return new Map(entries);
   } catch {
-    return new Map(uniqueUserIds.map((userId) => [userId, null]));
+    return new Map(uniqueUserIds.map((userId) => [userId, { email: null, name: null }]));
   }
 }
 
@@ -174,10 +184,10 @@ export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, 
   const rows = data ?? [];
   const memberIds = rows.map((row: any) => String(row.id));
   const userIds = rows.map((row: any) => String(row.user_id));
-  const [projectMap, tourMap, emailsByUserId] = await Promise.all([
+  const [projectMap, tourMap, directoryInfoByUserId] = await Promise.all([
     getMemberProjectIds(supabase, memberIds),
     getMemberTourIds(supabase, memberIds),
-    getEmailsByUserId(userIds),
+    getUserDirectoryInfoByUserId(userIds),
   ]);
 
   return rows.map((row: any) => {
@@ -185,11 +195,13 @@ export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, 
     const scopeType = normalizeScopeType(row.scope_type);
     const projectIds = [...new Set(projectMap.get(memberId) ?? [])];
     const tourIds = [...new Set(tourMap.get(memberId) ?? [])];
+    const directoryInfo = directoryInfoByUserId.get(String(row.user_id)) ?? { email: null, name: null };
     return {
       id: memberId,
       workspaceId: String(row.workspace_id),
       userId: String(row.user_id),
-      email: emailsByUserId.get(String(row.user_id)) ?? null,
+      name: directoryInfo.name,
+      email: directoryInfo.email,
       role: String(row.role) as WorkspaceRole,
       scopeType,
       projectIds: scopeType === 'workspace' ? [] : projectIds,

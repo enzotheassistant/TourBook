@@ -22,6 +22,7 @@ export type WorkspaceMemberDirectoryEntry = {
   id: string;
   workspaceId: string;
   userId: string;
+  name: string | null;
   email: string | null;
   role: WorkspaceRole;
   scopeType: WorkspaceScopeType;
@@ -60,6 +61,7 @@ export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expire
 export type WorkspaceInviteSummary = {
   id: string;
   workspaceId: string;
+  name: string | null;
   email: string;
   role: WorkspaceInviteRole;
   scopeType: WorkspaceScopeType;

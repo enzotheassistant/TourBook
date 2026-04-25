@@ -378,6 +378,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [saving, setSaving] = useState(false);
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
   const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
@@ -800,6 +801,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     try {
       const created = await createWorkspaceInvite({
         workspaceId: activeWorkspaceId,
+        name: inviteName.trim() || null,
         email: inviteEmail.trim(),
         role: inviteRole,
         scopeType: inviteScopeType,
@@ -808,6 +810,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       });
       const inviteLink = `${window.location.origin}/?inviteToken=${encodeURIComponent(created.acceptToken)}`;
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
+      setInviteName('');
       setInviteEmail('');
       setInviteProjectIds([]);
       setInviteTourIds([]);
@@ -826,7 +829,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function handleRevokeInvite(invite: WorkspaceInviteSummary) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
-    const confirmed = await requestConfirmation({ title: 'Revoke invite?', description: `Revoke invite for ${invite.email}?`, confirmLabel: 'Revoke', tone: 'danger' });
+    const confirmed = await requestConfirmation({ title: 'Revoke invite?', description: `Revoke invite for ${invite.name || invite.email}?`, confirmLabel: 'Revoke', tone: 'danger' });
     if (!confirmed) return;
 
     try {
@@ -892,7 +895,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function handleRemoveMember(member: WorkspaceMemberDirectoryEntry) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
-    const label = member.email || member.userId;
+    const label = member.name || member.email || member.userId;
     const confirmed = await requestConfirmation({ title: 'Remove member?', description: `Remove ${label} from this workspace?`, confirmLabel: 'Remove', tone: 'danger' });
     if (!confirmed) return;
 
@@ -1875,6 +1878,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         <InviteManagementSection
           invites={invites}
           loading={invitesLoading}
+          name={inviteName}
           email={inviteEmail}
           role={inviteRole}
           scopeType={inviteScopeType}
@@ -1887,6 +1891,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           lastInviteShare={lastInviteShare}
           showManualShare={showManualInviteShare}
           onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
+          onNameChange={setInviteName}
           onEmailChange={setInviteEmail}
           onRoleChange={setInviteRole}
           onScopeTypeChange={setInviteScopeType}
@@ -2405,6 +2410,7 @@ function directoryViewButtonClassName(active: boolean) {
 
 function TeamDirectoryCard({
   title,
+  secondary,
   subtitle,
   detail,
   role,
@@ -2413,6 +2419,7 @@ function TeamDirectoryCard({
   action,
 }: {
   title: string;
+  secondary?: string | null;
   subtitle: string;
   detail?: string | null;
   role: 'owner' | 'admin' | 'editor' | 'viewer';
@@ -2430,6 +2437,7 @@ function TeamDirectoryCard({
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
             {contextLabel ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-300">{contextLabel}</span> : null}
           </div>
+          {secondary ? <p className="mt-1 text-xs text-zinc-500">{secondary}</p> : null}
           <p className="mt-1 text-sm text-zinc-300">{subtitle}</p>
           {detail ? <p className="mt-1 text-xs text-zinc-500">{detail}</p> : null}
         </div>
@@ -2442,6 +2450,7 @@ function TeamDirectoryCard({
 function InviteManagementSection({
   invites,
   loading,
+  name,
   email,
   role,
   scopeType,
@@ -2454,6 +2463,7 @@ function InviteManagementSection({
   lastInviteShare,
   showManualShare,
   onToggleManualShare,
+  onNameChange,
   onEmailChange,
   onRoleChange,
   onScopeTypeChange,
@@ -2466,6 +2476,7 @@ function InviteManagementSection({
 }: {
   invites: WorkspaceInviteSummary[];
   loading: boolean;
+  name: string;
   email: string;
   role: WorkspaceInviteRole;
   scopeType: 'workspace' | 'projects' | 'tours';
@@ -2478,6 +2489,7 @@ function InviteManagementSection({
   lastInviteShare: { token: string; link: string } | null;
   showManualShare: boolean;
   onToggleManualShare: () => void;
+  onNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onRoleChange: (value: WorkspaceInviteRole) => void;
   onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
@@ -2517,7 +2529,14 @@ function InviteManagementSection({
           <p className="mt-1 text-sm text-zinc-400">Pending invites now use the same access language as accepted members, so the whole team reads like one directory instead of two different systems.</p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto]">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto]">
+          <input
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+            type="text"
+            placeholder="Name"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+          />
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
@@ -2607,7 +2626,8 @@ function InviteManagementSection({
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
-                        title={invite.email}
+                        title={invite.name || invite.email}
+                        secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
                         subtitle={`${scope.label} · expires ${formatInviteDate(invite.expiresAt)}`}
@@ -2628,7 +2648,8 @@ function InviteManagementSection({
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
-                        title={invite.email}
+                        title={invite.name || invite.email}
+                        secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
                         subtitle={`${scope.label} · updated ${formatInviteDate(invite.updatedAt)}`}
@@ -2817,7 +2838,8 @@ function EditMemberDialog({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Edit member</p>
-            <h3 className="mt-1 text-base font-semibold text-zinc-100">{member.email || member.userId}</h3>
+            <h3 className="mt-1 text-base font-semibold text-zinc-100">{member.name || member.email || member.userId}</h3>
+            {member.name && member.email ? <p className="mt-1 text-xs text-zinc-500">{member.email}</p> : null}
             <p className="mt-1 text-sm text-zinc-400">Update role and access scope without resending an invite.</p>
           </div>
           <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Close</button>
@@ -2925,7 +2947,8 @@ function TeamMembersSection({
               return (
                 <TeamDirectoryCard
                   key={member.id}
-                  title={member.email || member.userId}
+                  title={member.name || member.email || member.userId}
+                  secondary={member.name && member.email ? member.email : null}
                   role={member.role}
                   subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
                   detail={scope.detail}

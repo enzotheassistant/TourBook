@@ -9,6 +9,7 @@ export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expire
 export type WorkspaceInviteSummary = {
   id: string;
   workspaceId: string;
+  name: string | null;
   email: string;
   role: WorkspaceInviteRole;
   scopeType: WorkspaceScopeType;
@@ -37,6 +38,7 @@ function mapInviteRow(row: any, projectIds: string[] = [], tourIds: string[] = [
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
+    name: row.invitee_name ? String(row.invitee_name) : null,
     email: String(row.email),
     role: String(row.role) as WorkspaceInviteRole,
     scopeType: normalizeScopeType(row.scope_type),
@@ -159,7 +161,7 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
 
   const { data, error } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
@@ -178,10 +180,11 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
 export async function createWorkspaceInviteScoped(
   supabaseInput: SupabaseClient,
   userId: string,
-  input: { workspaceId: string; email: string; role: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null },
+  input: { workspaceId: string; name?: string | null; email: string; role: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null },
 ) {
   const supabase = requireScopedDataClient(supabaseInput);
   const workspaceId = String(input.workspaceId ?? '').trim();
+  const name = String(input.name ?? '').trim() || null;
   const email = normalizeInviteEmail(input.email);
   let role: WorkspaceInviteRole;
   try {
@@ -252,6 +255,7 @@ export async function createWorkspaceInviteScoped(
     .from('workspace_invites')
     .insert({
       workspace_id: workspaceId,
+      invitee_name: name,
       email,
       role,
       scope_type: scopeType,
@@ -260,7 +264,7 @@ export async function createWorkspaceInviteScoped(
       invited_by_user_id: userId,
       expires_at: expiresAt,
     })
-    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .single();
 
   if (error) {
@@ -351,7 +355,7 @@ export async function revokeWorkspaceInviteScoped(
     .update({ status: 'revoked' })
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
-    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .single();
 
   if (error) {
@@ -396,7 +400,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
 
   const { data: inviteRow, error: inviteError } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -565,7 +569,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     })
     .eq('id', invite.id)
     .eq('status', 'pending')
-    .select('id, workspace_id, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
     .maybeSingle();
 
   if (acceptedError) {
