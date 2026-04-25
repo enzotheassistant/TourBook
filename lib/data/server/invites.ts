@@ -195,6 +195,10 @@ export async function createWorkspaceInviteScoped(
 
   const scopeType = normalizeScopeType(input.scopeType ?? 'workspace');
 
+  if (role === 'admin' && scopeType !== 'workspace') {
+    throw new ApiError(400, 'Admins must have full workspace access.');
+  }
+
   if (!workspaceId) {
     throw new ApiError(400, 'workspaceId is required.');
   }

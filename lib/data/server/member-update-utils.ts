@@ -39,6 +39,10 @@ export function validateWorkspaceMemberUpdatePayload(input: {
     ? [...new Set(input.tourIds.map((value) => String(value ?? '').trim()).filter(Boolean))]
     : [];
 
+  if (role === 'admin' && scopeType !== 'workspace') {
+    throw new MemberUpdateValidationError(400, 'Admins must have full workspace access.');
+  }
+
   if (scopeType === 'projects' && projectIds.length === 0) {
     throw new MemberUpdateValidationError(400, 'Select at least one artist for project-scoped access.');
   }

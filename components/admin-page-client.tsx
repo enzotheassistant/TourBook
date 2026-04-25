@@ -783,6 +783,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
+    if (inviteRole === 'admin' && inviteScopeType !== 'workspace') {
+      setInviteMessage('Admins must have full workspace access.');
+      return;
+    }
+
     if (inviteScopeType === 'projects' && inviteProjectIds.length === 0) {
       setInviteMessage('Select at least one artist for project-limited access.');
       return;
@@ -848,7 +853,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (member.role === 'owner') return;
     setEditingMember(member);
     setEditingMemberRole(member.role);
-    setEditingMemberScopeType(member.scopeType);
+    setEditingMemberScopeType(member.role === 'admin' ? 'workspace' : member.scopeType);
     setEditingMemberProjectIds(member.projectIds);
     setEditingMemberTourIds(member.tourIds);
     setInviteMessage('');
@@ -865,6 +870,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function handleSaveMemberEdit() {
     if (!activeWorkspaceId || !editingMember || !canManageInvitesInWorkspace) return;
+    if (editingMemberRole === 'admin' && editingMemberScopeType !== 'workspace') {
+      setInviteMessage('Admins must have full workspace access.');
+      return;
+    }
     if (editingMemberScopeType === 'projects' && editingMemberProjectIds.length === 0) {
       setInviteMessage('Select at least one artist for project-scoped access.');
       return;
@@ -2546,7 +2555,15 @@ function InviteManagementSection({
           />
           <select
             value={role}
-            onChange={(event) => onRoleChange(event.target.value as WorkspaceInviteRole)}
+            onChange={(event) => {
+              const nextRole = event.target.value as WorkspaceInviteRole;
+              onRoleChange(nextRole);
+              if (nextRole === 'admin') {
+                onScopeTypeChange('workspace');
+                onScopeProjectIdsChange([]);
+                onScopeTourIdsChange([]);
+              }
+            }}
             className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
           >
             <option value="viewer">Viewer</option>
@@ -2565,6 +2582,8 @@ function InviteManagementSection({
           scopeTourIds={scopeTourIds}
           availableProjects={availableProjects}
           availableTours={availableTours}
+          disableScopedAccess={role === 'admin'}
+          disabledReason={role === 'admin' ? 'Admins always get full workspace access. Use editor or viewer for artist/tour-scoped access.' : undefined}
           onScopeTypeChange={onScopeTypeChange}
           onScopeProjectIdsChange={onScopeProjectIdsChange}
           onScopeTourIdsChange={onScopeTourIdsChange}
@@ -2675,6 +2694,8 @@ function TeamScopeEditor({
   scopeTourIds,
   availableProjects,
   availableTours,
+  disableScopedAccess = false,
+  disabledReason,
   onScopeTypeChange,
   onScopeProjectIdsChange,
   onScopeTourIdsChange,
@@ -2685,6 +2706,8 @@ function TeamScopeEditor({
   scopeTourIds: string[];
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
+  disableScopedAccess?: boolean;
+  disabledReason?: string;
   onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
   onScopeProjectIdsChange: (value: string[]) => void;
   onScopeTourIdsChange: (value: string[]) => void;
@@ -2697,11 +2720,12 @@ function TeamScopeEditor({
           <input type="radio" name={`${prefix}-scope`} checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
           <span><span className="block font-medium">Full workspace</span><span className="text-xs text-zinc-500">All artists and tours in this workspace.</span></span>
         </label>
-        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+        <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
           <input
             type="radio"
             name={`${prefix}-scope`}
             checked={scopeType === 'projects'}
+            disabled={disableScopedAccess}
             onChange={() => {
               if (scopeType !== 'projects') {
                 onScopeProjectIdsChange([]);
@@ -2713,11 +2737,12 @@ function TeamScopeEditor({
           />
           <span><span className="block font-medium">Selected artists</span><span className="text-xs text-zinc-500">Access only the artists checked below.</span></span>
         </label>
-        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+        <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
           <input
             type="radio"
             name={`${prefix}-scope`}
             checked={scopeType === 'tours'}
+            disabled={disableScopedAccess}
             onChange={() => {
               if (scopeType !== 'tours') {
                 onScopeProjectIdsChange([]);
@@ -2730,6 +2755,8 @@ function TeamScopeEditor({
           <span><span className="block font-medium">Selected tours</span><span className="text-xs text-zinc-500">Restrict access to specific tours only.</span></span>
         </label>
       </div>
+
+      {disableScopedAccess && disabledReason ? <p className="mt-3 text-sm text-zinc-500">{disabledReason}</p> : null}
 
       <div className="mt-3 space-y-2">
         <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
@@ -2847,7 +2874,15 @@ function EditMemberDialog({
 
         <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
           <label className="text-sm font-medium text-zinc-200">Role</label>
-          <select value={role} onChange={(event) => onRoleChange(event.target.value as EditableWorkspaceMemberRole)} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40">
+          <select value={role} onChange={(event) => {
+            const nextRole = event.target.value as EditableWorkspaceMemberRole;
+            onRoleChange(nextRole);
+            if (nextRole === 'admin') {
+              onScopeTypeChange('workspace');
+              onProjectIdsChange([]);
+              onTourIdsChange([]);
+            }
+          }} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
             {canAssignAdmin ? <option value="admin">Admin</option> : null}
@@ -2862,6 +2897,8 @@ function EditMemberDialog({
             scopeTourIds={tourIds}
             availableProjects={availableProjects}
             availableTours={availableTours}
+            disableScopedAccess={role === 'admin'}
+            disabledReason={role === 'admin' ? 'Admins always get full workspace access. Use editor or viewer for artist/tour-scoped access.' : undefined}
             onScopeTypeChange={onScopeTypeChange}
             onScopeProjectIdsChange={onProjectIdsChange}
             onScopeTourIdsChange={onTourIdsChange}
