@@ -53,6 +53,7 @@ export function mapDateRecordToShow(date: DateRecord): Show {
     notes: date.notes,
     guest_list_notes: date.guest_list_notes,
     created_at: date.created_at,
+    updated_at: date.updated_at,
     status: date.status === 'draft' ? 'draft' : 'published',
     visibility: date.visibility,
   });

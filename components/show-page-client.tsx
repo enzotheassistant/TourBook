@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
+import { OfflineStatus } from '@/components/offline-status';
 import { deleteShow, exportGuestListCsv, getShow } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
 import { KeyValueList } from '@/components/key-value-list';
@@ -187,6 +188,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
@@ -195,12 +198,16 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     async function load() {
       if (contextLoading || !activeWorkspaceId) return;
       try {
-        const nextShow = await getShow(showId, { workspaceId: activeWorkspaceId });
+        const result = await getShow(showId, { workspaceId: activeWorkspaceId });
         if (!active) return;
-        setShow(nextShow);
+        setShow(result.show);
+        setDataSource(result.source);
+        setLastSavedAt(result.savedAt);
       } catch {
         if (!active) return;
         setShow(null);
+        setDataSource('live');
+        setLastSavedAt(null);
       } finally {
         if (active) setLoaded(true);
       }
@@ -310,6 +317,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         </div>
 
         {show.tour_name ? <p className="text-sm text-emerald-300">{show.tour_name}</p> : null}
+
+        <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
           <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>

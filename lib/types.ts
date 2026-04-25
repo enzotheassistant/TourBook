@@ -45,6 +45,7 @@ export type Show = {
   notes: string;
   guest_list_notes: string;
   created_at: string;
+  updated_at: string;
   visibility: ShowVisibility;
   status: ShowStatus;
 };
@@ -56,8 +57,9 @@ export type GuestListEntry = {
   created_at: string;
 };
 
-export type ShowFormValues = Omit<Show, 'created_at'> & {
+export type ShowFormValues = Omit<Show, 'created_at' | 'updated_at'> & {
   created_at?: string;
+  updated_at?: string;
 };
 
 export type AddressSuggestion = {

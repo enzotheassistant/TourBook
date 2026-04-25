@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
+import { OfflineStatus } from '@/components/offline-status';
 import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
@@ -270,6 +271,9 @@ export function DashboardClient() {
   const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [upcomingTour, setUpcomingTour] = useState('All');
   const [pastTour, setPastTour] = useState('All');
   const [upcomingSearch, setUpcomingSearch] = useState('');
@@ -302,9 +306,18 @@ export function DashboardClient() {
 
       setLoading(true);
       try {
-        const nextShows = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+        const result = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
         if (!active) return;
-        setShows(nextShows);
+        setShows(result.shows);
+        setDataSource(result.source);
+        setLastSavedAt(result.savedAt);
+        setLoadError(null);
+      } catch (error) {
+        if (!active) return;
+        setShows([]);
+        setLoadError(error instanceof Error ? error.message : 'Unable to load dates.');
+        setDataSource('live');
+        setLastSavedAt(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -400,6 +413,12 @@ export function DashboardClient() {
   return (
     <div className="space-y-4">
       {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
+      <OfflineStatus
+        savedAt={lastSavedAt}
+        source={dataSource}
+        emptyOfflineMessage={loadError ? 'No recent itinerary is saved on this device yet. Reopen TourBook online once and your latest dates will be available here in weak signal.' : null}
+      />
+      {loadError ? <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{loadError}</div> : null}
 
       <section className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.045]">
         <div className="border-b border-white/8 px-4 py-4 sm:px-5 sm:py-5">

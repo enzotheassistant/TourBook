@@ -46,6 +46,7 @@ export function normalizeShow(show: Partial<ShowFormValues> & { id?: string }): 
     notes: show.notes ?? '',
     guest_list_notes: show.guest_list_notes ?? '',
     created_at: show.created_at ?? new Date().toISOString(),
+    updated_at: show.updated_at ?? show.created_at ?? new Date().toISOString(),
     status: deriveShowStatus(show.id, show.status),
     visibility: {
       show_venue: show.visibility?.show_venue ?? true,

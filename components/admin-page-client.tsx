@@ -529,8 +529,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   const loadShows = useCallback(async () => {
     if (!activeWorkspaceId || !activeProjectId) return;
-    const nextShows = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
-    setShows(nextShows);
+    const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+    setShows(result.shows);
   }, [activeProjectId, activeWorkspaceId]);
 
   const loadInvites = useCallback(async () => {

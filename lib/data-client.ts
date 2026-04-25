@@ -3,6 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import { readCachedItinerary, readCachedShow, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
 import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
@@ -83,15 +84,39 @@ export async function listShows(includeDrafts = false, scope?: ScopeInput) {
   if (resolved.tourId) params.set('tourId', resolved.tourId);
   if (includeDrafts) params.set('includeDrafts', '1');
 
-  const dates = await request<any[]>(`/api/dates?${params.toString()}`);
-  return dates.map(mapDateRecordToShow);
+  try {
+    const dates = await request<any[]>(`/api/dates?${params.toString()}`);
+    const shows = dates.map(mapDateRecordToShow);
+    writeCachedItinerary({ ...resolved, includeDrafts }, shows);
+    for (const show of shows) {
+      writeCachedShow({ workspaceId: resolved.workspaceId, showId: show.id }, show);
+    }
+    return { shows, source: 'live' as const, savedAt: new Date().toISOString() };
+  } catch (error) {
+    const cached = readCachedItinerary({ ...resolved, includeDrafts });
+    if (cached) {
+      return { shows: cached.data, source: 'cache' as const, savedAt: cached.savedAt };
+    }
+    throw error;
+  }
 }
 
 export async function getShow(id: string, scope?: ScopeInput) {
   const workspaceId = requireWorkspaceId(scope);
   const params = new URLSearchParams({ workspaceId });
-  const date = await request<any>(`/api/dates/${id}?${params.toString()}`);
-  return mapDateRecordToShow(date);
+
+  try {
+    const date = await request<any>(`/api/dates/${id}?${params.toString()}`);
+    const show = mapDateRecordToShow(date);
+    writeCachedShow({ workspaceId, showId: id }, show);
+    return { show, source: 'live' as const, savedAt: new Date().toISOString() };
+  } catch (error) {
+    const cached = readCachedShow({ workspaceId, showId: id });
+    if (cached) {
+      return { show: cached.data, source: 'cache' as const, savedAt: cached.savedAt };
+    }
+    throw error;
+  }
 }
 
 export async function upsertShow(values: ShowFormValues, scope?: ScopeInput) {
