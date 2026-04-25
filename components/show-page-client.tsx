@@ -10,10 +10,94 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
-import { Show } from '@/lib/types';
+import { ScheduleItem, Show } from '@/lib/types';
 
 function hasAccommodation(show: Show) {
   return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
+}
+
+function hasLocation(show: Show) {
+  return Boolean(show.venue_name || show.venue_address || show.venue_maps_url || show.city || show.region || show.country);
+}
+
+function joinNonEmpty(parts: Array<string | null | undefined>, separator = ' • ') {
+  return parts.map((part) => part?.trim()).filter(Boolean).join(separator);
+}
+
+function getCityRegionCountry(show: Show) {
+  return joinNonEmpty([show.city, show.region, show.country], ', ');
+}
+
+function matchesScheduleLabel(label: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(label));
+}
+
+const departurePatterns = [/\bdepart\b/i, /\bdeparture\b/i, /\bleave\b/i, /\broll\b/i, /\bwheels\s?up\b/i, /\bout\b/i];
+const arrivalPatterns = [/\barrive\b/i, /\barrival\b/i, /\beta\b/i, /\bcheck-?in\b/i, /\bhotel\b/i];
+const transportPatterns = [/\bflight\b/i, /\btrain\b/i, /\bvan\b/i, /\bbus\b/i, /\bdrive\b/i, /\bferry\b/i, /\bshuttle\b/i, /\btransport\b/i, /\buber\b/i, /\blyft\b/i];
+
+function splitTravelSchedule(items: ScheduleItem[]) {
+  const departureItems = items.filter((item) => matchesScheduleLabel(item.label, departurePatterns));
+  const arrivalItems = items.filter((item) => matchesScheduleLabel(item.label, arrivalPatterns) && !departureItems.includes(item));
+  const transportItems = items.filter(
+    (item) => matchesScheduleLabel(item.label, transportPatterns) && !departureItems.includes(item) && !arrivalItems.includes(item),
+  );
+  const usedItems = new Set([...departureItems, ...arrivalItems, ...transportItems]);
+  const timelineItems = items.filter((item) => !usedItems.has(item));
+
+  return { departureItems, arrivalItems, transportItems, timelineItems };
+}
+
+function getDayLocationLabel(show: Show) {
+  if (show.day_type === 'travel') return 'Route';
+  if (show.day_type === 'off') return 'Location';
+  return 'Venue';
+}
+
+function getLocationTitle(show: Show) {
+  if (show.day_type === 'travel') {
+    return show.venue_name || show.label || getCityRegionCountry(show) || 'Routing details';
+  }
+
+  if (show.day_type === 'off') {
+    return show.label || show.venue_name || getCityRegionCountry(show) || 'Location TBA';
+  }
+
+  return show.venue_name || 'Venue TBA';
+}
+
+function getDayHeroEyebrow(show: Show) {
+  if (show.day_type === 'travel') return 'In transit';
+  if (show.day_type === 'off') return 'Reset window';
+  return 'Show day';
+}
+
+function getDayHeroTitle(show: Show) {
+  if (show.day_type === 'travel') {
+    return show.label || show.venue_name || getCityRegionCountry(show) || 'Travel day';
+  }
+
+  if (show.day_type === 'off') {
+    return show.label || getCityRegionCountry(show) || show.hotel_name || 'Off day';
+  }
+
+  return show.venue_name || `${show.city}${show.region ? `, ${show.region}` : ''}` || 'Show day';
+}
+
+function getDayHeroSummary(show: Show) {
+  if (show.day_type === 'travel') {
+    return joinNonEmpty([
+      getCityRegionCountry(show) || null,
+      show.hotel_name ? `Stay: ${show.hotel_name}` : null,
+      show.venue_address ? 'Address available' : null,
+    ]);
+  }
+
+  return joinNonEmpty([
+    getCityRegionCountry(show) || null,
+    show.hotel_name ? `Staying at ${show.hotel_name}` : null,
+    show.schedule_items.some((item) => item.label.trim() && item.time.trim()) ? 'Crew reminders on deck' : null,
+  ]);
 }
 
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
@@ -66,6 +150,34 @@ function getDayTypeCopy(show: Show) {
   };
 }
 
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-zinc-100">{value}</p>
+    </div>
+  );
+}
+
+function DayOverviewCard({ show }: { show: Show }) {
+  const location = getCityRegionCountry(show);
+  const summary = getDayHeroSummary(show);
+
+  return (
+    <section className="overflow-hidden rounded-[30px] border border-white/10 bg-linear-to-br from-white/[0.08] via-white/[0.05] to-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{getDayHeroEyebrow(show)}</p>
+      <h2 className="mt-3 text-[1.45rem] font-semibold tracking-tight text-zinc-50">{getDayHeroTitle(show)}</h2>
+      {summary ? <p className="mt-2 text-sm leading-6 text-zinc-300">{summary}</p> : null}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <InfoPill label={show.day_type === 'travel' ? 'Destination' : 'City'} value={location || 'TBA'} />
+        <InfoPill label="Date" value={formatHeaderDate(show.date)} />
+        <InfoPill label="Stay" value={show.hotel_name || 'Not added yet'} />
+      </div>
+    </section>
+  );
+}
+
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
   const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
@@ -102,6 +214,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   }, [activeWorkspaceId, contextLoading, showId]);
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
+  const travelSchedule = useMemo(() => splitTravelSchedule(visibleScheduleItems), [visibleScheduleItems]);
 
   function requestConfirmation(options: { title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }) {
     return new Promise<boolean>((resolve) => {
@@ -155,6 +268,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const duplicateHref = `/admin?duplicate=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
   const daySheetTitle = show.day_type === 'show' ? 'Day Sheet' : 'Day Details';
   const canShowGuestList = show.day_type === 'show';
+  const hasAnyDayDetails = hasLocation(show) || Boolean(show.parking_load_info) || visibleScheduleItems.length > 0 || Boolean(show.dos_name || show.dos_phone) || hasAccommodation(show) || Boolean(show.notes);
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -205,17 +319,84 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         </div>
 
         {requestedView === 'day-sheet' || !canShowGuestList ? (
-          <>
-            {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title={show.day_type === 'show' ? 'Venue' : 'Location'}><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || (show.day_type === 'travel' ? 'Transit / routing' : 'Location TBA')}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
-            {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title={show.day_type === 'show' ? 'Load / parking info' : 'Travel notes'}><p className="text-sm text-zinc-200">{show.parking_load_info}</p></SectionCard> : null}
-            {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
-            {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title={show.day_type === 'show' ? 'DOS contact' : 'Contact'}><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
-            {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <p>{show.hotel_notes}</p> : null}</div></SectionCard> : null}
-            {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
-            {show.day_type !== 'show' && !show.venue_name && !show.venue_address && !show.parking_load_info && visibleScheduleItems.length === 0 && !show.dos_name && !show.dos_phone && !hasAccommodation(show) && !show.notes ? (
-              <SectionCard title="Day Details"><p className="text-sm text-zinc-300">This {show.day_type} day is on the itinerary, but detailed routing notes have not been filled in yet.</p></SectionCard>
-            ) : null}
-          </>
+          show.day_type === 'show' ? (
+            <>
+              {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
+              {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><p className="text-sm text-zinc-200">{show.parking_load_info}</p></SectionCard> : null}
+              {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
+              {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
+              {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <p>{show.hotel_notes}</p> : null}</div></SectionCard> : null}
+              {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
+            </>
+          ) : (
+            <>
+              <DayOverviewCard show={show} />
+
+              {show.visibility.show_venue && hasLocation(show) ? (
+                <SectionCard title={getDayLocationLabel(show)}>
+                  <div className="space-y-3 text-sm text-zinc-200">
+                    <p className="font-medium">{getLocationTitle(show)}</p>
+                    {getCityRegionCountry(show) ? <p className="text-zinc-300">{getCityRegionCountry(show)}</p> : null}
+                    {show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}
+                  </div>
+                </SectionCard>
+              ) : null}
+
+              {show.day_type === 'travel' && show.visibility.show_schedule && (travelSchedule.departureItems.length > 0 || travelSchedule.arrivalItems.length > 0) ? (
+                <SectionCard title="Departure & arrival">
+                  <KeyValueList
+                    items={[
+                      ...travelSchedule.departureItems.map((item) => ({ label: item.label, value: item.time })),
+                      ...travelSchedule.arrivalItems.map((item) => ({ label: item.label, value: item.time })),
+                    ]}
+                  />
+                </SectionCard>
+              ) : null}
+
+              {show.day_type === 'travel' && ((show.visibility.show_parking_load_info && show.parking_load_info) || (show.visibility.show_schedule && travelSchedule.transportItems.length > 0)) ? (
+                <SectionCard title="Transport">
+                  <div className="space-y-4">
+                    {show.visibility.show_schedule && travelSchedule.transportItems.length > 0 ? <KeyValueList items={travelSchedule.transportItems.map((item) => ({ label: item.label, value: item.time }))} /> : null}
+                    {show.visibility.show_parking_load_info && show.parking_load_info ? <p className="text-sm text-zinc-200">{show.parking_load_info}</p> : null}
+                  </div>
+                </SectionCard>
+              ) : null}
+
+              {show.day_type === 'travel' && show.visibility.show_schedule && travelSchedule.timelineItems.length > 0 ? (
+                <SectionCard title="Travel timeline">
+                  <KeyValueList items={travelSchedule.timelineItems.map((item) => ({ label: item.label, value: item.time }))} />
+                </SectionCard>
+              ) : null}
+
+              {show.day_type === 'off' && show.visibility.show_schedule && visibleScheduleItems.length > 0 ? (
+                <SectionCard title="Reminders & appointments">
+                  <KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} />
+                </SectionCard>
+              ) : null}
+
+              {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? (
+                <SectionCard title={show.day_type === 'travel' ? 'Travel contact' : 'Contact'}>
+                  <KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} />
+                </SectionCard>
+              ) : null}
+
+              {show.visibility.show_accommodation && hasAccommodation(show) ? (
+                <SectionCard title="Lodging">
+                  <div className="space-y-3 text-sm text-zinc-200">
+                    {show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}
+                    {show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}
+                    {show.hotel_notes ? <p>{show.hotel_notes}</p> : null}
+                  </div>
+                </SectionCard>
+              ) : null}
+
+              {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
+
+              {!hasAnyDayDetails ? (
+                <SectionCard title="Day Details"><p className="text-sm text-zinc-300">This {show.day_type} day is on the itinerary, but detailed routing notes have not been filled in yet.</p></SectionCard>
+              ) : null}
+            </>
+          )
         ) : (
           <SectionCard title="Guest List"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>
         )}
