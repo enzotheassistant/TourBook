@@ -305,7 +305,7 @@ export async function updateWorkspaceMemberScoped(
   const [projectMap, tourMap, emailsByUserId, updated] = await Promise.all([
     getMemberProjectIds(supabase, [memberId]),
     getMemberTourIds(supabase, [memberId]),
-    getEmailsByUserId([targetUserId]),
+    getUserDirectoryInfoByUserId([targetUserId]),
     readWorkspaceMemberById(supabase, workspaceId, memberId),
   ]);
 
@@ -314,7 +314,8 @@ export async function updateWorkspaceMemberScoped(
     id: String(updated.id),
     workspaceId: String(updated.workspace_id),
     userId: targetUserId,
-    email: emailsByUserId.get(targetUserId) ?? null,
+    email: emailsByUserId.get(targetUserId)?.email ?? null,
+    name: emailsByUserId.get(targetUserId)?.name ?? null,
     role: String(updated.role) as WorkspaceRole,
     scopeType,
     projectIds: scopeType === 'workspace' ? [] : [...new Set(projectMap.get(memberId) ?? [])],

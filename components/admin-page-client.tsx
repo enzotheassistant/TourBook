@@ -2585,22 +2585,19 @@ function InviteManagementSection({
 }) {
   const recentInvites = invites.slice(0, 12);
   const inviteGroups = splitInvitesByStatus(recentInvites);
-  const projectNameById = new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id]));
-  const toursById = new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
+  const projectNameById = useMemo(() => new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id])), [availableProjects]);
+  const toursById = useMemo(() => new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [availableTours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
-
-  useEffect(() => {
-    if (!contextProjectName) setViewMode('workspace');
-  }, [contextProjectName]);
+  const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
   const visiblePendingInvites = useMemo(
-    () => viewMode === 'workspace' || !contextProjectId ? inviteGroups.pending : inviteGroups.pending.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
-    [contextProjectId, inviteGroups.pending, toursById, viewMode],
+    () => effectiveViewMode === 'workspace' || !contextProjectId ? inviteGroups.pending : inviteGroups.pending.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
+    [contextProjectId, effectiveViewMode, inviteGroups.pending, toursById],
   );
   const visibleHistoryInvites = useMemo(
-    () => viewMode === 'workspace' || !contextProjectId ? inviteGroups.history : inviteGroups.history.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
-    [contextProjectId, inviteGroups.history, toursById, viewMode],
+    () => effectiveViewMode === 'workspace' || !contextProjectId ? inviteGroups.history : inviteGroups.history.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
+    [contextProjectId, effectiveViewMode, inviteGroups.history, toursById],
   );
 
   return (
@@ -2693,10 +2690,10 @@ function InviteManagementSection({
           </div>
           {contextProjectName ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-              <p className="px-2 text-xs text-zinc-400">Viewing {viewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} invites.</p>
+              <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} invites.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(viewMode === 'context')}>Current artist</button>
-                <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(viewMode === 'workspace')}>Full workspace</button>
+                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+                <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
               </div>
             </div>
           ) : null}
@@ -3006,14 +3003,11 @@ function TeamMembersSection({
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
 }) {
-  const projectNameById = new Map(projects.map((project) => [project.id, project.name || project.slug || project.id]));
-  const toursById = new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }]));
+  const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, project.name || project.slug || project.id])), [projects]);
+  const toursById = useMemo(() => new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [tours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
-
-  useEffect(() => {
-    if (!contextProjectName) setViewMode('workspace');
-  }, [contextProjectName]);
+  const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
   const sortedMembers = [...members].sort((a, b) => {
     const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
@@ -3021,7 +3015,7 @@ function TeamMembersSection({
     if (aInContext !== bInContext) return bInContext - aInContext;
     return (a.email || a.userId).localeCompare(b.email || b.userId);
   });
-  const visibleMembers = viewMode === 'workspace' || !contextProjectId
+  const visibleMembers = effectiveViewMode === 'workspace' || !contextProjectId
     ? sortedMembers
     : sortedMembers.filter((member) => matchesProjectContext(member, contextProjectId, toursById));
 
@@ -3036,10 +3030,10 @@ function TeamMembersSection({
 
         {contextProjectName ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-            <p className="px-2 text-xs text-zinc-400">Viewing {viewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} members.</p>
+            <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} members.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(viewMode === 'context')}>Current artist</button>
-              <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(viewMode === 'workspace')}>Full workspace</button>
+              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+              <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
             </div>
           </div>
         ) : null}
