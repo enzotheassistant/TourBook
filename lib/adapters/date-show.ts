@@ -1,4 +1,5 @@
 import { normalizeShow } from '@/lib/normalize';
+import { sanitizeShowFormForDayType } from '@/lib/tour-day';
 import type { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import type { DateFormValues, DateRecord, ScopedGuestListEntry } from '@/lib/types/date-record';
 
@@ -64,7 +65,8 @@ function pickAnchorTime(show: Partial<ShowFormValues>, labels: string[]) {
 }
 
 export function mapShowFormToDateForm(show: Partial<ShowFormValues>, scope: { workspaceId: string; projectId: string; tourId?: string | null }): Partial<DateFormValues> {
-  const scheduleItems = (show.schedule_items ?? [])
+  const sanitizedShow = sanitizeShowFormForDayType(show as ShowFormValues);
+  const scheduleItems = (sanitizedShow.schedule_items ?? [])
     .map((item, index) => ({
       id: String(item.id ?? ''),
       label: String(item.label ?? '').trim(),
@@ -74,36 +76,36 @@ export function mapShowFormToDateForm(show: Partial<ShowFormValues>, scope: { wo
     .filter((item) => item.label || item.time_text);
 
   return {
-    id: show.id,
+    id: sanitizedShow.id,
     workspace_id: scope.workspaceId,
     project_id: scope.projectId,
     tour_id: scope.tourId ?? null,
-    legacy_tour_name: String(show.tour_name ?? '').trim() || null,
-    date: String(show.date ?? '').trim(),
-    day_type: show.day_type === 'travel' || show.day_type === 'off' ? show.day_type : 'show',
-    status: show.status === 'draft' ? 'draft' : 'published',
-    city: String(show.city ?? '').trim(),
-    region: String(show.region ?? '').trim(),
-    country: String(show.country ?? '').trim(),
-    venue_name: String(show.venue_name ?? '').trim(),
-    label: String(show.label ?? '').trim(),
-    venue_address: String(show.venue_address ?? '').trim(),
-    venue_maps_url: String(show.venue_maps_url ?? '').trim(),
-    dos_name: String(show.dos_name ?? '').trim(),
-    dos_phone: String(show.dos_phone ?? '').trim(),
-    parking_load_info: String(show.parking_load_info ?? '').trim(),
-    hotel_name: String(show.hotel_name ?? '').trim(),
-    hotel_address: String(show.hotel_address ?? '').trim(),
-    hotel_maps_url: String(show.hotel_maps_url ?? '').trim(),
-    hotel_notes: String(show.hotel_notes ?? '').trim(),
-    notes: String(show.notes ?? '').trim(),
-    guest_list_notes: String(show.guest_list_notes ?? '').trim(),
-    load_in_time: pickAnchorTime(show, ['load in', 'load-in', 'load']),
-    soundcheck_time: pickAnchorTime(show, ['soundcheck']),
-    doors_time: pickAnchorTime(show, ['doors']),
-    show_time: pickAnchorTime(show, ['show']),
-    curfew_time: pickAnchorTime(show, ['curfew']),
-    visibility: show.visibility,
+    legacy_tour_name: String(sanitizedShow.tour_name ?? '').trim() || null,
+    date: String(sanitizedShow.date ?? '').trim(),
+    day_type: sanitizedShow.day_type === 'travel' || sanitizedShow.day_type === 'off' ? sanitizedShow.day_type : 'show',
+    status: sanitizedShow.status === 'draft' ? 'draft' : 'published',
+    city: String(sanitizedShow.city ?? '').trim(),
+    region: String(sanitizedShow.region ?? '').trim(),
+    country: String(sanitizedShow.country ?? '').trim(),
+    venue_name: String(sanitizedShow.venue_name ?? '').trim(),
+    label: String(sanitizedShow.label ?? '').trim(),
+    venue_address: String(sanitizedShow.venue_address ?? '').trim(),
+    venue_maps_url: String(sanitizedShow.venue_maps_url ?? '').trim(),
+    dos_name: String(sanitizedShow.dos_name ?? '').trim(),
+    dos_phone: String(sanitizedShow.dos_phone ?? '').trim(),
+    parking_load_info: String(sanitizedShow.parking_load_info ?? '').trim(),
+    hotel_name: String(sanitizedShow.hotel_name ?? '').trim(),
+    hotel_address: String(sanitizedShow.hotel_address ?? '').trim(),
+    hotel_maps_url: String(sanitizedShow.hotel_maps_url ?? '').trim(),
+    hotel_notes: String(sanitizedShow.hotel_notes ?? '').trim(),
+    notes: String(sanitizedShow.notes ?? '').trim(),
+    guest_list_notes: String(sanitizedShow.guest_list_notes ?? '').trim(),
+    load_in_time: pickAnchorTime(sanitizedShow, ['load in', 'load-in', 'load']),
+    soundcheck_time: pickAnchorTime(sanitizedShow, ['soundcheck']),
+    doors_time: pickAnchorTime(sanitizedShow, ['doors']),
+    show_time: pickAnchorTime(sanitizedShow, ['show']),
+    curfew_time: pickAnchorTime(sanitizedShow, ['curfew']),
+    visibility: sanitizedShow.visibility,
     schedule_items: scheduleItems,
   };
 }

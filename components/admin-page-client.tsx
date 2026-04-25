@@ -20,6 +20,7 @@ import type { IntakeRow } from '@/lib/ai/intake-types';
 import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
+import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -92,7 +93,7 @@ function inlineFilterButtonClassName() {
   return 'inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
-type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
+type SectionKey = TourDaySectionKey;
 type VisibilityKey = keyof ShowFormValues['visibility'];
 type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
 type ExpandedSections = Record<SectionKey, boolean>;
@@ -184,6 +185,25 @@ function getExpandedSectionsForPopulatedForm(form: ShowFormValues): ExpandedSect
     notes: sectionHasContent('notes', form),
     guestListNotes: sectionHasContent('guestListNotes', form),
   };
+}
+
+function getExpandedSectionsForDayType(dayType: TourDayType, current: ExpandedSections, form: ShowFormValues): ExpandedSections {
+  const relevantSections = new Set(getRelevantSectionsForDayType(dayType));
+
+  return {
+    basics: true,
+    venue: relevantSections.has('venue') ? current.venue || sectionHasContent('venue', form) : false,
+    parking: relevantSections.has('parking') ? current.parking || sectionHasContent('parking', form) : false,
+    schedule: relevantSections.has('schedule') ? true : false,
+    dos: relevantSections.has('dos') ? current.dos || sectionHasContent('dos', form) : false,
+    accommodation: relevantSections.has('accommodation') ? current.accommodation || sectionHasContent('accommodation', form) : false,
+    notes: relevantSections.has('notes') ? current.notes || sectionHasContent('notes', form) : false,
+    guestListNotes: relevantSections.has('guestListNotes') ? current.guestListNotes || sectionHasContent('guestListNotes', form) : false,
+  };
+}
+
+function shouldRenderSection(section: SectionKey, form: ShowFormValues) {
+  return isSectionRelevantForDayType(section, form.day_type) || sectionHasContent(section, form);
 }
 
 function applyAutoVisibility(form: ShowFormValues, visibilityModes: VisibilityModeMap): ShowFormValues {
@@ -1003,7 +1023,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setForm((current) => applyAutoVisibility(mutator(current), visibilityModes));
   }
 
+  function handleDayTypeChange(nextDayType: TourDayType) {
+    setDirty(true);
+    setForm((current) => {
+      const nextForm = applyAutoVisibility(sanitizeShowFormForDayType({ ...current, day_type: nextDayType }), visibilityModes);
+      setExpandedSections((expanded) => getExpandedSectionsForDayType(nextDayType, expanded, nextForm));
+      return nextForm;
+    });
+  }
+
   function updateField<K extends keyof ShowFormValues>(key: K, value: ShowFormValues[K]) {
+    if (key === 'day_type') {
+      handleDayTypeChange(value as TourDayType);
+      return;
+    }
     updateForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -1090,13 +1123,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     try {
       if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
-      const show = await upsertShow({
+      const cleanedForm = sanitizeShowFormForDayType({
         ...form,
         id: form.id,
         status: requestedStatus,
         tour_name: form.tour_name.trim(),
         region: form.region.trim().toUpperCase(),
-      }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      });
+      const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setDirty(false);
       setForm(show);
@@ -1178,9 +1212,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    setVisibilityModes(visibilityModesForLoadedForm(show));
-    setForm(show);
-    setExpandedSections(getExpandedSectionsForPopulatedForm(show));
+    const normalizedShow = sanitizeShowFormForDayType(show);
+    setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
+    setForm(normalizedShow);
+    setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
     setMessage('Loaded into editor');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1193,13 +1228,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    const duplicated = {
+    const duplicated = sanitizeShowFormForDayType({
       ...show,
       id: '',
       date: '',
       created_at: undefined,
       schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-    };
+    });
 
     setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);
@@ -2040,19 +2075,47 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { value: 'show', label: 'Show day', description: 'Venue, schedule, DOS and guest-list notes.' },
+                    { value: 'travel', label: 'Travel day', description: 'Routing, transit timeline and destination details.' },
+                    { value: 'off', label: 'Off day', description: 'Light itinerary, stay info and reset notes.' },
+                  ].map((option) => {
+                    const active = form.day_type === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => handleDayTypeChange(option.value as TourDayType)}
+                        className={`rounded-[24px] border px-4 py-3 text-left transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.15)]' : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]'}`}
+                        aria-pressed={active}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-sm font-medium ${active ? 'text-emerald-200' : 'text-zinc-100'}`}>{option.label}</span>
+                          {active ? <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Active</span> : null}
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-zinc-400">{option.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-xs text-zinc-400">
+                  {form.day_type === 'show'
+                    ? 'Show days expose the full day sheet, including guest-list notes for crew.'
+                    : form.day_type === 'travel'
+                      ? 'Travel days focus the editor on routing and arrival details while keeping crew-facing show behavior intact.'
+                      : 'Off days stay intentionally light and hide the noisier show-only fields unless they already contain data.'}
+                </div>
+
                 <div className="grid gap-3 lg:grid-cols-2">
                   <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[72px]" />
-                  <InlineSelect
-                    label="Type"
-                    value={form.day_type}
-                    onChange={(value) => updateField('day_type', value as TourDayType)}
-                    options={[
-                      { value: 'show', label: 'Show day' },
-                      { value: 'travel', label: 'Travel day' },
-                      { value: 'off', label: 'Off day' },
-                    ]}
-                    labelWidthClassName="w-[72px]"
-                  />
+                  <div className="flex items-center gap-3 text-sm text-zinc-300">
+                    <span className="w-[72px] shrink-0 text-zinc-300">Focus</span>
+                    <div className="inline-flex min-h-12 items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-200">
+                      {getDayTypeBadge(form.day_type)}
+                    </div>
+                  </div>
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
@@ -2061,6 +2124,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               </div>
             </CollapsibleSection>
 
+            {shouldRenderSection('venue', form) ? (
             <CollapsibleSection
               title={editorCopy.venueTitle}
               expanded={expandedSections.venue}
@@ -2084,7 +2148,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 />
               </div>
             </CollapsibleSection>
+            ) : null}
 
+            {shouldRenderSection('parking', form) ? (
             <CollapsibleSection
               title={editorCopy.parkingTitle}
               expanded={expandedSections.parking}
@@ -2095,7 +2161,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             >
               <Textarea label={editorCopy.parkingLabel} value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
             </CollapsibleSection>
+            ) : null}
 
+            {shouldRenderSection('schedule', form) ? (
             <CollapsibleSection
               title={editorCopy.scheduleTitle}
               expanded={expandedSections.schedule}
@@ -2128,7 +2196,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 </button>
               </div>
             </CollapsibleSection>
+            ) : null}
 
+            {shouldRenderSection('dos', form) ? (
             <CollapsibleSection
               title={editorCopy.dosTitle}
               expanded={expandedSections.dos}
@@ -2142,7 +2212,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 <Input label="Phone number" value={form.dos_phone} onChange={(value) => updateField('dos_phone', value)} />
               </div>
             </CollapsibleSection>
+            ) : null}
 
+            {shouldRenderSection('accommodation', form) ? (
             <CollapsibleSection
               title={editorCopy.accommodationTitle}
               expanded={expandedSections.accommodation}
@@ -2167,7 +2239,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 <Textarea label="Hotel notes" value={form.hotel_notes} onChange={(value) => updateField('hotel_notes', value)} />
               </div>
             </CollapsibleSection>
+            ) : null}
 
+            {shouldRenderSection('notes', form) ? (
             <CollapsibleSection
               title={editorCopy.notesTitle}
               expanded={expandedSections.notes}
@@ -2178,8 +2252,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             >
               <Textarea value={form.notes} onChange={(value) => updateField('notes', value)} ariaLabel="Notes" />
             </CollapsibleSection>
+            ) : null}
 
-            {form.day_type === 'show' ? (
+            {shouldRenderSection('guestListNotes', form) ? (
             <CollapsibleSection
               title="Guest List Notes"
               expanded={expandedSections.guestListNotes}
