@@ -2,6 +2,7 @@
 
 :root {
   color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -9,6 +10,13 @@ body {
   max-width: 100%;
   overflow-x: hidden;
   background: #07090d;
+}
+
+html {
+  background: #07090d;
+  overscroll-behavior-y: none;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -19,6 +27,9 @@ body {
     linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 18%),
     #07090d;
   color: #fafafa;
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
@@ -26,6 +37,23 @@ body {
   min-width: 0;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
 a {
   text-decoration: none;
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.35);
+  color: #f8fafc;
 }

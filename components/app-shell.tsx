@@ -315,7 +315,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main className={`mx-auto flex w-full max-w-5xl flex-col ${mode === 'admin' ? 'gap-3 py-3' : 'gap-4 py-4'} px-4 sm:px-6`}>{children}</main>
+      <main className={`mx-auto flex w-full max-w-5xl flex-col ${mode === 'admin' ? 'gap-3 py-3 pb-[max(calc(env(safe-area-inset-bottom)+0.75rem),0.75rem)]' : 'gap-4 py-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)]'} px-4 sm:px-6`}>{children}</main>
     </div>
   );
 }
