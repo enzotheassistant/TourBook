@@ -17,6 +17,10 @@ function normalizeStatus(value: unknown): DateStatus {
   return value === 'draft' || value === 'archived' || value === 'cancelled' ? value : 'published';
 }
 
+function normalizeDayType(value: unknown): DateRecord['day_type'] {
+  return value === 'travel' || value === 'off' ? value : 'show';
+}
+
 function normalizeVisibility(row: any): DateVisibility {
   return {
     show_venue: row?.show_venue ?? DEFAULT_VISIBILITY.show_venue,
@@ -37,6 +41,7 @@ function normalizeDateRecord(row: any, scheduleItems: DateScheduleItem[] = []): 
     tour_id: row.tour_id ? String(row.tour_id) : null,
     legacy_tour_name: row.legacy_tour_name ? String(row.legacy_tour_name) : null,
     date: String(row.date ?? ''),
+    day_type: normalizeDayType(row.day_type),
     status: normalizeStatus(row.status),
     city: String(row.city ?? ''),
     region: String(row.region ?? ''),
@@ -91,6 +96,7 @@ function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, 
     tour_id: values.tour_id || null,
     legacy_tour_name: values.legacy_tour_name || null,
     date: values.date || null,
+    day_type: normalizeDayType(values.day_type),
     status: normalizeStatus(values.status),
     city: values.city || null,
     region: values.region || null,
@@ -123,9 +129,8 @@ function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, 
   };
 }
 
-
 async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string): Promise<DateScheduleItem[]> {
-    const { data, error } = await supabase
+  const { data, error } = await supabase
     .from('date_schedule_items')
     .select('id, label, time_text, sort_order')
     .eq('date_id', dateId)
@@ -141,7 +146,7 @@ async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string
 }
 
 async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: Array<Partial<DateScheduleItem>>) {
-    const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
+  const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
   if (deleteResult.error && !isMissingRelationError(deleteResult.error)) {
     throw new Error(deleteResult.error.message);
   }
@@ -170,7 +175,7 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
 
 async function assertDateReadable(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const membership = await requireWorkspaceAccess(supabase, userId, workspaceId);
-    const { data, error } = await supabase
+  const { data, error } = await supabase
     .from('dates')
     .select('*')
     .eq('id', dateId)
@@ -218,7 +223,7 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
   const membership = await ensureProjectAccess(supabase, input.userId, input.workspaceId, input.projectId);
   await ensureTourInScope(supabase, input.workspaceId, input.projectId, input.tourId);
 
-    let query = supabase
+  let query = supabase
     .from('dates')
     .select('*')
     .eq('workspace_id', input.workspaceId)
@@ -298,7 +303,7 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
     await ensureTourAccess(supabase, userId, workspaceId, projectId, String(values.tour_id), ['owner', 'admin', 'editor']);
   }
 
-    const payload = buildDatePayload(values, workspaceId, projectId);
+  const payload = buildDatePayload(values, workspaceId, projectId);
   const { data, error } = await supabase.from('dates').insert(payload).select('*').single();
   if (error || !data) {
     if (isMissingRelationError(error)) {
@@ -326,7 +331,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     await ensureTourAccess(supabase, userId, workspaceId, projectId, String(effectiveTourId), ['owner', 'admin', 'editor']);
   }
 
-    const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
+  const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
   const { data, error } = await supabase
     .from('dates')
     .update(payload)

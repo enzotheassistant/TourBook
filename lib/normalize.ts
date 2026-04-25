@@ -1,12 +1,16 @@
 import { createEmptyScheduleItems } from '@/lib/defaults';
 import { deriveShowStatus } from '@/lib/drafts';
-import { GuestListEntry, ScheduleItem, Show, ShowFormValues } from '@/lib/types';
+import { GuestListEntry, ScheduleItem, Show, ShowFormValues, TourDayType } from '@/lib/types';
 
 function makeScheduleId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
   return `schedule-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeDayType(value: unknown): TourDayType {
+  return value === 'travel' || value === 'off' ? value : 'show';
 }
 
 export function normalizeScheduleItems(items: ScheduleItem[] | undefined): ScheduleItem[] {
@@ -22,11 +26,13 @@ export function normalizeShow(show: Partial<ShowFormValues> & { id?: string }): 
   return {
     id: show.id ?? '',
     date: show.date ?? '',
+    day_type: normalizeDayType(show.day_type),
     city: show.city ?? '',
     region: show.region ?? '',
     country: show.country ?? '',
     venue_name: show.venue_name ?? '',
     tour_name: show.tour_name ?? '',
+    label: show.label ?? '',
     venue_address: show.venue_address ?? '',
     venue_maps_url: show.venue_maps_url ?? '',
     dos_name: show.dos_name ?? '',

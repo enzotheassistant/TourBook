@@ -1481,6 +1481,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           <InviteManagementSection
             invites={invites}
             loading={invitesLoading}
+            name={inviteName}
             email={inviteEmail}
             role={inviteRole}
             scopeType={inviteScopeType}
@@ -1493,6 +1494,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             lastInviteShare={lastInviteShare}
             showManualShare={showManualInviteShare}
             onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
+            onNameChange={setInviteName}
             onEmailChange={setInviteEmail}
             onRoleChange={setInviteRole}
             onScopeTypeChange={setInviteScopeType}

@@ -29,7 +29,6 @@ function viewButtonClassName(active: boolean) {
   return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
-
 function formatHeaderDate(date: string) {
   const parsed = parseStoredDate(date);
   if (!parsed) return 'Date TBD';
@@ -41,6 +40,30 @@ function formatHeaderDate(date: string) {
   }).format(parsed);
 
   return `${weekdayMonthDay} · ${parsed.getFullYear()}`;
+}
+
+function getDayTypeCopy(show: Show) {
+  if (show.day_type === 'travel') {
+    return {
+      badge: 'Travel day',
+      title: show.label || show.venue_name || show.city || 'Travel day',
+      subtitle: show.city ? `${show.city}${show.region ? `, ${show.region}` : ''}` : 'Routing / transit day',
+    };
+  }
+
+  if (show.day_type === 'off') {
+    return {
+      badge: 'Off day',
+      title: show.label || show.city || 'Off day',
+      subtitle: show.hotel_name || (show.city ? `${show.city}${show.region ? `, ${show.region}` : ''}` : 'Recovery / reset day'),
+    };
+  }
+
+  return {
+    badge: 'Show day',
+    title: `${show.city}${show.region ? `, ${show.region}` : ''}` || 'Show day',
+    subtitle: show.venue_name || 'Venue TBA',
+  };
 }
 
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
@@ -126,9 +149,12 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   if (contextLoading || !loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
+  const copy = getDayTypeCopy(show);
   const backHref = adminMode ? `/admin/dates?tab=${returnTab}` : `/?tab=${returnTab}`;
   const editHref = `/admin?edit=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
   const duplicateHref = `/admin?duplicate=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
+  const daySheetTitle = show.day_type === 'show' ? 'Day Sheet' : 'Day Details';
+  const canShowGuestList = show.day_type === 'show';
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -145,8 +171,9 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         <div className="grid min-w-0 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
           <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{show.city}{show.region ? `, ${show.region}` : ''}</h1>
-            <p className="mt-0.5 truncate text-base text-zinc-300">{show.venue_name}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{copy.badge}</p>
+            <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
+            <p className="mt-0.5 truncate text-base text-zinc-300">{copy.subtitle}</p>
             <div className="mt-3 flex items-center justify-between gap-3">
               <p className="min-w-0 text-sm text-zinc-400">{formatHeaderDate(show.date)}</p>
               {adminMode ? (
@@ -171,20 +198,23 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         {show.tour_name ? <p className="text-sm text-emerald-300">{show.tour_name}</p> : null}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>Day Sheet</button>
-            <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button>
+          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
+            {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
           </div>
         </div>
 
-        {requestedView === 'day-sheet' ? (
+        {requestedView === 'day-sheet' || !canShowGuestList ? (
           <>
-            {show.visibility.show_venue ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name}</p>{show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p>}</div></SectionCard> : null}
-            {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><p className="text-sm text-zinc-200">{show.parking_load_info}</p></SectionCard> : null}
+            {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title={show.day_type === 'show' ? 'Venue' : 'Location'}><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || (show.day_type === 'travel' ? 'Transit / routing' : 'Location TBA')}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
+            {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title={show.day_type === 'show' ? 'Load / parking info' : 'Travel notes'}><p className="text-sm text-zinc-200">{show.parking_load_info}</p></SectionCard> : null}
             {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
-            {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
+            {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title={show.day_type === 'show' ? 'DOS contact' : 'Contact'}><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
             {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <p>{show.hotel_notes}</p> : null}</div></SectionCard> : null}
             {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
+            {show.day_type !== 'show' && !show.venue_name && !show.venue_address && !show.parking_load_info && visibleScheduleItems.length === 0 && !show.dos_name && !show.dos_phone && !hasAccommodation(show) && !show.notes ? (
+              <SectionCard title="Day Details"><p className="text-sm text-zinc-300">This {show.day_type} day is on the itinerary, but detailed routing notes have not been filled in yet.</p></SectionCard>
+            ) : null}
           </>
         ) : (
           <SectionCard title="Guest List"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>

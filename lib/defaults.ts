@@ -21,11 +21,13 @@ export function createEmptyScheduleItems(count = 3): ScheduleItem[] {
 export const emptyShowForm: ShowFormValues = {
   id: '',
   date: '',
+  day_type: 'show',
   city: '',
   region: '',
   country: '',
   venue_name: '',
   tour_name: '',
+  label: '',
   venue_address: '',
   venue_maps_url: '',
   dos_name: '',

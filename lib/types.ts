@@ -20,15 +20,18 @@ export type ShowVisibility = {
 };
 
 export type ShowStatus = 'draft' | 'published';
+export type TourDayType = 'show' | 'travel' | 'off';
 
 export type Show = {
   id: string;
   date: string;
+  day_type: TourDayType;
   city: string;
   region: string;
   country: string;
   venue_name: string;
   tour_name: string;
+  label: string;
   venue_address: string;
   venue_maps_url: string;
   dos_name: string;

@@ -44,6 +44,19 @@ export function formatMonthDay(date: string) {
   }).format(parsed);
 }
 
+export function formatDateBlock(date: string) {
+  const parsed = parseStoredDate(date);
+  if (!parsed) {
+    return { month: 'TBD', day: '—', weekday: 'Date TBD' };
+  }
+
+  return {
+    month: new Intl.DateTimeFormat('en-CA', { month: 'short' }).format(parsed).toUpperCase(),
+    day: new Intl.DateTimeFormat('en-CA', { day: 'numeric' }).format(parsed),
+    weekday: new Intl.DateTimeFormat('en-CA', { weekday: 'short' }).format(parsed),
+  };
+}
+
 export function isToday(date: string) {
   if (!isValidStoredDate(date)) return false;
 

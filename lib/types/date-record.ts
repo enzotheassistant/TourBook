@@ -1,4 +1,5 @@
 import type { WorkspaceRole } from '@/lib/types/tenant';
+import type { TourDayType } from '@/lib/types';
 
 export type DateStatus = 'draft' | 'published' | 'archived' | 'cancelled';
 
@@ -26,6 +27,7 @@ export type DateRecord = {
   tour_id: string | null;
   legacy_tour_name: string | null;
   date: string;
+  day_type: TourDayType;
   status: DateStatus;
   city: string;
   region: string;
