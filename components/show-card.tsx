@@ -78,10 +78,33 @@ function clampTextClassName(dayType: Show['day_type']) {
   return dayType === 'show' ? 'line-clamp-1 sm:line-clamp-2' : 'line-clamp-2';
 }
 
+function hasLocation(show: Show) {
+  return Boolean(show.venue_name || show.venue_address || show.city || show.region || show.country);
+}
+
+function hasAccommodation(show: Show) {
+  return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
+}
+
+function hasCrewReadyDetails(show: Show) {
+  return hasLocation(show)
+    || Boolean(show.parking_load_info)
+    || show.schedule_items.some((item) => item.label.trim() && item.time.trim())
+    || Boolean(show.dos_name || show.dos_phone)
+    || hasAccommodation(show)
+    || Boolean(show.notes);
+}
+
+function getReadinessCopy(show: Show) {
+  if (hasCrewReadyDetails(show)) return null;
+  return show.day_type === 'show' ? 'Venue details pending' : show.day_type === 'travel' ? 'Routing details pending' : 'Day notes pending';
+}
+
 export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcoming' | 'past' }) {
   const today = isToday(show.date);
   const dateBlock = formatDateBlock(show.date);
   const supportingMeta = getSupportingMeta(show);
+  const readinessCopy = getReadinessCopy(show);
 
   return (
     <Link
@@ -133,6 +156,11 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
                   {today ? (
                     <span className="hidden items-center rounded-full border border-emerald-300/20 bg-emerald-400/8 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-200/90 sm:inline-flex">
                       Today
+                    </span>
+                  ) : null}
+                  {readinessCopy ? (
+                    <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-300">
+                      {readinessCopy}
                     </span>
                   ) : null}
                 </div>

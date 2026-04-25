@@ -101,6 +101,16 @@ function getDayHeroSummary(show: Show) {
   ]);
 }
 
+function countVisibleScheduleItems(show: Show) {
+  return show.schedule_items.filter((item) => item.label.trim() && item.time.trim()).length;
+}
+
+function getCrewReadOnlyNote(show: Show) {
+  if (show.day_type === 'show') return 'Crew view is read-only. Reach out to an admin if this day sheet needs changes.';
+  if (show.day_type === 'travel') return 'Crew view is read-only. Routing changes should be updated from the admin side.';
+  return 'Crew view is read-only. Ask an admin to update this off-day plan if anything shifts.';
+}
+
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
@@ -163,6 +173,7 @@ function InfoPill({ label, value }: { label: string; value: string }) {
 function DayOverviewCard({ show }: { show: Show }) {
   const location = getCityRegionCountry(show);
   const summary = getDayHeroSummary(show);
+  const scheduleCount = countVisibleScheduleItems(show);
 
   return (
     <section className="overflow-hidden rounded-[30px] border border-white/10 bg-linear-to-br from-white/[0.08] via-white/[0.05] to-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
@@ -170,10 +181,27 @@ function DayOverviewCard({ show }: { show: Show }) {
       <h2 className="mt-3 text-[1.45rem] font-semibold tracking-tight text-zinc-50">{getDayHeroTitle(show)}</h2>
       {summary ? <p className="mt-2 text-sm leading-6 text-zinc-300">{summary}</p> : null}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <InfoPill label={show.day_type === 'travel' ? 'Destination' : 'City'} value={location || 'TBA'} />
         <InfoPill label="Date" value={formatHeaderDate(show.date)} />
         <InfoPill label="Stay" value={show.hotel_name || 'Not added yet'} />
+        <InfoPill label={show.day_type === 'off' ? 'Reminders' : 'Timeline'} value={scheduleCount > 0 ? `${scheduleCount} item${scheduleCount === 1 ? '' : 's'}` : 'None yet'} />
+      </div>
+    </section>
+  );
+}
+
+function CrewReadOnlyBanner({ show }: { show: Show }) {
+  return (
+    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Crew view</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-300">{getCrewReadOnlyNote(show)}</p>
+        </div>
+        <span className="inline-flex items-center self-start rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-300">
+          Read-only
+        </span>
       </div>
     </section>
   );
@@ -320,6 +348,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
         <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />
 
+        {!adminMode ? <CrewReadOnlyBanner show={show} /> : null}
+
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
           <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
@@ -402,7 +432,12 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
 
               {!hasAnyDayDetails ? (
-                <SectionCard title="Day Details"><p className="text-sm text-zinc-300">This {show.day_type} day is on the itinerary, but detailed routing notes have not been filled in yet.</p></SectionCard>
+                <SectionCard title="Day Details">
+                  <div className="space-y-2">
+                    <p className="text-sm text-zinc-100">This {show.day_type} day is on the itinerary, but the crew-facing details have not been filled in yet.</p>
+                    <p className="text-sm leading-6 text-zinc-400">The date is locked in, but routing, lodging, contacts, or notes have not been added for this screen yet.</p>
+                  </div>
+                </SectionCard>
               ) : null}
             </>
           )
