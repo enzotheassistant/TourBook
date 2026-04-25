@@ -88,6 +88,10 @@ function filterFieldClassName() {
   return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
+function inlineFilterButtonClassName() {
+  return 'inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
+}
+
 type SectionKey = 'basics' | 'venue' | 'parking' | 'schedule' | 'dos' | 'accommodation' | 'notes' | 'guestListNotes';
 type VisibilityKey = keyof ShowFormValues['visibility'];
 type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
@@ -2115,6 +2119,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onTourChange={setDraftTour}
               tours={draftTours}
               shows={filteredDraftShows}
+              totalCount={draftShows.length}
               onEdit={loadShow}
               onExport={exportGuestList}
               onDelete={handleDelete}
@@ -2145,6 +2150,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onTourChange={setPastTour}
                     tours={pastTours}
                     shows={filteredPastShows}
+                    totalCount={pastShows.length}
                     groupedShows={pastShowsByYear}
                     stickyYears
                     onEdit={loadShow}
@@ -2162,6 +2168,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onTourChange={setUpcomingTour}
                     tours={upcomingTours}
                     shows={filteredUpcomingShows}
+                    totalCount={upcomingShows.length}
                     onEdit={loadShow}
                     onExport={exportGuestList}
                     onDelete={handleDelete}
@@ -2944,6 +2951,7 @@ function ShowListSection({
   onTourChange,
   tours,
   shows,
+  totalCount,
   groupedShows,
   stickyYears = false,
   onEdit,
@@ -2960,6 +2968,7 @@ function ShowListSection({
   onTourChange: (value: string) => void;
   tours: string[];
   shows: Show[];
+  totalCount: number;
   groupedShows?: Array<[string, Show[]]>;
   stickyYears?: boolean;
   onEdit: (show: Show) => void;
@@ -2970,6 +2979,7 @@ function ShowListSection({
   onPublish?: (show: Show) => void;
 }) {
   const [menuState, setMenuState] = useState<{ show: Show; top: number; left: number } | null>(null);
+  const hasActiveFilters = Boolean(search.trim()) || selectedTour !== 'All';
 
   useEffect(() => {
     if (!menuState) return;
@@ -3097,19 +3107,33 @@ function ShowListSection({
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
         <h2 className="text-base font-semibold">{title}</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
             <SearchInput value={search} onChange={onSearchChange} />
           </div>
           <div className="w-[132px] shrink-0 sm:w-[180px]">
             <SelectField label="Tour" value={selectedTour} onChange={onTourChange} options={tours} compact hideLabel selectClassName={filterFieldClassName()} />
           </div>
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={() => {
+                onSearchChange('');
+                onTourChange('All');
+              }}
+              className={inlineFilterButtonClassName()}
+            >
+              Clear filters
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="mt-3 space-y-3">
         {shows.length === 0 ? (
-          <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">No shows match this filter.</div>
+          <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">
+            {totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
+          </div>
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (
             <section key={year} className="space-y-3">
