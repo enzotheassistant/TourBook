@@ -11,7 +11,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
-import { Show, ShowFormValues, ShowStatus } from '@/lib/types';
+import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
@@ -47,7 +47,7 @@ function filterShows(shows: Show[], search: string, selectedTour: string) {
     const normalizedTour = show.tour_name.trim();
     const matchesTour = selectedTour === 'All' || selectedTour === 'Hide drafts' || normalizedTour === selectedTour;
     const matchesStatus = selectedTour !== 'Hide drafts' || show.status !== 'draft';
-    const haystack = [show.city, show.venue_name, formatShowDate(show.date), show.date, show.tour_name].join(' ').toLowerCase();
+    const haystack = [show.city, show.region, show.venue_name, show.label, show.day_type, formatShowDate(show.date), show.date, show.tour_name].join(' ').toLowerCase();
     const matchesSearch = !normalizedSearch || haystack.includes(normalizedSearch);
     return matchesTour && matchesStatus && matchesSearch;
   });
@@ -214,6 +214,64 @@ function readExpandedSectionsPreference() {
   }
 }
 
+
+function getDayTypeBadge(dayType: TourDayType) {
+  if (dayType === 'travel') return 'Travel Day';
+  if (dayType === 'off') return 'Off Day';
+  return 'Show Day';
+}
+
+function getDayTypeNoun(dayType: TourDayType) {
+  return dayType === 'show' ? 'show' : 'day';
+}
+
+function getEditorCopy(dayType: TourDayType) {
+  if (dayType === 'travel') {
+    return {
+      title: 'Create Tour Day',
+      subtitle: 'Travel day',
+      venueTitle: 'Travel / destination',
+      venueNameLabel: 'Travel title',
+      venueAddressLabel: 'Destination / address',
+      parkingTitle: 'Travel notes',
+      parkingLabel: 'Routing / parking / transit notes',
+      scheduleTitle: 'Travel timeline',
+      dosTitle: 'Travel contact',
+      accommodationTitle: 'Stay',
+      notesTitle: 'Notes',
+    };
+  }
+
+  if (dayType === 'off') {
+    return {
+      title: 'Create Tour Day',
+      subtitle: 'Off day',
+      venueTitle: 'Location',
+      venueNameLabel: 'Location name',
+      venueAddressLabel: 'Address',
+      parkingTitle: 'Local notes',
+      parkingLabel: 'Parking / local notes',
+      scheduleTitle: 'Day timeline',
+      dosTitle: 'Day contact',
+      accommodationTitle: 'Stay',
+      notesTitle: 'Notes',
+    };
+  }
+
+  return {
+    title: 'Create Tour Day',
+    subtitle: 'Show day',
+    venueTitle: 'Venue',
+    venueNameLabel: 'Venue name',
+    venueAddressLabel: 'Venue address',
+    parkingTitle: 'Load / parking info',
+    parkingLabel: 'Details',
+    scheduleTitle: 'Schedule',
+    dosTitle: 'DOS contact',
+    accommodationTitle: 'Accommodation',
+    notesTitle: 'Notes',
+  };
+}
 
 function formatDateForStorage(date: Date) {
   const year = date.getFullYear();
@@ -639,7 +697,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setVisibilityModes(visibilityModesForLoadedForm(duplicated));
         setForm(duplicated);
         setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
-        setMessage('Date duplicated');
+        setMessage('Tour day duplicated');
         setDirty(false);
       }
     } else if (editId) {
@@ -706,7 +764,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       await refreshContext();
       setActiveProjectId(created.id);
       setNewArtistName('');
-      setMessage('Artist created. You can now create your first date.');
+      setMessage('Artist created. You can now create your first tour day.');
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.no_artists',
@@ -1048,7 +1106,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         if (isEditing) {
           setMessage('Draft saved.');
         } else {
-          resetForm('Draft saved. Form cleared for the next date.');
+          resetForm('Draft saved. Form cleared for the next tour day.');
         }
         return;
       }
@@ -1064,7 +1122,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         return;
       }
 
-      resetForm('Show created. Form cleared for the next date.');
+      resetForm('Tour day created. Form cleared for the next one.');
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.new_date',
@@ -1408,7 +1466,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   const isEditingDraft = isEditing && form.status === 'draft';
-  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create Date';
+  const editorCopy = getEditorCopy(form.day_type);
+  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? `Update ${getDayTypeNoun(form.day_type)}` : `Create ${getDayTypeBadge(form.day_type)}`;
 
   if (contextLoading) {
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
@@ -1810,7 +1869,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           }}
           className={adminTabClassName(mode === 'new' && !isEditing)}
         >
-          New Date
+          New Tour Day
         </button>
         <button
           type="button"
@@ -1920,11 +1979,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            {isEditing ? (
-              <div className="pt-1">
-                <h1 className="text-lg font-medium tracking-tight text-zinc-300">Edit Date</h1>
-              </div>
-            ) : <div />}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{editorCopy.title}</p>
+              <h1 className="mt-1 text-lg font-medium tracking-tight text-zinc-300">{isEditing ? `Edit ${getDayTypeBadge(form.day_type)}` : getDayTypeBadge(form.day_type)}</h1>
+              <p className="mt-1 text-sm text-zinc-500">{form.day_type === 'show' ? 'Full show-day details with guest-list support.' : form.day_type === 'travel' ? 'Routing-focused itinerary entry for transit days.' : 'Simple itinerary entry for days off and reset days.'}</p>
+            </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {isEditingDraft ? (
@@ -1952,7 +2011,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
                     <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Create Date'}
+                      {saving ? 'Saving...' : `Create ${getDayTypeBadge(form.day_type)}`}
                     </button>
                   </>
                 )}
@@ -1983,6 +2042,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <div className="grid gap-3">
                 <div className="grid gap-3 lg:grid-cols-2">
                   <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[72px]" />
+                  <InlineSelect
+                    label="Type"
+                    value={form.day_type}
+                    onChange={(value) => updateField('day_type', value as TourDayType)}
+                    options={[
+                      { value: 'show', label: 'Show day' },
+                      { value: 'travel', label: 'Travel day' },
+                      { value: 'off', label: 'Off day' },
+                    ]}
+                    labelWidthClassName="w-[72px]"
+                  />
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
@@ -1992,7 +2062,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="Venue"
+              title={editorCopy.venueTitle}
               expanded={expandedSections.venue}
               onExpandedChange={(value) => setSectionExpanded('venue', value)}
               hasContent={sectionHasContent('venue', form)}
@@ -2000,9 +2070,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onVisibilityToggle={(value) => updateVisibility('show_venue', value)}
             >
               <div className="grid gap-3">
-                <Input label="Venue name" value={form.venue_name} onChange={(value) => updateField('venue_name', value)} />
+                <Input label={editorCopy.venueNameLabel} value={form.venue_name} onChange={(value) => updateField('venue_name', value)} placeholder={form.day_type === 'show' ? undefined : form.day_type === 'travel' ? 'Drive to Chicago' : 'Hotel / city / crew day off'} />
                 <AddressAutocompleteField
-                  label="Venue address"
+                  label={editorCopy.venueAddressLabel}
                   value={form.venue_address}
                   mapsUrl={form.venue_maps_url}
                   city={form.city}
@@ -2016,18 +2086,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="Load / parking info"
+              title={editorCopy.parkingTitle}
               expanded={expandedSections.parking}
               onExpandedChange={(value) => setSectionExpanded('parking', value)}
               hasContent={sectionHasContent('parking', form)}
               visibilityState={form.visibility.show_parking_load_info}
               onVisibilityToggle={(value) => updateVisibility('show_parking_load_info', value)}
             >
-              <Textarea label="Details" value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
+              <Textarea label={editorCopy.parkingLabel} value={form.parking_load_info} onChange={(value) => updateField('parking_load_info', value)} />
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="Schedule"
+              title={editorCopy.scheduleTitle}
               expanded={expandedSections.schedule}
               onExpandedChange={(value) => setSectionExpanded('schedule', value)}
               hasContent={sectionHasContent('schedule', form)}
@@ -2060,7 +2130,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="DOS contact"
+              title={editorCopy.dosTitle}
               expanded={expandedSections.dos}
               onExpandedChange={(value) => setSectionExpanded('dos', value)}
               hasContent={sectionHasContent('dos', form)}
@@ -2074,7 +2144,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="Accommodation"
+              title={editorCopy.accommodationTitle}
               expanded={expandedSections.accommodation}
               onExpandedChange={(value) => setSectionExpanded('accommodation', value)}
               hasContent={sectionHasContent('accommodation', form)}
@@ -2099,7 +2169,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </CollapsibleSection>
 
             <CollapsibleSection
-              title="Notes"
+              title={editorCopy.notesTitle}
               expanded={expandedSections.notes}
               onExpandedChange={(value) => setSectionExpanded('notes', value)}
               hasContent={sectionHasContent('notes', form)}
@@ -2109,6 +2179,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <Textarea value={form.notes} onChange={(value) => updateField('notes', value)} ariaLabel="Notes" />
             </CollapsibleSection>
 
+            {form.day_type === 'show' ? (
             <CollapsibleSection
               title="Guest List Notes"
               expanded={expandedSections.guestListNotes}
@@ -2119,6 +2190,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             >
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
             </CollapsibleSection>
+            ) : null}
 
           </form>
         </section>
@@ -3416,6 +3488,43 @@ function InlineInput({
         onChange={(event) => onChange(event.target.value)}
         className={`${fieldClassName()} min-w-0 flex-1`}
       />
+    </label>
+  );
+}
+
+function InlineSelect({
+  label,
+  value,
+  onChange,
+  options,
+  labelWidthClassName,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  labelWidthClassName?: string;
+}) {
+  return (
+    <label className="flex items-center gap-3 text-sm text-zinc-300">
+      <span className={`${labelWidthClassName ?? 'w-[72px]'} shrink-0 text-zinc-300`}>{label}</span>
+      <div className="relative min-w-0 flex-1">
+        <select
+          value={value}
+          aria-label={label}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+          <ChevronDownIcon />
+        </span>
+      </div>
     </label>
   );
 }
