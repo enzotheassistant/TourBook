@@ -24,6 +24,14 @@ function normalizeScopeType(value: unknown): 'workspace' | 'projects' | 'tours' 
   return null;
 }
 
+function isOptionalBootstrapSchemaDriftError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const maybeCode = 'code' in error ? String((error as { code?: string }).code ?? '') : '';
+  const maybeMessage = 'message' in error ? String((error as { message?: string }).message ?? '') : '';
+  const message = maybeMessage.toLowerCase();
+  return isMissingRelationError(error) || maybeCode === '42703' || message.includes('column') || message.includes('schema cache');
+}
+
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
   if (authState instanceof NextResponse) return authState;
@@ -82,21 +90,64 @@ export async function GET(request: NextRequest) {
 
       const tourGrantsResult = await supabase
         .from('workspace_member_tours')
-        .select('workspace_member_id, project_id, tour_id')
+        .select('*')
         .in('workspace_member_id', memberIds);
 
-      if (tourGrantsResult.error && !isMissingRelationError(tourGrantsResult.error)) {
+      if (tourGrantsResult.error && !isOptionalBootstrapSchemaDriftError(tourGrantsResult.error)) {
         throw tourGrantsResult.error;
       }
 
       for (const row of tourGrantsResult.data ?? []) {
         const memberId = String((row as any).workspace_member_id);
-        const tours = memberTourMap.get(memberId) ?? [];
-        tours.push(String((row as any).tour_id));
-        memberTourMap.set(memberId, tours);
-        const projects = memberProjectMap.get(memberId) ?? [];
-        projects.push(String((row as any).project_id));
-        memberProjectMap.set(memberId, projects);
+        const rawTourId = (row as any).tour_id;
+        if (rawTourId) {
+          const tours = memberTourMap.get(memberId) ?? [];
+          tours.push(String(rawTourId));
+          memberTourMap.set(memberId, tours);
+        }
+        const rawProjectId = (row as any).project_id;
+        if (rawProjectId) {
+          const projects = memberProjectMap.get(memberId) ?? [];
+          projects.push(String(rawProjectId));
+          memberProjectMap.set(memberId, projects);
+        }
+      }
+    }
+
+    const unresolvedTourIds = [...new Set(Array.from(memberTourMap.values()).flat().filter(Boolean))];
+
+    if (unresolvedTourIds.length) {
+      const tourProjectResult = await supabase
+        .from('tours')
+        .select('*')
+        .in('id', unresolvedTourIds);
+
+      if (tourProjectResult.error) {
+        if (!isOptionalBootstrapSchemaDriftError(tourProjectResult.error)) {
+          throw tourProjectResult.error;
+        }
+      } else {
+        const projectIdByTourId = new Map<string, string>();
+        for (const row of tourProjectResult.data ?? []) {
+          if ((row as any)?.id && (row as any)?.project_id) {
+            projectIdByTourId.set(String((row as any).id), String((row as any).project_id));
+          }
+        }
+
+        for (const membershipRow of membershipRows) {
+          const memberId = String((membershipRow as any).id);
+          const existingProjects = memberProjectMap.get(memberId) ?? [];
+          const nextProjects = new Set(existingProjects);
+
+          for (const tourId of memberTourMap.get(memberId) ?? []) {
+            const projectId = projectIdByTourId.get(tourId);
+            if (projectId) nextProjects.add(projectId);
+          }
+
+          if (nextProjects.size) {
+            memberProjectMap.set(memberId, [...nextProjects]);
+          }
+        }
       }
     }
 
@@ -199,13 +250,13 @@ export async function GET(request: NextRequest) {
     if (activeWorkspaceId) {
       const toursResult = await supabase
         .from('tours')
-        .select('id, workspace_id, project_id, name, start_date, end_date, created_at')
+        .select('*')
         .eq('workspace_id', activeWorkspaceId)
         .order('created_at', { ascending: true })
         .limit(200);
 
       if (toursResult.error) {
-        if (!isMissingRelationError(toursResult.error)) throw toursResult.error;
+        if (!isOptionalBootstrapSchemaDriftError(toursResult.error)) throw toursResult.error;
       } else {
         const workspaceMemberships = memberships.filter((membership) => membership.workspaceId === activeWorkspaceId);
         const allowedProjectIds = new Set(
