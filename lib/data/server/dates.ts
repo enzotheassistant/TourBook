@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour } from '@/lib/data/server/shared';
+import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, isSchemaDriftError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -12,6 +12,49 @@ const DEFAULT_VISIBILITY: DateVisibility = {
   show_notes: false,
   show_guest_list_notes: false,
 };
+
+const DATES_SELECT_COLUMNS = [
+  'id',
+  'workspace_id',
+  'project_id',
+  'tour_id',
+  'legacy_tour_name',
+  'date',
+  'day_type',
+  'status',
+  'city',
+  'region',
+  'country',
+  'venue_name',
+  'label',
+  'venue_address',
+  'venue_maps_url',
+  'dos_name',
+  'dos_phone',
+  'parking_load_info',
+  'hotel_name',
+  'hotel_address',
+  'hotel_maps_url',
+  'hotel_notes',
+  'notes',
+  'guest_list_notes',
+  'load_in_time',
+  'soundcheck_time',
+  'doors_time',
+  'show_time',
+  'curfew_time',
+  'show_venue',
+  'show_parking_load_info',
+  'show_schedule',
+  'show_dos_contact',
+  'show_accommodation',
+  'show_notes',
+  'show_guest_list_notes',
+  'created_at',
+  'updated_at',
+] as const;
+
+const LEGACY_MISSING_DATE_COLUMNS = ['day_type'] as const;
 
 function normalizeStatus(value: unknown): DateStatus {
   return value === 'draft' || value === 'archived' || value === 'cancelled' ? value : 'published';
@@ -129,6 +172,47 @@ function buildDatePayload(values: Partial<DateFormValues>, workspaceId: string, 
   };
 }
 
+function getDatesSelectClause(omitColumns: readonly string[] = []) {
+  return DATES_SELECT_COLUMNS.filter((column) => !omitColumns.includes(column)).join(', ');
+}
+
+function stripDatePayloadColumns(payload: Record<string, unknown>, omitColumns: readonly string[]) {
+  const nextPayload = { ...payload };
+  for (const column of omitColumns) {
+    delete nextPayload[column];
+  }
+  return nextPayload;
+}
+
+async function runDatesSelect<T>(buildQuery: (selectClause: string) => Promise<{ data: T | null; error: any }>, options?: { allowLegacyDayTypeFallback?: boolean }) {
+  const primary = await buildQuery(getDatesSelectClause());
+  if (!primary.error || !options?.allowLegacyDayTypeFallback || !isSchemaDriftError(primary.error)) {
+    return primary;
+  }
+
+  const message = String(primary.error?.message ?? '').toLowerCase();
+  const mentionsDayType = message.includes('day_type') || message.includes('column');
+  if (!mentionsDayType) {
+    return primary;
+  }
+
+  return buildQuery(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS));
+}
+
+async function runDatesWrite<T>(attempt: (payload: Record<string, unknown>) => Promise<{ data: T | null; error: any }>, payload: Record<string, unknown>) {
+  const primary = await attempt(payload);
+  if (!primary.error || !isSchemaDriftError(primary.error)) {
+    return primary;
+  }
+
+  const message = String(primary.error?.message ?? '').toLowerCase();
+  if (!message.includes('day_type') && !message.includes('column')) {
+    return primary;
+  }
+
+  return attempt(stripDatePayloadColumns(payload, LEGACY_MISSING_DATE_COLUMNS));
+}
+
 async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string): Promise<DateScheduleItem[]> {
   const { data, error } = await supabase
     .from('date_schedule_items')
@@ -175,12 +259,15 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
 
 async function assertDateReadable(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const membership = await requireWorkspaceAccess(supabase, userId, workspaceId);
-  const { data, error } = await supabase
-    .from('dates')
-    .select('*')
-    .eq('id', dateId)
-    .eq('workspace_id', workspaceId)
-    .maybeSingle();
+  const { data, error } = await runDatesSelect(
+    (selectClause) => supabase
+      .from('dates')
+      .select(selectClause)
+      .eq('id', dateId)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle(),
+    { allowLegacyDayTypeFallback: true },
+  );
 
   if (error) {
     if (isMissingRelationError(error)) {
@@ -223,9 +310,9 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
   const membership = await ensureProjectAccess(supabase, input.userId, input.workspaceId, input.projectId);
   await ensureTourInScope(supabase, input.workspaceId, input.projectId, input.tourId);
 
-  let query = supabase
+  let buildQuery = (selectClause: string) => supabase
     .from('dates')
-    .select('*')
+    .select(selectClause)
     .eq('workspace_id', input.workspaceId)
     .eq('project_id', input.projectId)
     .order('date', { ascending: true })
@@ -233,19 +320,25 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
 
   if (input.tourId) {
     await ensureTourAccess(supabase, input.userId, input.workspaceId, input.projectId, input.tourId, ['owner', 'admin', 'editor', 'viewer']);
-    query = query.eq('tour_id', input.tourId);
+    const previous = buildQuery;
+    buildQuery = (selectClause: string) => previous(selectClause).eq('tour_id', input.tourId as string);
   } else if (membership.scopeType === 'tours') {
-    query = query.in('tour_id', membership.tourIds);
+    const previous = buildQuery;
+    buildQuery = (selectClause: string) => previous(selectClause).in('tour_id', membership.tourIds);
   }
 
   if (membership.role === 'viewer' || !input.includeDrafts) {
-    query = query.eq('status', 'published');
+    const previous = buildQuery;
+    buildQuery = (selectClause: string) => previous(selectClause).eq('status', 'published');
   }
 
   const cappedLimit = Math.min(Math.max(Number(input.limit ?? 200), 1), 500);
-  query = query.limit(cappedLimit);
+  const finalBuildQuery = buildQuery;
 
-  const { data, error } = await query;
+  const { data, error } = await runDatesSelect(
+    (selectClause) => finalBuildQuery(selectClause).limit(cappedLimit),
+    { allowLegacyDayTypeFallback: true },
+  );
   if (error) {
     if (isMissingRelationError(error)) return [];
     throw new Error(error.message);
@@ -304,9 +397,12 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload(values, workspaceId, projectId);
-  const { data, error } = await supabase.from('dates').insert(payload).select('*').single();
+  const { data, error } = await runDatesWrite(
+    (nextPayload) => supabase.from('dates').insert(nextPayload).select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS)).single(),
+    payload,
+  );
   if (error || !data) {
-    if (isMissingRelationError(error)) {
+    if (isMissingRelationError(error) || isSchemaDriftError(error)) {
       throw new ApiError(409, 'Dates schema is not ready yet.');
     }
     throw new ApiError(500, error?.message ?? 'Unable to create date.');
@@ -332,16 +428,19 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
-  const { data, error } = await supabase
-    .from('dates')
-    .update(payload)
-    .eq('id', dateId)
-    .eq('workspace_id', workspaceId)
-    .select('*')
-    .single();
+  const { data, error } = await runDatesWrite(
+    (nextPayload) => supabase
+      .from('dates')
+      .update(nextPayload)
+      .eq('id', dateId)
+      .eq('workspace_id', workspaceId)
+      .select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS))
+      .single(),
+    payload,
+  );
 
   if (error || !data) {
-    if (isMissingRelationError(error)) {
+    if (isMissingRelationError(error) || isSchemaDriftError(error)) {
       throw new ApiError(409, 'Dates schema is not ready yet.');
     }
     throw new ApiError(500, error?.message ?? 'Unable to update date.');

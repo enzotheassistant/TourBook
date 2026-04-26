@@ -30,6 +30,14 @@ export function isMissingRelationError(error: unknown) {
   return maybeCode === '42P01' || maybeMessage.toLowerCase().includes('does not exist');
 }
 
+export function isSchemaDriftError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const maybeCode = 'code' in error ? String((error as { code?: string }).code ?? '') : '';
+  const maybeMessage = 'message' in error ? String((error as { message?: string }).message ?? '') : '';
+  const message = maybeMessage.toLowerCase();
+  return isMissingRelationError(error) || maybeCode === '42703' || message.includes('column') || message.includes('schema cache');
+}
+
 /**
  * Explicit privileged client for system/background/admin tasks.
  * Do not use in normal user request paths.
