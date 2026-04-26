@@ -2,34 +2,29 @@ import Link from 'next/link';
 import { formatDateBlock, isToday } from '@/lib/date';
 import { Show } from '@/lib/types';
 
-function getDayTypeAccentClassName(dayType: Show['day_type']) {
-  if (dayType === 'travel') return 'bg-sky-300/80';
-  if (dayType === 'off') return 'bg-violet-300/80';
-  return 'bg-amber-300/80';
+function getDayTypeLabel(dayType: Show['day_type']) {
+  if (dayType === 'travel') return 'Travel day';
+  if (dayType === 'off') return 'Off day';
+  return 'Show day';
 }
 
-function getPrimaryTitle(show: Show) {
+function getCityLine(show: Show) {
+  if (show.city) return show.city;
+  if (show.day_type === 'travel') return 'Travel day';
+  if (show.day_type === 'off') return 'Off day';
+  return show.label || 'Show day';
+}
+
+function getVenueLine(show: Show) {
   if (show.day_type === 'travel') {
-    return show.label || show.venue_name || show.city || 'Travel day';
+    return show.venue_name || show.label || show.notes || show.hotel_name || 'Routing details';
   }
 
   if (show.day_type === 'off') {
-    return show.label || show.city || 'Off day';
+    return show.venue_name || show.hotel_name || show.label || show.notes || 'Day off';
   }
 
-  return show.city ? `${show.city}${show.region ? `, ${show.region}` : ''}` : (show.label || 'Show day');
-}
-
-function getSecondaryLine(show: Show) {
-  if (show.day_type === 'travel') {
-    return show.venue_name || show.notes || show.hotel_name || 'Travel / routing details';
-  }
-
-  if (show.day_type === 'off') {
-    return show.venue_name || show.hotel_name || show.notes || 'Day off';
-  }
-
-  return show.venue_name || 'Venue TBA';
+  return show.venue_name || show.label || 'Venue TBA';
 }
 
 function getLocationLine(show: Show) {
@@ -86,11 +81,11 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
             today ? 'border-emerald-300/25 bg-emerald-400/[0.075]' : 'border-white/10 bg-black/20'
           }`}
         >
-          <div className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full sm:inset-x-4 sm:top-0 sm:h-[3px] sm:w-auto sm:rounded-b-full sm:rounded-tr-none ${today ? 'bg-emerald-300/80' : getDayTypeAccentClassName(show.day_type)}`} />
+          <div className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-white/12 sm:inset-x-4 sm:top-0 sm:h-[3px] sm:w-auto sm:rounded-b-full sm:rounded-tr-none ${today ? 'sm:bg-emerald-300/80 bg-emerald-300/80' : ''}`} />
 
           <div className="min-w-0 flex-1 sm:flex-none sm:text-center">
             <div className="flex items-center gap-2 sm:justify-center">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.26em] text-zinc-400">{dateBlock.month}</span>
+              <span className={`text-[11px] font-semibold uppercase tracking-[0.26em] ${today ? 'text-emerald-200' : 'text-zinc-400'}`}>{dateBlock.month}</span>
               {today ? (
                 <span className="inline-flex items-center rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200 sm:hidden">
                   Today
@@ -99,22 +94,25 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
             </div>
             <div className="mt-1 flex items-end gap-2 sm:mt-2 sm:flex-col sm:items-center sm:gap-0">
               <span className="text-[2rem] font-semibold leading-none tracking-[-0.05em] text-zinc-50 sm:text-[2.5rem]">{dateBlock.day}</span>
-              <span className="pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 sm:pb-0 sm:pt-1">{dateBlock.weekday}</span>
+              <span className={`pb-1 text-[11px] font-medium uppercase tracking-[0.18em] sm:pb-0 sm:pt-1 ${today ? 'text-emerald-200/90' : 'text-zinc-400'}`}>{dateBlock.weekday}</span>
             </div>
           </div>
-
         </div>
 
         <div className="min-w-0">
           <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-4">
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <h2 className="break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:mt-3 sm:text-[1.6rem]">
-                  {getPrimaryTitle(show)}
+                <div className="flex flex-wrap items-center gap-2">
+                  {today ? <span className="inline-flex items-center rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Today</span> : null}
+                  <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">{getDayTypeLabel(show.day_type)}</span>
+                </div>
+                <h2 className="mt-1 break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:mt-3 sm:text-[1.6rem]">
+                  {getCityLine(show)}
                 </h2>
 
-                <p className={`break-words text-[13px] leading-5 text-zinc-200/92 sm:mt-2 sm:max-w-[58ch] sm:text-[15px] sm:leading-6 ${clampTextClassName(show.day_type)}`}>
-                  {getSecondaryLine(show)}
+                <p className={`mt-1 break-words text-[13px] leading-5 text-zinc-200/92 sm:mt-2 sm:max-w-[58ch] sm:text-[15px] sm:leading-6 ${clampTextClassName(show.day_type)}`}>
+                  {getVenueLine(show)}
                 </p>
               </div>
 

@@ -2075,25 +2075,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: 'show', label: 'Show Day' },
-                    { value: 'travel', label: 'Travel Day' },
-                    { value: 'off', label: 'Off Day' },
-                  ].map((option) => {
-                    const active = form.day_type === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => handleDayTypeChange(option.value as TourDayType)}
-                        className={`inline-flex h-11 items-center justify-center rounded-full border px-4 text-sm font-medium transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-black/20 text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`}
-                        aria-pressed={active}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+                <div className="relative w-full max-w-[220px]">
+                  <select
+                    value={form.day_type}
+                    onChange={(event) => handleDayTypeChange(event.target.value as TourDayType)}
+                    aria-label="Day type"
+                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/40 focus:bg-white/[0.03]"
+                  >
+                    <option value="show">Show Day</option>
+                    <option value="travel">Travel Day</option>
+                    <option value="off">Off Day</option>
+                  </select>
+                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className="h-4 w-4"><path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </span>
                 </div>
 
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -2663,7 +2658,6 @@ function InviteManagementSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Pending invites now use the same access language as accepted members, so the whole team reads like one directory instead of two different systems.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto]">
@@ -2741,7 +2735,6 @@ function InviteManagementSection({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
-              <p className="text-sm text-zinc-300">Pending invites are separated from historical invite activity for easier scanning.</p>
             </div>
             <div className="text-xs text-zinc-500">{visiblePendingInvites.length} pending · {visibleHistoryInvites.length} recent</div>
           </div>
@@ -3082,7 +3075,6 @@ function TeamMembersSection({
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Members</p>
           <h2 className="mt-1 text-base font-semibold text-zinc-100">Accepted team members</h2>
-          <p className="mt-1 text-sm text-zinc-400">Same access labels as invites, with a cleaner switch between current artist and full workspace views.</p>
         </div>
 
         {contextProjectName ? (
