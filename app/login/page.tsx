@@ -5,22 +5,61 @@ import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
-function mapAuthError(message?: string) {
+function mapAuthError(message?: string, options?: { mode?: AuthMode; fallback?: string }) {
   const raw = (message || "").trim();
   const text = raw.toLowerCase();
+  const mode = options?.mode ?? "signin";
+  const fallback =
+    options?.fallback
+    ?? (mode === "signup"
+      ? "Unable to create your account right now. Please try again."
+      : mode === "forgot"
+        ? "Unable to send the reset email right now. Please try again."
+        : "Unable to sign in right now. Please try again.");
 
   if (!text || text === '{}' || text === '[object object]') {
-    return 'Unable to complete authentication right now. Please try again, or sign in if this email already has an account.';
+    return fallback;
   }
-  if (text.includes('invalid login credentials')) return 'Invalid email or password.';
+
+  if (
+    text.includes('invalid login credentials')
+    || text.includes('email not confirmed')
+    || text.includes('invalid email or password')
+    || text.includes('incorrect password')
+  ) {
+    return 'Invalid email or password.';
+  }
+
   if (text.includes('already registered') || text.includes('user already registered')) {
     return 'An account with this email already exists. Try signing in instead.';
   }
+
   if (text.includes('password') && text.includes('weak')) {
     return 'Password is too weak. Use at least 8 characters with a stronger mix.';
   }
 
-  return raw || 'Something went wrong. Please try again.';
+  if (
+    text.includes('load failed')
+    || text.includes('failed to fetch')
+    || text.includes('fetch failed')
+    || text.includes('networkerror')
+    || text.includes('network request failed')
+  ) {
+    return 'Network error. Check your connection and try again.';
+  }
+
+  if (
+    text.includes('500')
+    || text.includes('502')
+    || text.includes('503')
+    || text.includes('504')
+    || text.includes('internal server error')
+    || text.includes('service unavailable')
+  ) {
+    return 'Server error. Please try again in a moment.';
+  }
+
+  return raw || fallback;
 }
 
 export default function LoginPage() {
@@ -54,7 +93,7 @@ export default function LoginPage() {
   }, [loading, mode]);
 
   async function syncSession(accessToken: string, refreshToken: string) {
-    await fetch("/api/auth/session", {
+    const response = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -63,6 +102,10 @@ export default function LoginPage() {
         refreshToken,
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(response.status >= 500 ? "Server error" : "Unable to sync session.");
+    }
   }
 
   function routeToApp() {
@@ -86,7 +129,7 @@ export default function LoginPage() {
         });
 
         if (error || !data.session) {
-          setError(mapAuthError(error?.message || "Unable to sign in."));
+          setError(mapAuthError(error?.message || "Unable to sign in.", { mode: "signin" }));
           return;
         }
 
@@ -108,7 +151,7 @@ export default function LoginPage() {
         });
 
         if (error) {
-          setError(mapAuthError(error.message));
+          setError(mapAuthError(error.message, { mode: "signup" }));
           return;
         }
 
@@ -134,13 +177,21 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setError(mapAuthError(error.message));
+        setError(mapAuthError(error.message, { mode: "forgot" }));
         return;
       }
 
       setSuccess("If this email is registered, a password reset link has been sent.");
     } catch (err) {
-      setError(err instanceof Error ? mapAuthError(err.message) : "Unable to continue.");
+      setError(
+        err instanceof Error
+          ? mapAuthError(err.message, { mode })
+          : mode === "signup"
+            ? "Unable to create your account right now."
+            : mode === "forgot"
+              ? "Unable to send the reset email right now."
+              : "Unable to sign in right now.",
+      );
     } finally {
       setLoading(false);
     }
