@@ -199,7 +199,7 @@ export async function GET(request: NextRequest) {
     if (activeWorkspaceId) {
       const toursResult = await supabase
         .from('tours')
-        .select('id, workspace_id, project_id, name, status, start_date, end_date, created_at')
+        .select('id, workspace_id, project_id, name, start_date, end_date, created_at')
         .eq('workspace_id', activeWorkspaceId)
         .order('created_at', { ascending: true })
         .limit(200);

@@ -13,7 +13,7 @@ export async function listToursScoped(
 
   const { data, error } = await supabase
     .from('tours')
-    .select('id, workspace_id, project_id, name, status, start_date, end_date, created_at')
+    .select('id, workspace_id, project_id, name, start_date, end_date, created_at')
     .eq('workspace_id', workspaceId)
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
