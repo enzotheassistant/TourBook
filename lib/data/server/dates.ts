@@ -184,7 +184,7 @@ function stripDatePayloadColumns(payload: Record<string, unknown>, omitColumns: 
   return nextPayload;
 }
 
-async function runDatesSelect<T>(buildQuery: (selectClause: string) => Promise<{ data: T | null; error: any }>, options?: { allowLegacyDayTypeFallback?: boolean }) {
+async function runDatesSelect<T>(buildQuery: (selectClause: string) => PromiseLike<{ data: T | null; error: any }>, options?: { allowLegacyDayTypeFallback?: boolean }) {
   const primary = await buildQuery(getDatesSelectClause());
   if (!primary.error || !options?.allowLegacyDayTypeFallback || !isSchemaDriftError(primary.error)) {
     return primary;
@@ -199,7 +199,7 @@ async function runDatesSelect<T>(buildQuery: (selectClause: string) => Promise<{
   return buildQuery(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS));
 }
 
-async function runDatesWrite<T>(attempt: (payload: Record<string, unknown>) => Promise<{ data: T | null; error: any }>, payload: Record<string, unknown>) {
+async function runDatesWrite<T>(attempt: (payload: Record<string, unknown>) => PromiseLike<{ data: T | null; error: any }>, payload: Record<string, unknown>) {
   const primary = await attempt(payload);
   if (!primary.error || !isSchemaDriftError(primary.error)) {
     return primary;
@@ -259,7 +259,7 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
 
 async function assertDateReadable(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const membership = await requireWorkspaceAccess(supabase, userId, workspaceId);
-  const { data, error } = await runDatesSelect(
+  const { data, error } = await runDatesSelect<any>(
     (selectClause) => supabase
       .from('dates')
       .select(selectClause)
@@ -335,7 +335,7 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
   const cappedLimit = Math.min(Math.max(Number(input.limit ?? 200), 1), 500);
   const finalBuildQuery = buildQuery;
 
-  const { data, error } = await runDatesSelect(
+  const { data, error } = await runDatesSelect<any[]>(
     (selectClause) => finalBuildQuery(selectClause).limit(cappedLimit),
     { allowLegacyDayTypeFallback: true },
   );
@@ -397,7 +397,7 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload(values, workspaceId, projectId);
-  const { data, error } = await runDatesWrite(
+  const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase.from('dates').insert(nextPayload).select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS)).single(),
     payload,
   );
@@ -428,7 +428,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
-  const { data, error } = await runDatesWrite(
+  const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase
       .from('dates')
       .update(nextPayload)
