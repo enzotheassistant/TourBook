@@ -89,7 +89,7 @@ function getDayHeroSummary(show: Show) {
   if (show.day_type === 'travel') {
     return joinNonEmpty([
       getCityRegionCountry(show) || null,
-      show.hotel_name ? `Stay: ${show.hotel_name}` : null,
+      show.hotel_name ? `Accommodation: ${show.hotel_name}` : null,
       show.venue_address ? 'Address available' : null,
     ]);
   }
@@ -105,11 +105,6 @@ function countVisibleScheduleItems(show: Show) {
   return show.schedule_items.filter((item) => item.label.trim() && item.time.trim()).length;
 }
 
-function getCrewReadOnlyNote(show: Show) {
-  if (show.day_type === 'show') return 'Crew view is read-only. Reach out to an admin if this day sheet needs changes.';
-  if (show.day_type === 'travel') return 'Crew view is read-only. Routing changes should be updated from the admin side.';
-  return 'Crew view is read-only. Ask an admin to update this off-day plan if anything shifts.';
-}
 
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -184,28 +179,13 @@ function DayOverviewCard({ show }: { show: Show }) {
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <InfoPill label={show.day_type === 'travel' ? 'Destination' : 'City'} value={location || 'TBA'} />
         <InfoPill label="Date" value={formatHeaderDate(show.date)} />
-        <InfoPill label="Stay" value={show.hotel_name || 'Not added yet'} />
+        <InfoPill label="Accommodation" value={show.hotel_name || 'Not added yet'} />
         <InfoPill label={show.day_type === 'off' ? 'Reminders' : 'Timeline'} value={scheduleCount > 0 ? `${scheduleCount} item${scheduleCount === 1 ? '' : 's'}` : 'None yet'} />
       </div>
     </section>
   );
 }
 
-function CrewReadOnlyBanner({ show }: { show: Show }) {
-  return (
-    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Crew view</p>
-          <p className="mt-1 text-sm leading-6 text-zinc-300">{getCrewReadOnlyNote(show)}</p>
-        </div>
-        <span className="inline-flex items-center self-start rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-300">
-          Read-only
-        </span>
-      </div>
-    </section>
-  );
-}
 
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
   const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
@@ -348,7 +328,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
         <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />
 
-        {!adminMode ? <CrewReadOnlyBanner show={show} /> : null}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
           <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -420,7 +399,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               ) : null}
 
               {show.visibility.show_accommodation && hasAccommodation(show) ? (
-                <SectionCard title="Lodging">
+                <SectionCard title="Accommodation">
                   <div className="space-y-3 text-sm text-zinc-200">
                     {show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}
                     {show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-emerald-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}

@@ -435,26 +435,6 @@ export function DashboardClient() {
                   {activeCollection.length}
                 </span>
               </div>
-              <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-                {tab === 'past'
-                  ? 'Browse completed tour days by year with the same crew-first layout used on the road.'
-                  : 'A quick-scan itinerary for the road — built to surface today, next, and everything else without clutter.'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center sm:min-w-[92px]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Shows</p>
-                <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-100">{dayTypeSummary.show}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center sm:min-w-[92px]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Travel</p>
-                <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-100">{dayTypeSummary.travel}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center sm:min-w-[92px]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Off</p>
-                <p className="mt-1 text-lg font-semibold tracking-tight text-zinc-100">{dayTypeSummary.off}</p>
-              </div>
             </div>
           </div>
         </div>

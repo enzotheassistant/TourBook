@@ -248,7 +248,7 @@ function getDayTypeNoun(dayType: TourDayType) {
 function getEditorCopy(dayType: TourDayType) {
   if (dayType === 'travel') {
     return {
-      title: 'Create Tour Day',
+      title: 'New Date',
       subtitle: 'Travel day',
       venueTitle: 'Travel / destination',
       venueNameLabel: 'Travel title',
@@ -257,14 +257,14 @@ function getEditorCopy(dayType: TourDayType) {
       parkingLabel: 'Routing / parking / transit notes',
       scheduleTitle: 'Travel timeline',
       dosTitle: 'Travel contact',
-      accommodationTitle: 'Stay',
+      accommodationTitle: 'Accommodation',
       notesTitle: 'Notes',
     };
   }
 
   if (dayType === 'off') {
     return {
-      title: 'Create Tour Day',
+      title: 'New Date',
       subtitle: 'Off day',
       venueTitle: 'Location',
       venueNameLabel: 'Location name',
@@ -273,13 +273,13 @@ function getEditorCopy(dayType: TourDayType) {
       parkingLabel: 'Parking / local notes',
       scheduleTitle: 'Day timeline',
       dosTitle: 'Day contact',
-      accommodationTitle: 'Stay',
+      accommodationTitle: 'Accommodation',
       notesTitle: 'Notes',
     };
   }
 
   return {
-    title: 'Create Tour Day',
+    title: 'New Date',
     subtitle: 'Show day',
     venueTitle: 'Venue',
     venueNameLabel: 'Venue name',
@@ -1502,7 +1502,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   const isEditingDraft = isEditing && form.status === 'draft';
   const editorCopy = getEditorCopy(form.day_type);
-  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? `Update ${getDayTypeNoun(form.day_type)}` : `Create ${getDayTypeBadge(form.day_type)}`;
+  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? `Update ${getDayTypeNoun(form.day_type)}` : 'Create';
 
   if (contextLoading) {
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
@@ -1904,7 +1904,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           }}
           className={adminTabClassName(mode === 'new' && !isEditing)}
         >
-          New Tour Day
+          New Date
         </button>
         <button
           type="button"
@@ -2046,7 +2046,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
                     <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : `Create ${getDayTypeBadge(form.day_type)}`}
+                      {saving ? 'Saving...' : 'Create'}
                     </button>
                   </>
                 )}
@@ -2075,11 +2075,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               hasContent={sectionHasContent('basics', form)}
             >
               <div className="grid gap-3">
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="flex flex-wrap gap-2">
                   {[
-                    { value: 'show', label: 'Show day', description: 'Venue, schedule, DOS and guest-list notes.' },
-                    { value: 'travel', label: 'Travel day', description: 'Routing, transit timeline and destination details.' },
-                    { value: 'off', label: 'Off day', description: 'Light itinerary, stay info and reset notes.' },
+                    { value: 'show', label: 'Show Day' },
+                    { value: 'travel', label: 'Travel Day' },
+                    { value: 'off', label: 'Off Day' },
                   ].map((option) => {
                     const active = form.day_type === option.value;
                     return (
@@ -2087,35 +2087,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                         key={option.value}
                         type="button"
                         onClick={() => handleDayTypeChange(option.value as TourDayType)}
-                        className={`rounded-[24px] border px-4 py-3 text-left transition ${active ? 'border-emerald-400/40 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.15)]' : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]'}`}
+                        className={`inline-flex h-11 items-center justify-center rounded-full border px-4 text-sm font-medium transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-black/20 text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`}
                         aria-pressed={active}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-sm font-medium ${active ? 'text-emerald-200' : 'text-zinc-100'}`}>{option.label}</span>
-                          {active ? <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Active</span> : null}
-                        </div>
-                        <p className="mt-2 text-xs leading-5 text-zinc-400">{option.description}</p>
+                        {option.label}
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-xs text-zinc-400">
-                  {form.day_type === 'show'
-                    ? 'Show days expose the full day sheet, including guest-list notes for crew.'
-                    : form.day_type === 'travel'
-                      ? 'Travel days focus the editor on routing and arrival details while keeping crew-facing show behavior intact.'
-                      : 'Off days stay intentionally light and hide the noisier show-only fields unless they already contain data.'}
-                </div>
-
                 <div className="grid gap-3 lg:grid-cols-2">
                   <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[72px]" />
-                  <div className="flex items-center gap-3 text-sm text-zinc-300">
-                    <span className="w-[72px] shrink-0 text-zinc-300">Focus</span>
-                    <div className="inline-flex min-h-12 items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-200">
-                      {getDayTypeBadge(form.day_type)}
-                    </div>
-                  </div>
                   <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
                   <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />

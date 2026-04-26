@@ -90,7 +90,7 @@ export function OfflineStatus({
   if (isOnline && source !== 'cache' && !savedAt) return null;
 
   const tone = getStatusTone(isOnline, source);
-  const headline = !isOnline ? 'Offline mode' : source === 'cache' ? 'Showing saved itinerary' : 'Synced for the road';
+  const headline = !isOnline ? 'Offline mode' : source === 'cache' ? 'Showing saved itinerary' : 'Ready offline';
   const body = !isOnline
     ? 'TourBook will keep using what is already saved on this device until you reconnect.'
     : source === 'cache'

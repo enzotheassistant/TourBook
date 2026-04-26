@@ -1,18 +1,6 @@
 import Link from 'next/link';
-import { formatDateBlock, formatMonthDay, isToday } from '@/lib/date';
+import { formatDateBlock, isToday } from '@/lib/date';
 import { Show } from '@/lib/types';
-
-function getDayTypeLabel(dayType: Show['day_type']) {
-  if (dayType === 'travel') return 'Travel day';
-  if (dayType === 'off') return 'Off day';
-  return 'Show day';
-}
-
-function getDayTypeBadgeClassName(dayType: Show['day_type']) {
-  if (dayType === 'travel') return 'border-sky-400/20 bg-sky-400/10 text-sky-200';
-  if (dayType === 'off') return 'border-violet-400/20 bg-violet-400/10 text-violet-200';
-  return 'border-amber-400/20 bg-amber-400/10 text-amber-200';
-}
 
 function getDayTypeAccentClassName(dayType: Show['day_type']) {
   if (dayType === 'travel') return 'bg-sky-300/80';
@@ -70,7 +58,6 @@ function getSupportingMeta(show: Show) {
   const locationLine = getLocationLine(show);
   if (locationLine) meta.push(locationLine);
   if (show.tour_name) meta.push(show.tour_name);
-  meta.push(formatMonthDay(show.date));
   return meta;
 }
 
@@ -78,33 +65,10 @@ function clampTextClassName(dayType: Show['day_type']) {
   return dayType === 'show' ? 'line-clamp-1 sm:line-clamp-2' : 'line-clamp-2';
 }
 
-function hasLocation(show: Show) {
-  return Boolean(show.venue_name || show.venue_address || show.city || show.region || show.country);
-}
-
-function hasAccommodation(show: Show) {
-  return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
-}
-
-function hasCrewReadyDetails(show: Show) {
-  return hasLocation(show)
-    || Boolean(show.parking_load_info)
-    || show.schedule_items.some((item) => item.label.trim() && item.time.trim())
-    || Boolean(show.dos_name || show.dos_phone)
-    || hasAccommodation(show)
-    || Boolean(show.notes);
-}
-
-function getReadinessCopy(show: Show) {
-  if (hasCrewReadyDetails(show)) return null;
-  return show.day_type === 'show' ? 'Venue details pending' : show.day_type === 'travel' ? 'Routing details pending' : 'Day notes pending';
-}
-
 export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcoming' | 'past' }) {
   const today = isToday(show.date);
   const dateBlock = formatDateBlock(show.date);
   const supportingMeta = getSupportingMeta(show);
-  const readinessCopy = getReadinessCopy(show);
 
   return (
     <Link
@@ -116,9 +80,9 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
       }`}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent opacity-60" />
-      <div className="relative flex flex-col gap-4 p-4 sm:grid sm:grid-cols-[108px,minmax(0,1fr)] sm:items-stretch sm:gap-5 sm:p-5">
+      <div className="relative flex items-start gap-3 p-3 sm:grid sm:grid-cols-[108px,minmax(0,1fr)] sm:items-stretch sm:gap-5 sm:p-5">
         <div
-          className={`relative flex min-h-[92px] items-center gap-4 overflow-hidden rounded-[24px] border px-4 py-3 sm:min-h-0 sm:flex-col sm:items-center sm:justify-center sm:gap-0 sm:px-4 sm:py-4 ${
+          className={`relative flex w-[92px] shrink-0 items-center gap-4 overflow-hidden rounded-[22px] border px-3 py-3 sm:min-h-0 sm:w-auto sm:flex-col sm:items-center sm:justify-center sm:gap-0 sm:px-4 sm:py-4 ${
             today ? 'border-emerald-300/25 bg-emerald-400/[0.075]' : 'border-white/10 bg-black/20'
           }`}
         >
@@ -139,37 +103,17 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
             </div>
           </div>
 
-          <div className="hidden h-px w-10 bg-white/10 sm:mt-3 sm:block" aria-hidden="true" />
-          <span className="hidden pt-3 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500 sm:inline-flex">
-            {show.day_type === 'show' ? 'Live' : show.day_type === 'travel' ? 'Route' : 'Reset'}
-          </span>
         </div>
 
         <div className="min-w-0">
-          <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-4">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getDayTypeBadgeClassName(show.day_type)}`}>
-                    {getDayTypeLabel(show.day_type)}
-                  </span>
-                  {today ? (
-                    <span className="hidden items-center rounded-full border border-emerald-300/20 bg-emerald-400/8 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-200/90 sm:inline-flex">
-                      Today
-                    </span>
-                  ) : null}
-                  {readinessCopy ? (
-                    <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-300">
-                      {readinessCopy}
-                    </span>
-                  ) : null}
-                </div>
-
-                <h2 className="mt-3 break-words text-[1.25rem] font-semibold leading-[1.02] tracking-[-0.035em] text-zinc-50 sm:text-[1.6rem]">
+                <h2 className="break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:mt-3 sm:text-[1.6rem]">
                   {getPrimaryTitle(show)}
                 </h2>
 
-                <p className={`mt-2 break-words text-sm leading-6 text-zinc-200/92 sm:max-w-[58ch] sm:text-[15px] ${clampTextClassName(show.day_type)}`}>
+                <p className={`break-words text-[13px] leading-5 text-zinc-200/92 sm:mt-2 sm:max-w-[58ch] sm:text-[15px] sm:leading-6 ${clampTextClassName(show.day_type)}`}>
                   {getSecondaryLine(show)}
                 </p>
               </div>
@@ -181,9 +125,9 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-3 border-t border-white/6 pt-3 sm:flex-row sm:items-end sm:justify-between sm:pt-4">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:border-t sm:border-white/6 sm:pt-4">
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-zinc-500 sm:text-[13px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-500 sm:text-[13px]">
                   {supportingMeta.map((item, index) => (
                     <span key={`${item}-${index}`} className="inline-flex min-w-0 max-w-full items-center gap-2">
                       {index > 0 ? <span className="text-zinc-700" aria-hidden="true">•</span> : null}
@@ -191,18 +135,6 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
                     </span>
                   ))}
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-600 sm:hidden">
-                  {show.day_type === 'show' ? 'Live' : show.day_type === 'travel' ? 'Route' : 'Reset'}
-                </span>
-                <span className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500 transition group-hover:text-zinc-300">
-                  Open day
-                  <span className="text-zinc-600 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" aria-hidden="true">
-                    →
-                  </span>
-                </span>
               </div>
             </div>
           </div>
