@@ -141,8 +141,16 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [statusSource, setStatusSource] = useState<'live' | 'cache'>('live');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [showLoadingUI, setShowLoadingUI] = useState(false);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  // Only show the loading card after 200ms — prevents a brief flash for fast/cached loads.
+  useEffect(() => {
+    if (loaded) return;
+    const timer = setTimeout(() => setShowLoadingUI(true), 200);
+    return () => clearTimeout(timer);
+  }, [loaded]);
 
   useEffect(() => {
     let active = true;
@@ -154,9 +162,9 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         setLastSavedAt(cached.savedAt);
         setHasLoadedOnce(true);
         setLoaded(true);
-      } else if (!hasLoadedOnce) {
-        setLoaded(false);
       }
+      // No else branch: `loaded` starts false already; only the cache hit or
+      // the finally block below should flip it to true.
 
       try {
         const result = await getShow(showId, { workspaceId: activeWorkspaceId });
@@ -184,7 +192,11 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, [activeWorkspaceId, contextLoading, hasLoadedOnce, showId]);
+  // NOTE: hasLoadedOnce intentionally excluded from deps — including it caused the
+  // effect to re-run after the first successful fetch, triggering a second getShow()
+  // call and an extra render cycle that produced the first-load strobe/blip.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId, contextLoading, showId]);
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
   const travelSchedule = useMemo(() => splitTravelSchedule(visibleScheduleItems), [visibleScheduleItems]);
@@ -245,7 +257,12 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     }
   }, [adminMode, backHref, duplicateHref, editHref, router]);
 
-  if (contextLoading || !loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
+  if (contextLoading || !loaded) {
+    // Return null until the deferred timer fires (200ms), so fast/cached loads never
+    // flash a loading card. Slow first-loads will show the card after the delay.
+    if (!showLoadingUI) return null;
+    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
+  }
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
   const headerMetaLine = getHeaderMetaLine(show);
