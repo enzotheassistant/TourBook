@@ -47,7 +47,7 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
       href={`/shows/${show.id}?tab=${tab}`}
       className={`group relative block overflow-hidden rounded-[30px] border transition duration-200 active:scale-[0.99] ${
         today
-          ? 'border-emerald-400/25 bg-emerald-500/[0.065] shadow-[0_10px_36px_rgba(16,185,129,0.08)]'
+          ? 'border-indigo-400/25 bg-indigo-500/[0.065] shadow-[0_10px_36px_rgba(99,102,241,0.08)]'
           : 'border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.055]'
       }`}
     >
@@ -59,19 +59,19 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
         {/* Date Rail — compact vertical pill, same on all screen sizes */}
         <div
           className={`relative flex w-[68px] shrink-0 flex-col items-center justify-center overflow-hidden rounded-[18px] border px-2 py-3 sm:w-[72px] sm:py-3.5 ${
-            today ? 'border-emerald-300/25 bg-emerald-400/[0.075]' : 'border-white/10 bg-black/20'
+            today ? 'border-indigo-300/25 bg-indigo-400/[0.075]' : 'border-white/10 bg-black/20'
           }`}
         >
           {/* Left accent bar — always vertical */}
           <div
             className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full ${
-              today ? 'bg-emerald-300/80' : 'bg-white/12'
+              today ? 'bg-indigo-300/80' : 'bg-white/12'
             }`}
           />
 
           <span
             className={`text-[9px] font-semibold uppercase tracking-[0.22em] ${
-              today ? 'text-emerald-200' : 'text-zinc-400'
+              today ? 'text-indigo-200' : 'text-zinc-400'
             }`}
           >
             {dateBlock.month}
@@ -83,14 +83,14 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
 
           <span
             className={`mt-1 text-[9px] font-medium uppercase tracking-[0.16em] ${
-              today ? 'text-emerald-200/90' : 'text-zinc-400'
+              today ? 'text-indigo-200/90' : 'text-zinc-400'
             }`}
           >
             {dateBlock.weekday}
           </span>
 
           {today ? (
-            <span className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            <span className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.18em] text-indigo-300">
               Today
             </span>
           ) : null}

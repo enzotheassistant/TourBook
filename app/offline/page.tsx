@@ -30,7 +30,7 @@ export default function OfflinePage() {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Link href="/" className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-400/45 bg-emerald-500/12 px-4 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20">
+          <Link href="/" className="inline-flex h-11 items-center justify-center rounded-full border border-indigo-400/45 bg-indigo-500/12 px-4 text-sm font-medium text-indigo-200 transition hover:bg-indigo-500/20">
             Open itinerary
           </Link>
           <button type="button" onClick={() => window.location.reload()} className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]">

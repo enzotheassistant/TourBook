@@ -191,7 +191,7 @@ export function AddressAutocompleteField({
               event.preventDefault();
               revealManualLink();
             }}
-            className="block w-full px-4 py-3 text-left text-sm text-emerald-300"
+            className="block w-full px-4 py-3 text-left text-sm text-indigo-300"
           >
             + Enter address / link manually
           </button>

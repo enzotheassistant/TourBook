@@ -213,7 +213,7 @@ export default function LoginPage() {
           {mode === "signup" ? "Create account" : mode === "forgot" ? "Reset password" : "Sign in"}
         </h1>
         {inviteToken ? (
-          <p className="mt-2 text-xs text-emerald-300">Invite token detected. Complete auth and invite acceptance will continue.</p>
+          <p className="mt-2 text-xs text-indigo-300">Invite token detected. Complete auth and invite acceptance will continue.</p>
         ) : null}
 
         <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/20 p-1">
@@ -303,7 +303,7 @@ export default function LoginPage() {
           )}
 
           {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-          {success ? <p className="text-sm text-emerald-300">{success}</p> : null}
+          {success ? <p className="text-sm text-indigo-300">{success}</p> : null}
 
           <button
             type="submit"

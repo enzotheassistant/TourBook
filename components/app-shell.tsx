@@ -60,7 +60,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
                   key={project.id}
                   type="button"
                   onClick={() => onSelect(project.id)}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-emerald-400/45 bg-emerald-500/12 text-emerald-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-indigo-400/45 bg-indigo-500/12 text-indigo-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
                   aria-pressed={active}
                 >
                   <span className="min-w-0 truncate">{project.name || project.slug || project.id}</span>

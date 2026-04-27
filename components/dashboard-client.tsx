@@ -56,7 +56,7 @@ function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; 
         value={value}
         aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-auto appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/35 focus:bg-white/[0.03]"
+        className="h-11 w-auto appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-indigo-400/35 focus:bg-white/[0.03]"
       >
         {options.map((option) => <option key={option} value={option}>{option === 'All' ? 'All tours' : option}</option>)}
       </select>
@@ -75,7 +75,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search"
         aria-label="Search dates"
-        className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/35"
+        className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/35"
       />
       {value ? <button type="button" onClick={() => onChange('')} className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Clear search">×</button> : null}
     </div>
@@ -159,7 +159,7 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
             value={token}
             onChange={(event) => setToken(event.target.value)}
             placeholder="Paste token"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
           />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -167,12 +167,12 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
             type="button"
             onClick={() => void handleAccept()}
             disabled={status === 'loading'}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center rounded-full bg-indigo-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-indigo-400 disabled:opacity-60"
           >
             {status === 'loading' ? 'Accepting…' : 'Accept invite'}
           </button>
         </div>
-        <p className={`text-sm ${status === 'error' ? 'text-rose-300' : status === 'success' ? 'text-emerald-300' : 'text-zinc-400'}`}>{message}</p>
+        <p className={`text-sm ${status === 'error' ? 'text-rose-300' : status === 'success' ? 'text-indigo-300' : 'text-zinc-400'}`}>{message}</p>
       </div>
     </section>
   );
@@ -228,7 +228,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
             value={workspaceName}
             onChange={(event) => setWorkspaceName(event.target.value)}
             placeholder="e.g. Northbound Touring"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
           />
         </label>
         <label className="block text-sm text-zinc-300">
@@ -237,7 +237,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
             value={artistName}
             onChange={(event) => setArtistName(event.target.value)}
             placeholder="e.g. The Midnight Echoes"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-zinc-300">
@@ -254,7 +254,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
             type="button"
             onClick={() => void handleSubmit()}
             disabled={status === 'loading'}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center rounded-full bg-indigo-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-indigo-400 disabled:opacity-60"
           >
             {status === 'loading' ? 'Setting up…' : 'Create workspace and artist'}
           </button>
@@ -438,7 +438,7 @@ export function DashboardClient() {
       />
       {isRefreshing ? (
         <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" aria-hidden="true" />
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-400/70" aria-hidden="true" />
           Refreshing dates…
         </div>
       ) : null}
@@ -465,27 +465,8 @@ export function DashboardClient() {
 
         <div className="px-4 py-4 sm:px-5">
           <div className="flex flex-row items-center gap-2">
-            <FilterSelect value={tab === 'past' ? pastTour : upcomingTour} onChange={tab === 'past' ? setPastTour : setUpcomingTour} options={tab === 'past' ? pastTours : upcomingTours} ariaLabel={`${tab} dates tour filter`} />
             <SearchInput value={tab === 'past' ? pastSearch : upcomingSearch} onChange={tab === 'past' ? setPastSearch : setUpcomingSearch} />
-          </div>
-
-          <div className="mt-3">
-            <FilterSummary
-              tab={tab}
-              totalCount={totalCollection.length}
-              filteredCount={activeCollection.length}
-              activeTour={tab === 'past' ? pastTour : upcomingTour}
-              searchValue={tab === 'past' ? pastSearch : upcomingSearch}
-              onClear={() => {
-                if (tab === 'past') {
-                  setPastSearch('');
-                  setPastTour('All');
-                  return;
-                }
-                setUpcomingSearch('');
-                setUpcomingTour('All');
-              }}
-            />
+            <FilterSelect value={tab === 'past' ? pastTour : upcomingTour} onChange={tab === 'past' ? setPastTour : setUpcomingTour} options={tab === 'past' ? pastTours : upcomingTours} ariaLabel={`${tab} dates tour filter`} />
           </div>
         </div>
       </section>
