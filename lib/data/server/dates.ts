@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, isSchemaDriftError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
+import { upsertTourByName } from '@/lib/data/server/tours';
 
 const DEFAULT_VISIBILITY: DateVisibility = {
   show_venue: true,
@@ -396,15 +397,28 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   const projectId = String(values.project_id ?? '');
   const access = await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date);
-  await ensureTourInScope(supabase, workspaceId, projectId, values.tour_id);
-  if (access.scopeType === 'tours' && !values.tour_id) {
-    throw new ApiError(403, 'Tour-scoped members can only create dates inside an assigned tour.');
-  }
-  if (values.tour_id) {
-    await ensureTourAccess(supabase, userId, workspaceId, projectId, String(values.tour_id), ['owner', 'admin', 'editor']);
+
+  // Auto-create a tour entity from legacy_tour_name so the tours table stays
+  // populated and the invite-scope dropdown has something to show.
+  let resolvedValues: Partial<DateFormValues> = { ...values };
+  if (!resolvedValues.tour_id && resolvedValues.legacy_tour_name) {
+    try {
+      const tour = await upsertTourByName(supabase, workspaceId, projectId, resolvedValues.legacy_tour_name);
+      resolvedValues = { ...resolvedValues, tour_id: tour.id };
+    } catch {
+      // If tour upsert fails (e.g. schema not ready), continue without tour_id
+    }
   }
 
-  const payload = buildDatePayload(values, workspaceId, projectId);
+  await ensureTourInScope(supabase, workspaceId, projectId, resolvedValues.tour_id);
+  if (access.scopeType === 'tours' && !resolvedValues.tour_id) {
+    throw new ApiError(403, 'Tour-scoped members can only create dates inside an assigned tour.');
+  }
+  if (resolvedValues.tour_id) {
+    await ensureTourAccess(supabase, userId, workspaceId, projectId, String(resolvedValues.tour_id), ['owner', 'admin', 'editor']);
+  }
+
+  const payload = buildDatePayload(resolvedValues, workspaceId, projectId);
   const requestedDayType = String(payload.day_type ?? 'show');
   const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase.from('dates').insert(nextPayload).select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS)).single(),
@@ -431,7 +445,20 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
   const projectId = String(values.project_id ?? current.project_id);
   const access = await ensureProjectAccess(supabase, userId, workspaceId, projectId, ['owner', 'admin', 'editor']);
   requireDateValue(values.date ?? current.date);
-  const effectiveTourId = values.tour_id ?? current.tour_id;
+
+  // Auto-create a tour entity from legacy_tour_name if provided and no tour_id set yet.
+  const incomingTourName = values.legacy_tour_name ?? current.legacy_tour_name;
+  let resolvedTourId = values.tour_id ?? current.tour_id;
+  if (!resolvedTourId && incomingTourName) {
+    try {
+      const tour = await upsertTourByName(supabase, workspaceId, projectId, incomingTourName);
+      resolvedTourId = tour.id;
+    } catch {
+      // If tour upsert fails (e.g. schema not ready), continue without tour_id
+    }
+  }
+
+  const effectiveTourId = resolvedTourId;
   await ensureTourInScope(supabase, workspaceId, projectId, effectiveTourId);
   if (access.scopeType === 'tours' && !effectiveTourId) {
     throw new ApiError(403, 'Tour-scoped members can only update dates inside an assigned tour.');
@@ -440,7 +467,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     await ensureTourAccess(supabase, userId, workspaceId, projectId, String(effectiveTourId), ['owner', 'admin', 'editor']);
   }
 
-  const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
+  const payload = buildDatePayload({ ...current, ...values, tour_id: effectiveTourId, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
   const requestedDayType = String(payload.day_type ?? current.day_type ?? 'show');
   const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase

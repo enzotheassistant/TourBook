@@ -1135,6 +1135,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setDirty(false);
       setForm(show);
       window.dispatchEvent(new Event('tourbook:shows-updated'));
+      // Refresh bootstrap context so newly auto-created tour entities appear
+      // in the invite-scope tour dropdown without a full page reload.
+      void refreshContext();
 
       if (requestedStatus === 'draft') {
         if (isEditing) {
