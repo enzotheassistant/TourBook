@@ -350,6 +350,15 @@ export function DashboardClient() {
   const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows).filter((tour) => tour !== 'All')], [upcomingShows]);
   const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows).filter((tour) => tour !== 'All')], [pastShows]);
 
+  // Reset all filters and stale shows when the active project changes
+  useEffect(() => {
+    setUpcomingTour('All');
+    setPastTour('All');
+    setUpcomingSearch('');
+    setPastSearch('');
+    setShows([]);
+  }, [activeProjectId]);
+
   useEffect(() => { if (!upcomingTours.includes(upcomingTour)) setUpcomingTour('All'); }, [upcomingTour, upcomingTours]);
   useEffect(() => { if (!pastTours.includes(pastTour)) setPastTour('All'); }, [pastTour, pastTours]);
 
