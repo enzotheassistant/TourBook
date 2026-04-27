@@ -9,7 +9,13 @@ function getDayTypeLabel(dayType: Show['day_type']) {
 }
 
 function getCityLine(show: Show) {
-  if (show.city) return show.city;
+  if (show.city) {
+    if (show.region && show.country) return `${show.city}, ${show.region}, ${show.country}`;
+    if (show.region) return `${show.city}, ${show.region}`;
+    if (show.country) return `${show.city}, ${show.country}`;
+    return show.city;
+  }
+
   if (show.day_type === 'travel') return 'Travel day';
   if (show.day_type === 'off') return 'Off day';
   return show.label || 'Show day';
@@ -27,31 +33,8 @@ function getVenueLine(show: Show) {
   return show.venue_name || show.label || 'Venue TBA';
 }
 
-function getLocationLine(show: Show) {
-  if (show.day_type === 'show') {
-    if (show.country && show.region) return `${show.region}, ${show.country}`;
-    if (show.country) return show.country;
-    if (show.region) return show.region;
-    return null;
-  }
-
-  if (show.city) {
-    if (show.region && show.country) return `${show.city}, ${show.region}, ${show.country}`;
-    if (show.region) return `${show.city}, ${show.region}`;
-    if (show.country) return `${show.city}, ${show.country}`;
-    return show.city;
-  }
-
-  if (show.region && show.country) return `${show.region}, ${show.country}`;
-  if (show.region) return show.region;
-  if (show.country) return show.country;
-  return null;
-}
-
 function getSupportingMeta(show: Show) {
   const meta: string[] = [];
-  const locationLine = getLocationLine(show);
-  if (locationLine) meta.push(locationLine);
   if (show.tour_name) meta.push(show.tour_name);
   return meta;
 }
