@@ -472,6 +472,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const contextProjectId = searchParams.get('contextProjectId');
   const [shows, setShows] = useState<Show[]>([]);
   const [showsLoading, setShowsLoading] = useState(false);
+  const [showsHasLoadedOnce, setShowsHasLoadedOnce] = useState(false);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
@@ -563,6 +564,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     try {
       const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       setShows(result.shows);
+      setShowsHasLoadedOnce(true);
     } finally {
       setShowsLoading(false);
     }
@@ -619,8 +621,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [editAvailableTours]);
 
   // Reset stale shows, filters, and errors when the active project changes
+  // Must run before the data loading effect so resets happen first
   useEffect(() => {
     setShows([]);
+    setShowsHasLoadedOnce(false);
     setUpcomingSearch('');
     setPastSearch('');
     setUpcomingTour('All');
@@ -1789,7 +1793,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onCancel={() => closeConfirmation(false)}
       />
       {importOpen ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 px-4 py-4 backdrop-blur-sm sm:flex sm:items-start sm:justify-center sm:py-6">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-black/80 px-4 py-4 backdrop-blur-sm sm:py-6">
           <div className="mx-auto mt-[max(env(safe-area-inset-top),0.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:mt-0 sm:max-h-[calc(100vh-3rem)] sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -2374,6 +2378,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </section>
         </div>
       ) : mode === 'dates' || mode === 'drafts' ? (
+        showsLoading && !showsHasLoadedOnce ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-20 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />
+            ))}
+          </div>
+        ) : (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           {message ? <div className="mb-3 text-xs text-sky-300/90">{message}</div> : null}
           {isDraftsMode ? (
@@ -2449,6 +2460,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </>
           )}
         </section>
+        )
       ) : null}
     </div>
   );
