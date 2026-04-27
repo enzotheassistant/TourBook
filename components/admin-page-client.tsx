@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -462,6 +462,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     memberships,
     refreshContext,
   } = useAppContext();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
@@ -470,6 +471,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const statusMessage = searchParams.get('message');
   const contextProjectId = searchParams.get('contextProjectId');
   const [shows, setShows] = useState<Show[]>([]);
+  const [showsLoading, setShowsLoading] = useState(false);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
@@ -550,9 +552,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
 
   const loadShows = useCallback(async () => {
-    if (!activeWorkspaceId || !activeProjectId) return;
-    const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
-    setShows(result.shows);
+    if (!activeWorkspaceId || !activeProjectId) {
+      setShows([]);
+      setShowsLoading(false);
+      return;
+    }
+
+    setShowsLoading(true);
+    try {
+      const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      setShows(result.shows);
+    } finally {
+      setShowsLoading(false);
+    }
   }, [activeProjectId, activeWorkspaceId]);
 
   const loadInvites = useCallback(async () => {
@@ -1172,12 +1184,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       if (isEditing) {
         if (form.status === 'draft') {
-          window.location.href = `/admin/dates/${encodeURIComponent(show.id)}?tab=${isPastShow(show.date) ? 'past' : 'upcoming'}&message=${encodeURIComponent('Draft published.')}`;
+          router.push(`/admin/dates/${encodeURIComponent(show.id)}?tab=${isPastShow(show.date) ? 'past' : 'upcoming'}&message=${encodeURIComponent('Draft published.')}`);
           return;
         }
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
         const target = (returnToUrl.startsWith('/shows/') || returnToUrl.startsWith('/admin/dates/')) ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
-        window.location.href = target;
+        router.push(target);
         return;
       }
 
@@ -1228,12 +1240,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   function loadShow(show: Show) {
 
     if (mode === 'dates') {
-      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
+      router.push(`/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`);
       return;
     }
 
     if (mode === 'drafts') {
-      window.location.href = `/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`;
+      router.push(`/admin?edit=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`);
       return;
     }
 
@@ -1249,7 +1261,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   function duplicateShow(show: Show) {
 
     if (mode === 'dates') {
-      window.location.href = `/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`;
+      router.push(`/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`);
       return;
     }
 
@@ -1896,7 +1908,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
                 if (!confirmed) return;
               }
-              window.location.href = returnToUrl;
+              router.push(returnToUrl);
             }}
             className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
             aria-label={`Back to ${returnLabel}`}
@@ -1925,7 +1937,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               resetForm('Ready to create');
               return;
             }
-            window.location.href = '/admin';
+            router.push('/admin');
           }}
           className={adminTabClassName(mode === 'new' && !isEditing)}
         >
@@ -1939,10 +1951,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing Dates instead?', confirmLabel: 'Discard' });
                 if (!confirmed) return;
               }
-              window.location.href = '/admin/dates';
+              router.push('/admin/dates');
               return;
             }
-            window.location.href = '/admin/dates';
+            router.push('/admin/dates');
           }}
           className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
         >
@@ -1956,10 +1968,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Drafts instead?', confirmLabel: 'Discard' });
                 if (!confirmed) return;
               }
-              window.location.href = '/admin/drafts';
+              router.push('/admin/drafts');
               return;
             }
-            window.location.href = '/admin/drafts';
+            router.push('/admin/drafts');
           }}
           className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
         >
@@ -2295,6 +2307,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onDuplicate={duplicateShow}
               mode="drafts"
               onPublish={publishShow}
+              loading={showsLoading}
             />
           ) : (
             <>
@@ -2327,6 +2340,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onDelete={handleDelete}
                     onDuplicate={duplicateShow}
                     onPublish={publishShow}
+                    loading={showsLoading}
                   />
                 ) : (
                   <ShowListSection
@@ -2343,6 +2357,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     onDelete={handleDelete}
                     onDuplicate={duplicateShow}
                     onPublish={publishShow}
+                    loading={showsLoading}
                   />
                 )}
               </div>
@@ -3215,6 +3230,7 @@ function ShowListSection({
   onDuplicate,
   mode = 'dates',
   onPublish,
+  loading = false,
 }: {
   title: string;
   search: string;
@@ -3232,6 +3248,7 @@ function ShowListSection({
   onDuplicate: (show: Show) => void;
   mode?: 'dates' | 'drafts';
   onPublish?: (show: Show) => void;
+  loading?: boolean;
 }) {
   const [menuState, setMenuState] = useState<{ show: Show; top: number; left: number } | null>(null);
   const hasActiveFilters = Boolean(search.trim()) || selectedTour !== 'All';
@@ -3385,9 +3402,15 @@ function ShowListSection({
       </div>
 
       <div className="mt-3 space-y-3">
+        {loading && shows.length > 0 ? (
+          <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" aria-hidden="true" />
+            Refreshing dates…
+          </div>
+        ) : null}
         {shows.length === 0 ? (
           <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">
-            {totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
+            {loading ? 'Loading dates…' : totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
           </div>
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (

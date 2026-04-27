@@ -199,7 +199,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     if (!activeWorkspaceId) return;
     await deleteShow(show.id, { workspaceId: activeWorkspaceId });
     window.dispatchEvent(new Event('tourbook:shows-updated'));
-    window.location.href = '/admin/dates';
+    router.push('/admin/dates');
   }
 
   async function handleExport() {

@@ -269,6 +269,7 @@ export function DashboardClient() {
   const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -297,6 +298,7 @@ export function DashboardClient() {
       if (!activeWorkspaceId || !activeProjectId) {
         if (active) {
           setShows([]);
+          setHasLoadedOnce(false);
           setLoading(false);
         }
         return;
@@ -310,9 +312,9 @@ export function DashboardClient() {
         setDataSource(result.source);
         setLastSavedAt(result.savedAt);
         setLoadError(null);
+        setHasLoadedOnce(true);
       } catch (error) {
         if (!active) return;
-        setShows([]);
         setLoadError(error instanceof Error ? error.message : 'Unable to load dates.');
         setDataSource('live');
         setLastSavedAt(null);
@@ -358,7 +360,10 @@ export function DashboardClient() {
     });
   }, [filteredPastShows]);
 
-  if (contextLoading || loading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
+  const showBlockingLoading = (contextLoading && !hasLoadedOnce) || (loading && !hasLoadedOnce && shows.length === 0);
+  const isRefreshing = loading && hasLoadedOnce;
+
+  if (showBlockingLoading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
 
   if (!activeWorkspaceId) {
     const hasWorkspaceAccess = workspaces.length > 0;
@@ -416,6 +421,12 @@ export function DashboardClient() {
         source={dataSource}
         emptyOfflineMessage={loadError ? 'No recent itinerary is saved on this device yet. Reopen TourBook online once and your latest dates will be available here in weak signal.' : null}
       />
+      {isRefreshing ? (
+        <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" aria-hidden="true" />
+          Refreshing dates…
+        </div>
+      ) : null}
       {loadError ? <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{loadError}</div> : null}
 
       <section className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.045]">
