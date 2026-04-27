@@ -13,7 +13,7 @@ type EmptyStateTelemetry = {
 
 function buttonClassName(tone: 'primary' | 'ghost' = 'ghost') {
   if (tone === 'primary') {
-    return 'inline-flex h-10 items-center rounded-full border border-indigo-400/45 bg-indigo-500/12 px-4 text-sm font-medium text-indigo-200 transition hover:bg-indigo-500/20';
+    return 'inline-flex h-10 items-center rounded-full border border-sky-400/45 bg-sky-500/12 px-4 text-sm font-medium text-sky-200 transition hover:bg-sky-500/20';
   }
 
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';

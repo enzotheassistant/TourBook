@@ -31,7 +31,7 @@ function bubbleClassName() {
 }
 
 function primaryButtonClassName() {
-  return 'inline-flex h-11 items-center justify-center rounded-full bg-indigo-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-indigo-400 disabled:opacity-60';
+  return 'inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-sky-400 disabled:opacity-60';
 }
 
 function secondaryButtonClassName() {
@@ -77,16 +77,16 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-indigo-400/40 bg-indigo-500/10 text-indigo-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-sky-400/40 bg-sky-500/10 text-sky-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 
 function fieldClassName() {
-  return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-indigo-400/40';
+  return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40';
 }
 
 function filterFieldClassName() {
-  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-indigo-400/40';
+  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40';
 }
 
 function inlineFilterButtonClassName() {
@@ -1652,7 +1652,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <select
               value={activeWorkspaceId}
               onChange={(event) => handleWorkspaceSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-indigo-400/40"
+              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
@@ -1665,7 +1665,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <select
               value=""
               onChange={(event) => handleArtistSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-indigo-400/40"
+              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
             >
               <option value="">Select artist…</option>
               {projectsForActiveWorkspace.map((project) => (
@@ -1730,7 +1730,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   value={newArtistName}
                   onChange={(event) => setNewArtistName(event.target.value)}
                   placeholder="Artist name"
-                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-indigo-400/40"
+                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
                 />
                 <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
                   {creatingArtist ? 'Creating…' : 'Create Artist'}
@@ -1795,14 +1795,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   <textarea
                     value={importSourceText}
                     onChange={(event) => setImportSourceText(event.target.value)}
-                    className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+                    className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
                   />
                 </label>
 
                 <div>
                   <span className="mb-2 block text-sm text-zinc-300">Files / images</span>
                   <div
-                    className={`rounded-[24px] border border-dashed p-6 transition ${isDraggingImportFiles ? 'border-indigo-400/50 bg-indigo-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
+                    className={`rounded-[24px] border border-dashed p-6 transition ${isDraggingImportFiles ? 'border-sky-400/50 bg-sky-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
                     onDragOver={handleImportDragOver}
                     onDragLeave={handleImportDragLeave}
                     onDrop={handleImportDrop}
@@ -1930,7 +1930,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                                   value={item.time}
                                   onChange={(event) => updateImportScheduleItem(row.id, item.id, { time: event.target.value })}
                                   placeholder="Time"
-                                  className="h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-indigo-400/40 sm:w-44"
+                                  className="h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40 sm:w-44"
                                 />
                               </div>
                             ))}
@@ -2117,7 +2117,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         <div ref={formRef} className="space-y-3">
           {editorBootstrapLoading && !isEditing ? (
             <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-400/70" aria-hidden="true" />
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
               Loading date into the editor…
             </div>
           ) : null}
@@ -2165,7 +2165,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </div>
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
-            <div className="min-h-[1rem] text-indigo-300/90">{message || ''}</div>
+            <div className="min-h-[1rem] text-sky-300/90">{message || ''}</div>
             <div className="flex items-center gap-3">
               <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
                 Expand all
@@ -2190,7 +2190,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     value={form.day_type}
                     onChange={(event) => handleDayTypeChange(event.target.value as TourDayType)}
                     aria-label="Day type"
-                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-indigo-400/40 focus:bg-white/[0.03]"
+                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-sky-400/40 focus:bg-white/[0.03]"
                   >
                     <option value="show">Show Day</option>
                     <option value="travel">Travel Day</option>
@@ -2363,7 +2363,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
       ) : mode === 'dates' || mode === 'drafts' ? (
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-          {message ? <div className="mb-3 text-xs text-indigo-300/90">{message}</div> : null}
+          {message ? <div className="mb-3 text-xs text-sky-300/90">{message}</div> : null}
           {isDraftsMode ? (
             <ShowListSection
               title="Drafts"
@@ -2517,7 +2517,7 @@ function ProjectManagementSection({
             value={newArtistName}
             onChange={(event) => onNewArtistNameChange(event.target.value)}
             placeholder="New artist name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
           />
           <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
             {creatingArtist ? 'Creating…' : 'Create artist'}
@@ -2612,7 +2612,7 @@ function ProjectManagementSection({
                     value={renameValue}
                     onChange={(event) => setRenameValue(event.target.value)}
                     placeholder="Artist name"
-                    className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+                    className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
                     autoFocus
                   />
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -2645,19 +2645,19 @@ function ProjectManagementSection({
 function roleBadgeClassName(role: 'owner' | 'admin' | 'editor' | 'viewer') {
   if (role === 'owner') return 'border-amber-400/30 bg-amber-500/10 text-amber-100';
   if (role === 'admin') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
-  if (role === 'editor') return 'border-indigo-400/30 bg-indigo-500/10 text-indigo-100';
+  if (role === 'editor') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
   return 'border-white/10 bg-white/[0.06] text-zinc-200';
 }
 
 function inviteStatusBadgeClassName(status: WorkspaceInviteSummary['status']) {
-  if (status === 'pending') return 'border-indigo-400/30 bg-indigo-500/10 text-indigo-100';
+  if (status === 'pending') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
   if (status === 'accepted') return 'border-sky-400/30 bg-sky-500/10 text-sky-100';
   if (status === 'revoked') return 'border-red-400/30 bg-red-500/10 text-red-100';
   return 'border-white/10 bg-white/[0.06] text-zinc-300';
 }
 
 function directoryViewButtonClassName(active: boolean) {
-  return `inline-flex h-9 items-center justify-center rounded-full border px-3 text-xs font-medium transition ${active ? 'border-indigo-400/40 bg-indigo-500/10 text-indigo-100' : 'border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
+  return `inline-flex h-9 items-center justify-center rounded-full border px-3 text-xs font-medium transition ${active ? 'border-sky-400/40 bg-sky-500/10 text-sky-100' : 'border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
 function TeamDirectoryCard({
@@ -2783,14 +2783,14 @@ function InviteManagementSection({
             onChange={(event) => onNameChange(event.target.value)}
             type="text"
             placeholder="Name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
           />
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
             type="email"
             placeholder="teammate@example.com"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
           />
           <select
             value={role}
@@ -2803,7 +2803,7 @@ function InviteManagementSection({
                 onScopeTourIdsChange([]);
               }
             }}
-            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-indigo-400/40"
+            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
           >
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
@@ -2831,7 +2831,7 @@ function InviteManagementSection({
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
         {lastInviteShare ? (
-          <div className="rounded-2xl border border-indigo-400/25 bg-indigo-500/10 p-3 text-sm text-indigo-100">
+          <div className="rounded-2xl border border-sky-400/25 bg-sky-500/10 p-3 text-sm text-sky-100">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p>Invite sent.</p>
               <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>{showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}</button>
@@ -3119,7 +3119,7 @@ function EditMemberDialog({
               onProjectIdsChange([]);
               onTourIdsChange([]);
             }
-          }} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-indigo-400/40">
+          }} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
             {canAssignAdmin ? <option value="admin">Admin</option> : null}
@@ -3263,7 +3263,7 @@ function CollapsibleSection({
           <h2 className="truncate text-base font-semibold">{title}</h2>
           {!expanded && hasContent ? (
             <>
-              <span className="h-2.5 w-2.5 rounded-full bg-indigo-300" />
+              <span className="h-2.5 w-2.5 rounded-full bg-sky-300" />
               {typeof visibilityState === 'boolean' ? <span className="text-xs font-medium text-zinc-400">{visibilityState ? 'Visible' : 'Hidden'}</span> : null}
             </>
           ) : null}
@@ -3477,7 +3477,7 @@ function ShowListSection({
       <div className="mt-3 space-y-3">
         {loading && shows.length > 0 ? (
           <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-indigo-400/70" aria-hidden="true" />
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
             Refreshing dates…
           </div>
         ) : null}
@@ -3558,9 +3558,9 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boo
     <button
       type="button"
       onClick={() => onToggle(!enabled)}
-      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium ${enabled ? 'border-indigo-400/40 bg-indigo-500/10 text-indigo-200' : 'border-white/10 text-zinc-300'}`}
+      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium ${enabled ? 'border-sky-400/40 bg-sky-500/10 text-sky-200' : 'border-white/10 text-zinc-300'}`}
     >
-      <span className={`h-2.5 w-2.5 rounded-full ${enabled ? 'bg-indigo-300' : 'bg-zinc-500'}`} />
+      <span className={`h-2.5 w-2.5 rounded-full ${enabled ? 'bg-sky-300' : 'bg-zinc-500'}`} />
       {enabled ? 'Show' : 'Hide'}
     </button>
   );
@@ -3943,7 +3943,7 @@ function Textarea({ label, value, onChange, ariaLabel, placeholder }: { label?: 
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         rows={4}
-        className="w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-indigo-400/40"
+        className="w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
       />
     </label>
   );

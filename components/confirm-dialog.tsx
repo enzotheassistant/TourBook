@@ -39,7 +39,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className={`inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-medium transition ${tone === 'danger' ? 'bg-red-500/90 text-white hover:bg-red-400' : 'bg-indigo-500 text-zinc-950 hover:bg-indigo-400'}`}
+            className={`inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-medium transition ${tone === 'danger' ? 'bg-red-500/90 text-white hover:bg-red-400' : 'bg-sky-500 text-zinc-950 hover:bg-sky-400'}`}
           >
             {confirmLabel}
           </button>
