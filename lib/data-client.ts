@@ -49,7 +49,7 @@ function readStoredValue(key: string) {
 function resolveScope(scope?: ScopeInput) {
   const workspaceId = scope?.workspaceId ?? readStoredValue(WORKSPACE_STORAGE_KEY);
   const projectId = scope?.projectId ?? readStoredValue(PROJECT_STORAGE_KEY);
-  const rawTourId = scope?.tourId ?? readStoredValue(TOUR_STORAGE_KEY);
+  const rawTourId = (scope && 'tourId' in scope) ? scope.tourId : readStoredValue(TOUR_STORAGE_KEY);
   const tourId = rawTourId || null;
 
   return {

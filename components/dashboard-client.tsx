@@ -266,7 +266,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
 }
 
 export function DashboardClient() {
-  const { activeWorkspaceId, activeProjectId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, activeTourId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -304,7 +304,7 @@ export function DashboardClient() {
         return;
       }
 
-      const cached = peekCachedShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      const cached = peekCachedShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId, tourId: activeTourId });
       if (cached && active) {
         setShows(cached.data);
         setLastSavedAt(cached.savedAt);
@@ -316,7 +316,7 @@ export function DashboardClient() {
       }
 
       try {
-        const result = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+        const result = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId, tourId: activeTourId });
         if (!active) return;
         setShows(result.shows);
         setStatusSource(result.source);
@@ -343,20 +343,21 @@ export function DashboardClient() {
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, [activeProjectId, activeWorkspaceId, contextLoading]);
+  }, [activeProjectId, activeWorkspaceId, activeTourId, contextLoading]);
 
   const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
   const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows).filter((tour) => tour !== 'All')], [upcomingShows]);
   const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows).filter((tour) => tour !== 'All')], [pastShows]);
 
-  // Reset all filters and stale shows when the active project changes
+  // Reset all filters, stale shows, and errors when the active project changes
   useEffect(() => {
     setUpcomingTour('All');
     setPastTour('All');
     setUpcomingSearch('');
     setPastSearch('');
     setShows([]);
+    setLoadError(null);
   }, [activeProjectId]);
 
   useEffect(() => { if (!upcomingTours.includes(upcomingTour)) setUpcomingTour('All'); }, [upcomingTour, upcomingTours]);
