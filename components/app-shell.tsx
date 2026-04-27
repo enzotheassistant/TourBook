@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -37,7 +38,7 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
 
   if (!open) return null;
 
-  return (
+  const sheet = (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Switch project">
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
       <div className="absolute inset-x-0 bottom-0 flex justify-center px-0 pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:right-4 sm:top-20 sm:block sm:w-[340px] sm:px-0 sm:pb-0">
@@ -73,6 +74,8 @@ function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect
       </div>
     </div>
   );
+
+  return createPortal(sheet, document.body);
 }
 
 function AdminProjectSelector() {
