@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
@@ -505,6 +505,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [draftTour, setDraftTour] = useState('All');
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
   const [returnLabel, setReturnLabel] = useState('Existing Dates');
+  const [editorBootstrapLoading, setEditorBootstrapLoading] = useState(false);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
   const [newArtistName, setNewArtistName] = useState('');
@@ -714,6 +715,72 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if ((mode !== 'dates' && mode !== 'drafts') || !statusMessage) return;
     setMessage(statusMessage);
   }, [mode, statusMessage]);
+
+  useEffect(() => {
+    if (mode !== 'new' || contextLoading || !activeWorkspaceId) return;
+
+    const editId = searchParams.get('edit');
+    const duplicateId = searchParams.get('duplicate');
+    const targetId = duplicateId ?? editId;
+    const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
+
+    if (!targetId || !nextAction || handledLoadRef.current === nextAction) return;
+    const resolvedTargetId = targetId;
+    if (shows.some((show) => show.id === resolvedTargetId)) return;
+
+    let active = true;
+
+    async function bootstrapEditor() {
+      setEditorBootstrapLoading(true);
+      try {
+        const result = await getShow(resolvedTargetId, { workspaceId: activeWorkspaceId });
+        if (!active) return;
+        const source = result.show;
+
+        if (duplicateId) {
+          const duplicated = sanitizeShowFormForDayType({
+            ...source,
+            id: '',
+            date: '',
+            created_at: undefined,
+            schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
+          });
+          setVisibilityModes(visibilityModesForLoadedForm(duplicated));
+          setForm(duplicated);
+          setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
+          setMessage('Tour day duplicated');
+          setDirty(false);
+        } else {
+          const normalizedShow = sanitizeShowFormForDayType(source);
+          setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
+          setForm(normalizedShow);
+          setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
+          setMessage('Loaded into editor');
+          setDirty(false);
+        }
+
+        handledLoadRef.current = nextAction;
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', '/admin');
+        }
+      } catch {
+        if (!active) return;
+      } finally {
+        if (active) setEditorBootstrapLoading(false);
+      }
+    }
+
+    void bootstrapEditor();
+    return () => {
+      active = false;
+    };
+  }, [activeWorkspaceId, contextLoading, mode, searchParams, shows]);
+
+  useEffect(() => {
+    const routes = ['/admin', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/projects'];
+    routes.forEach((route) => router.prefetch(route));
+    if (returnToUrl.startsWith('/')) router.prefetch(returnToUrl);
+  }, [returnToUrl, router]);
 
   useEffect(() => {
     if (mode !== 'new' || !shows.length) return;
@@ -2048,6 +2115,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       {mode === 'new' ? (
         <div ref={formRef} className="space-y-3">
+          {editorBootstrapLoading && !isEditing ? (
+            <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" aria-hidden="true" />
+              Loading date into the editor…
+            </div>
+          ) : null}
 
         <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">

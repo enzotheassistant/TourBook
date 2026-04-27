@@ -138,6 +138,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
@@ -147,12 +148,14 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     let active = true;
     async function load() {
       if (contextLoading || !activeWorkspaceId) return;
+      if (!hasLoadedOnce) setLoaded(false);
       try {
         const result = await getShow(showId, { workspaceId: activeWorkspaceId });
         if (!active) return;
         setShow(result.show);
         setDataSource(result.source);
         setLastSavedAt(result.savedAt);
+        setHasLoadedOnce(true);
       } catch {
         if (!active) return;
         setShow(null);
@@ -168,7 +171,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
       active = false;
       window.removeEventListener('tourbook:shows-updated', load);
     };
-  }, [activeWorkspaceId, contextLoading, showId]);
+  }, [activeWorkspaceId, contextLoading, hasLoadedOnce, showId]);
 
   const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() && item.time.trim()) ?? [], [show]);
   const travelSchedule = useMemo(() => splitTravelSchedule(visibleScheduleItems), [visibleScheduleItems]);
@@ -216,14 +219,24 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     setMenuOpen(false);
   }
 
+  const backHref = adminMode ? `/admin/dates?tab=${returnTab}` : `/?tab=${returnTab}`;
+  const editHref = `/admin?edit=${showId}&returnTo=${encodeURIComponent(backHref)}`;
+  const duplicateHref = `/admin?duplicate=${showId}&returnTo=${encodeURIComponent(backHref)}`;
+  const isSoftRefreshing = loaded && hasLoadedOnce && show?.id !== showId;
+
+  useEffect(() => {
+    router.prefetch(backHref);
+    if (adminMode) {
+      router.prefetch(editHref);
+      router.prefetch(duplicateHref);
+    }
+  }, [adminMode, backHref, duplicateHref, editHref, router]);
+
   if (contextLoading || !loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
   const headerMetaLine = getHeaderMetaLine(show);
   const headerSupportMeta = getHeaderSupportMeta(show);
-  const backHref = adminMode ? `/admin/dates?tab=${returnTab}` : `/?tab=${returnTab}`;
-  const editHref = `/admin?edit=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
-  const duplicateHref = `/admin?duplicate=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
   const daySheetTitle = show.day_type === 'show' ? 'Day Sheet' : 'Day Details';
   const canShowGuestList = show.day_type === 'show';
   const hasAnyDayDetails = hasLocation(show) || Boolean(show.parking_load_info) || visibleScheduleItems.length > 0 || Boolean(show.dos_name || show.dos_phone) || hasAccommodation(show) || Boolean(show.notes);
@@ -267,6 +280,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
             </div>
           </div>
         </div>
+
+        {isSoftRefreshing ? (
+          <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400/70" aria-hidden="true" />
+            Loading latest details…
+          </div>
+        ) : null}
 
         {!dataSource || dataSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />}
 
