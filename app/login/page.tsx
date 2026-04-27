@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { getBrowserSupabaseClient, backupRefreshToken } from "@/lib/supabase/client";
+import { getBrowserSupabaseClient, backupRefreshToken, authLog } from "@/lib/supabase/client";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -135,8 +135,11 @@ export default function LoginPage() {
 
         // Back up the refresh token to a cookie so we can recover the session
         // if iOS Safari clears localStorage (PWA eviction).
+        authLog("login: signInWithPassword succeeded — writing backup cookie");
         backupRefreshToken(data.session.refresh_token);
+        authLog("login: syncing session to server…");
         await syncSession(data.session.access_token, data.session.refresh_token);
+        authLog("login: server sync done — routing to app");
         routeToApp();
         return;
       }
@@ -159,6 +162,7 @@ export default function LoginPage() {
         }
 
         if (data.session) {
+          authLog("login: signUp succeeded with immediate session — writing backup cookie");
           backupRefreshToken(data.session.refresh_token);
           await syncSession(data.session.access_token, data.session.refresh_token);
           routeToApp();

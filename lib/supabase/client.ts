@@ -22,11 +22,40 @@ let browserClient: SupabaseClient | null = null;
 const RT_COOKIE = "tb-rt"; // "TourBook refresh token"
 const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
 
-/** Persist a copy of the refresh token in a SameSite=Lax cookie. */
+// ---------------------------------------------------------------------------
+// Debug logging helper — uses console.warn so it's visible in Safari Web
+// Inspector even when log level is set to "Warnings".  Tag is distinctive
+// so logs are easy to filter: search "[TourBook Auth]" in console.
+// ---------------------------------------------------------------------------
+export function authLog(message: string, data?: unknown): void {
+  const ts = new Date().toISOString();
+  if (data !== undefined) {
+    console.warn(`[TourBook Auth] ${ts} — ${message}`, data);
+  } else {
+    console.warn(`[TourBook Auth] ${ts} — ${message}`);
+  }
+}
+
+/** Persist a copy of the refresh token in a SameSite=Lax; Secure cookie. */
 export function backupRefreshToken(refreshToken: string): void {
   if (typeof document === "undefined") return;
   const expires = new Date(Date.now() + RT_COOKIE_MAX_AGE_S * 1000).toUTCString();
-  document.cookie = `${RT_COOKIE}=${encodeURIComponent(refreshToken)}; expires=${expires}; path=/; SameSite=Lax`;
+  // Add Secure flag (required for HTTPS deployments; harmless on localhost
+  // where the browser ignores it).  SameSite=Lax is correct for same-origin
+  // PWA access — no cross-site iframe context here.
+  const cookieStr = `${RT_COOKIE}=${encodeURIComponent(refreshToken)}; expires=${expires}; path=/; SameSite=Lax; Secure`;
+  document.cookie = cookieStr;
+
+  // Verify write: immediately read back and confirm presence.
+  const readBack = getBackupRefreshToken();
+  if (readBack) {
+    authLog("backupRefreshToken: cookie WRITTEN ✓ (token prefix: " + refreshToken.slice(0, 8) + "…)");
+  } else {
+    authLog("backupRefreshToken: cookie WRITE FAILED ✗ — document.cookie did not persist", {
+      attempted: cookieStr.slice(0, 80) + "…",
+      allCookies: document.cookie || "(empty)",
+    });
+  }
 }
 
 /** Read the backed-up refresh token from the cookie, or null if absent. */
@@ -36,10 +65,35 @@ export function getBackupRefreshToken(): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
+/**
+ * Read the backup token WITH diagnostic logging — use this on app boot
+ * so we can see exactly what the cookie store contains.
+ */
+export function getBackupRefreshTokenWithDiagnostics(): string | null {
+  if (typeof document === "undefined") return null;
+
+  const allCookies = document.cookie;
+  authLog("getBackupRefreshToken: all document.cookie keys = [" +
+    (allCookies
+      ? allCookies.split(";").map((c) => c.trim().split("=")[0]).join(", ")
+      : "(no cookies)") +
+    "]"
+  );
+
+  const token = getBackupRefreshToken();
+  if (token) {
+    authLog("getBackupRefreshToken: found backup token ✓ (prefix: " + token.slice(0, 8) + "…)");
+  } else {
+    authLog("getBackupRefreshToken: NO backup token found ✗ — tb-rt cookie absent or empty");
+  }
+  return token;
+}
+
 /** Remove the backed-up refresh token cookie (called on sign-out). */
 export function clearBackupRefreshToken(): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${RT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+  document.cookie = `${RT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax; Secure`;
+  authLog("clearBackupRefreshToken: backup cookie cleared");
 }
 
 // ---------------------------------------------------------------------------
