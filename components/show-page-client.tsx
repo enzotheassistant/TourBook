@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { OfflineStatus } from '@/components/offline-status';
-import { deleteShow, exportGuestListCsv, getShow } from '@/lib/data-client';
+import { deleteShow, exportGuestListCsv, getShow, peekCachedShow } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
@@ -148,7 +148,17 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     let active = true;
     async function load() {
       if (contextLoading || !activeWorkspaceId) return;
-      if (!hasLoadedOnce) setLoaded(false);
+      const cached = peekCachedShow(showId, { workspaceId: activeWorkspaceId });
+      if (cached && active) {
+        setShow(cached.data);
+        setDataSource('cache');
+        setLastSavedAt(cached.savedAt);
+        setHasLoadedOnce(true);
+        setLoaded(true);
+      } else if (!hasLoadedOnce) {
+        setLoaded(false);
+      }
+
       try {
         const result = await getShow(showId, { workspaceId: activeWorkspaceId });
         if (!active) return;
@@ -157,7 +167,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         setLastSavedAt(result.savedAt);
         setHasLoadedOnce(true);
       } catch {
-        if (!active) return;
+        if (!active || cached) return;
         setShow(null);
         setDataSource('live');
         setLastSavedAt(null);

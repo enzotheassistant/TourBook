@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, updateGuestListEntry } from '@/lib/data-client';
+import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCachedGuestList, updateGuestListEntry } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
 import { GuestListEntry } from '@/lib/types';
 
@@ -31,9 +31,20 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
     async function load() {
       if (isLoading || !activeWorkspaceId) return;
-      const nextEntries = await listGuestListEntries(showId, { workspaceId: activeWorkspaceId });
-      if (!active) return;
-      setEntries(nextEntries);
+      const cached = peekCachedGuestList(showId, { workspaceId: activeWorkspaceId });
+      if (cached && active) {
+        setEntries(cached.data);
+      }
+
+      try {
+        const nextEntries = await listGuestListEntries(showId, { workspaceId: activeWorkspaceId });
+        if (!active) return;
+        setEntries(nextEntries);
+        setError('');
+      } catch (err) {
+        if (!active || cached) return;
+        setError(err instanceof Error ? err.message : 'Unable to load guest list.');
+      }
     }
 
     void load();
@@ -76,7 +87,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   async function handleDelete(entryId: string) {
     setError('');
     try {
-      await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId });
+      await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId, showId });
       setEntries((current) => current.filter((entry) => entry.id !== entryId));
       setOpenMenuId(null);
     } catch (err) {

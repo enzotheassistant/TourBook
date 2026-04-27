@@ -1,11 +1,9 @@
 'use client';
 
-import type { Show } from '@/lib/types';
+import type { GuestListEntry, Show } from '@/lib/types';
 
 const CACHE_PREFIX = 'tourbook.offline';
-const CACHE_VERSION = 'v1';
-const MAX_ITINERARY_AGE_MS = 1000 * 60 * 60 * 12;
-const MAX_DAY_AGE_MS = 1000 * 60 * 60 * 24;
+const CACHE_VERSION = 'v2';
 
 type CachedPayload<T> = {
   version: string;
@@ -37,7 +35,7 @@ function writeStorage(key: string, value: string) {
   }
 }
 
-function parseCachedPayload<T>(raw: string | null, maxAgeMs: number): CachedPayload<T> | null {
+function parseCachedPayload<T>(raw: string | null): CachedPayload<T> | null {
   if (!raw) return null;
 
   try {
@@ -45,7 +43,6 @@ function parseCachedPayload<T>(raw: string | null, maxAgeMs: number): CachedPayl
     if (payload.version !== CACHE_VERSION || !payload.savedAt) return null;
     const savedAtMs = new Date(payload.savedAt).getTime();
     if (!Number.isFinite(savedAtMs)) return null;
-    if (Date.now() - savedAtMs > maxAgeMs) return null;
     return payload;
   } catch {
     return null;
@@ -64,8 +61,12 @@ function dayKey(scope: { workspaceId: string; showId: string }) {
   return [CACHE_PREFIX, 'day', scope.workspaceId, scope.showId].join(':');
 }
 
+function guestListKey(scope: { workspaceId: string; showId: string }) {
+  return [CACHE_PREFIX, 'guest-list', scope.workspaceId, scope.showId].join(':');
+}
+
 export function readCachedItinerary(scope: { workspaceId: string; projectId: string; tourId?: string | null; includeDrafts?: boolean }) {
-  return parseCachedPayload<Show[]>(readStorage(itineraryKey(scope)), MAX_ITINERARY_AGE_MS);
+  return parseCachedPayload<Show[]>(readStorage(itineraryKey(scope)));
 }
 
 export function writeCachedItinerary(scope: { workspaceId: string; projectId: string; tourId?: string | null; includeDrafts?: boolean }, shows: Show[]) {
@@ -73,9 +74,17 @@ export function writeCachedItinerary(scope: { workspaceId: string; projectId: st
 }
 
 export function readCachedShow(scope: { workspaceId: string; showId: string }) {
-  return parseCachedPayload<Show>(readStorage(dayKey(scope)), MAX_DAY_AGE_MS);
+  return parseCachedPayload<Show>(readStorage(dayKey(scope)));
 }
 
 export function writeCachedShow(scope: { workspaceId: string; showId: string }, show: Show) {
   writeCachedPayload(dayKey(scope), show);
+}
+
+export function readCachedGuestList(scope: { workspaceId: string; showId: string }) {
+  return parseCachedPayload<GuestListEntry[]>(readStorage(guestListKey(scope)));
+}
+
+export function writeCachedGuestList(scope: { workspaceId: string; showId: string }, entries: GuestListEntry[]) {
+  writeCachedPayload(guestListKey(scope), entries);
 }

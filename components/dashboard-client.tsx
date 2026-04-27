@@ -7,7 +7,7 @@ import { OfflineStatus } from '@/components/offline-status';
 import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
-import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows } from '@/lib/data-client';
+import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCachedShows } from '@/lib/data-client';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
@@ -304,7 +304,18 @@ export function DashboardClient() {
         return;
       }
 
-      setLoading(true);
+      const cached = peekCachedShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      if (cached && active) {
+        setShows(cached.data);
+        setDataSource('cache');
+        setLastSavedAt(cached.savedAt);
+        setHasLoadedOnce(true);
+        setLoadError(null);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       try {
         const result = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
         if (!active) return;
@@ -315,9 +326,11 @@ export function DashboardClient() {
         setHasLoadedOnce(true);
       } catch (error) {
         if (!active) return;
-        setLoadError(error instanceof Error ? error.message : 'Unable to load dates.');
-        setDataSource('live');
-        setLastSavedAt(null);
+        if (!cached) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load dates.');
+          setDataSource('live');
+          setLastSavedAt(null);
+        }
       } finally {
         if (active) setLoading(false);
       }

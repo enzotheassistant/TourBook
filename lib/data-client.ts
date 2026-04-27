@@ -3,7 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
-import { readCachedItinerary, readCachedShow, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
+import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
 import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
@@ -73,6 +73,21 @@ function requireWorkspaceProjectScope(scope?: ScopeInput) {
     throw new Error('No active workspace or artist selected.');
   }
   return resolved as { workspaceId: string; projectId: string; tourId: string | null };
+}
+
+export function peekCachedShows(includeDrafts = false, scope?: ScopeInput) {
+  const resolved = requireWorkspaceProjectScope(scope);
+  return readCachedItinerary({ ...resolved, includeDrafts });
+}
+
+export function peekCachedShow(id: string, scope?: ScopeInput) {
+  const workspaceId = requireWorkspaceId(scope);
+  return readCachedShow({ workspaceId, showId: id });
+}
+
+export function peekCachedGuestList(showId: string, scope?: ScopeInput) {
+  const workspaceId = requireWorkspaceId(scope);
+  return readCachedGuestList({ workspaceId, showId });
 }
 
 export async function listShows(includeDrafts = false, scope?: ScopeInput) {
@@ -152,8 +167,21 @@ export async function listGuestListEntries(showId: string, scope?: ScopeInput) {
   const resolved = resolveScope(scope);
   const params = new URLSearchParams();
   if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
-  const entries = await request<any[]>(`/api/dates/${showId}/guest-list?${params.toString()}`);
-  return entries.map(mapScopedGuestListEntryToLegacy);
+
+  try {
+    const entries = await request<any[]>(`/api/dates/${showId}/guest-list?${params.toString()}`);
+    const mappedEntries = entries.map(mapScopedGuestListEntryToLegacy);
+    if (resolved.workspaceId) {
+      writeCachedGuestList({ workspaceId: resolved.workspaceId, showId }, mappedEntries);
+    }
+    return mappedEntries;
+  } catch (error) {
+    if (resolved.workspaceId) {
+      const cached = readCachedGuestList({ workspaceId: resolved.workspaceId, showId });
+      if (cached) return cached.data;
+    }
+    throw error;
+  }
 }
 
 export async function addGuestListEntries(showId: string, names: string[], scope?: ScopeInput) {
@@ -164,7 +192,12 @@ export async function addGuestListEntries(showId: string, names: string[], scope
     method: 'POST',
     body: JSON.stringify({ names }),
   });
-  return entries.map(mapScopedGuestListEntryToLegacy);
+  const mappedEntries = entries.map(mapScopedGuestListEntryToLegacy);
+  if (resolved.workspaceId) {
+    const currentEntries = readCachedGuestList({ workspaceId: resolved.workspaceId, showId })?.data ?? [];
+    writeCachedGuestList({ workspaceId: resolved.workspaceId, showId }, [...currentEntries, ...mappedEntries]);
+  }
+  return mappedEntries;
 }
 
 export async function updateGuestListEntry(entryId: string, name: string, scope?: ScopeInput) {
@@ -175,16 +208,25 @@ export async function updateGuestListEntry(entryId: string, name: string, scope?
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
-  return mapScopedGuestListEntryToLegacy(entry);
+  const mappedEntry = mapScopedGuestListEntryToLegacy(entry);
+  if (resolved.workspaceId) {
+    const currentEntries = readCachedGuestList({ workspaceId: resolved.workspaceId, showId: mappedEntry.show_id })?.data ?? [];
+    writeCachedGuestList({ workspaceId: resolved.workspaceId, showId: mappedEntry.show_id }, currentEntries.map((currentEntry) => (currentEntry.id === entryId ? mappedEntry : currentEntry)));
+  }
+  return mappedEntry;
 }
 
-export async function deleteGuestListEntry(entryId: string, scope?: ScopeInput) {
+export async function deleteGuestListEntry(entryId: string, scope?: ScopeInput & { showId?: string | null }) {
   const resolved = resolveScope(scope);
   const params = new URLSearchParams();
   if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
   await request<{ ok: boolean }>(`/api/dates/guest-list/${entryId}?${params.toString()}`, {
     method: 'DELETE',
   });
+  if (resolved.workspaceId && scope?.showId) {
+    const currentEntries = readCachedGuestList({ workspaceId: resolved.workspaceId, showId: scope.showId })?.data ?? [];
+    writeCachedGuestList({ workspaceId: resolved.workspaceId, showId: scope.showId }, currentEntries.filter((entry) => entry.id !== entryId));
+  }
 }
 
 export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
