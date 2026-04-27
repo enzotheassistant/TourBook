@@ -12,19 +12,10 @@ function getStatusTone(isOnline: boolean, source?: 'live' | 'cache') {
     };
   }
 
-  if (source === 'cache') {
-    return {
-      wrap: 'border-sky-400/20 bg-linear-to-br from-sky-500/10 to-white/[0.03] text-zinc-100',
-      pill: 'border-sky-300/20 bg-sky-300/10 text-sky-100',
-      dot: 'bg-sky-300',
-      meta: 'text-zinc-400',
-    };
-  }
-
   return {
-    wrap: 'border-white/10 bg-linear-to-br from-white/[0.06] to-white/[0.03] text-zinc-100',
-    pill: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100',
-    dot: 'bg-emerald-300',
+    wrap: 'border-sky-400/20 bg-linear-to-br from-sky-500/10 to-white/[0.03] text-zinc-100',
+    pill: 'border-sky-300/20 bg-sky-300/10 text-sky-100',
+    dot: 'bg-sky-300',
     meta: 'text-zinc-400',
   };
 }
@@ -54,10 +45,10 @@ export function OfflineStatus({
     );
   }
 
-  if (isOnline && source !== 'cache' && !savedAt) return null;
+  if (isOnline && source !== 'cache') return null;
 
   const tone = getStatusTone(isOnline, source);
-  const headline = !isOnline ? 'Offline' : source === 'cache' ? 'Saved copy' : 'Online';
+  const headline = !isOnline ? 'Offline' : 'Saved copy';
 
   return (
     <div className={`rounded-[24px] border px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.16)] ${tone.wrap}`}>
