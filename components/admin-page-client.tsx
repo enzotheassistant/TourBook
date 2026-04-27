@@ -1502,7 +1502,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   const isEditingDraft = isEditing && form.status === 'draft';
   const editorCopy = getEditorCopy(form.day_type);
-  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? `Update ${getDayTypeNoun(form.day_type)}` : 'Create';
+  const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create';
 
   if (contextLoading) {
     return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
@@ -2093,9 +2093,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
                 <div className="grid gap-3 lg:grid-cols-2">
                   <FlexibleDateInput label="Date" value={form.date} onChange={(value) => updateField('date', value)} labelWidthClassName="w-[72px]" />
-                  <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
-                  <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
-                  <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
+                  {form.day_type === 'show' && (
+                    <>
+                      <InlineInput label="City" value={form.city} onChange={(value) => updateField('city', value)} labelWidthClassName="w-[72px]" />
+                      <InlineInput label="Region" value={form.region} onChange={(value) => updateField('region', value.toUpperCase())} labelWidthClassName="w-[72px]" />
+                      <InlineInput label="Country" value={form.country} onChange={(value) => updateField('country', value.toUpperCase())} labelWidthClassName="w-[72px]" />
+                    </>
+                  )}
                 </div>
                 <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[72px]" />
               </div>
