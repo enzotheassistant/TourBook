@@ -186,6 +186,23 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     void refreshContext();
   }, [refreshContext]);
 
+  // Refresh context whenever the PWA comes to the foreground (visibilitychange).
+  // This handles the case where the OS suspends the app and the session expires
+  // while the tab is hidden, ensuring a fresh session on resume.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshContext();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshContext]);
+
   // Subscribe to Supabase auth state changes so that when the access token is
   // automatically refreshed (every ~1 hour), we re-sync it to server cookies.
   // This keeps the server-side session alive for the full refresh-token TTL
