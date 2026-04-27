@@ -618,6 +618,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setEditingMemberTourIds((current) => current.filter((id) => editAvailableTours.some((tour) => tour.id === id)));
   }, [editAvailableTours]);
 
+  // Reset stale shows, filters, and errors when the active project changes
+  useEffect(() => {
+    setShows([]);
+    setUpcomingSearch('');
+    setPastSearch('');
+    setUpcomingTour('All');
+    setPastTour('All');
+    setDraftSearch('');
+    setDraftTour('All');
+    setMessage('');
+  }, [activeProjectId]);
+
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
     void loadShows();
