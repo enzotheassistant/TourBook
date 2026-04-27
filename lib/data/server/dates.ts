@@ -199,7 +199,11 @@ async function runDatesSelect<T>(buildQuery: (selectClause: string) => PromiseLi
   return buildQuery(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS));
 }
 
-async function runDatesWrite<T>(attempt: (payload: Record<string, unknown>) => PromiseLike<{ data: T | null; error: any }>, payload: Record<string, unknown>) {
+async function runDatesWrite<T>(
+  attempt: (payload: Record<string, unknown>) => PromiseLike<{ data: T | null; error: any }>,
+  payload: Record<string, unknown>,
+  options?: { allowLegacyDayTypeFallback?: boolean },
+) {
   const primary = await attempt(payload);
   if (!primary.error || !isSchemaDriftError(primary.error)) {
     return primary;
@@ -207,6 +211,10 @@ async function runDatesWrite<T>(attempt: (payload: Record<string, unknown>) => P
 
   const message = String(primary.error?.message ?? '').toLowerCase();
   if (!message.includes('day_type') && !message.includes('column')) {
+    return primary;
+  }
+
+  if (!options?.allowLegacyDayTypeFallback) {
     return primary;
   }
 
@@ -397,12 +405,17 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload(values, workspaceId, projectId);
+  const requestedDayType = String(payload.day_type ?? 'show');
   const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase.from('dates').insert(nextPayload).select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS)).single(),
     payload,
+    { allowLegacyDayTypeFallback: requestedDayType === 'show' },
   );
   if (error || !data) {
     if (isMissingRelationError(error) || isSchemaDriftError(error)) {
+      if (requestedDayType !== 'show') {
+        throw new ApiError(409, 'Tour day schema is not ready yet. Apply the live dates.day_type migration before creating travel or off days.');
+      }
       throw new ApiError(409, 'Dates schema is not ready yet.');
     }
     throw new ApiError(500, error?.message ?? 'Unable to create date.');
@@ -428,6 +441,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const payload = buildDatePayload({ ...current, ...values, project_id: projectId, workspace_id: workspaceId }, workspaceId, projectId);
+  const requestedDayType = String(payload.day_type ?? current.day_type ?? 'show');
   const { data, error } = await runDatesWrite<any>(
     (nextPayload) => supabase
       .from('dates')
@@ -437,10 +451,14 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
       .select(getDatesSelectClause(LEGACY_MISSING_DATE_COLUMNS))
       .single(),
     payload,
+    { allowLegacyDayTypeFallback: requestedDayType === 'show' },
   );
 
   if (error || !data) {
     if (isMissingRelationError(error) || isSchemaDriftError(error)) {
+      if (requestedDayType !== 'show') {
+        throw new ApiError(409, 'Tour day schema is not ready yet. Apply the live dates.day_type migration before creating travel or off days.');
+      }
       throw new ApiError(409, 'Dates schema is not ready yet.');
     }
     throw new ApiError(500, error?.message ?? 'Unable to update date.');
