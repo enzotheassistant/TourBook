@@ -4,6 +4,46 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let browserClient: SupabaseClient | null = null;
 
+// ---------------------------------------------------------------------------
+// iOS Safari PWA refresh-token backup
+//
+// iOS Safari periodically evicts localStorage for PWAs (low storage, iOS
+// updates, ITP).  When localStorage is cleared, `getSession()` returns null
+// and the user is forced to log in again.  To survive this, we store a copy
+// of the Supabase refresh token in a plain (non-HttpOnly) cookie alongside
+// localStorage.  On boot, if `getSession()` comes back empty we use the
+// cookie to call `refreshSession()` and silently recover the session.
+//
+// The refresh token itself has a long TTL (Supabase default: 60 days) and is
+// single-use — Supabase rotates it on every refresh, so we always keep the
+// backup current.
+// ---------------------------------------------------------------------------
+
+const RT_COOKIE = "tb-rt"; // "TourBook refresh token"
+const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
+
+/** Persist a copy of the refresh token in a SameSite=Lax cookie. */
+export function backupRefreshToken(refreshToken: string): void {
+  if (typeof document === "undefined") return;
+  const expires = new Date(Date.now() + RT_COOKIE_MAX_AGE_S * 1000).toUTCString();
+  document.cookie = `${RT_COOKIE}=${encodeURIComponent(refreshToken)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+/** Read the backed-up refresh token from the cookie, or null if absent. */
+export function getBackupRefreshToken(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(^|;\s*)tb-rt=([^;]+)/);
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+/** Remove the backed-up refresh token cookie (called on sign-out). */
+export function clearBackupRefreshToken(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${RT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Returns a singleton Supabase browser client that stores auth tokens in
  * localStorage rather than cookies. This ensures tokens survive PWA

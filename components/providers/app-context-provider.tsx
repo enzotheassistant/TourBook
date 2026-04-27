@@ -2,7 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { getBrowserSupabaseClient, syncSessionToServer, clearServerSession } from '@/lib/supabase/client';
+import {
+  getBrowserSupabaseClient,
+  syncSessionToServer,
+  clearServerSession,
+  backupRefreshToken,
+  getBackupRefreshToken,
+  clearBackupRefreshToken,
+} from '@/lib/supabase/client';
 import type { BootstrapContext } from '@/lib/types/tenant';
 
 type AppContextValue = BootstrapContext & {
@@ -57,13 +64,35 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       const supabase = getBrowserSupabaseClient();
 
       // Restore session from localStorage (PWA persistence).
-      // getSession() reads from localStorage and will auto-refresh if the
-      // access token is expired but a valid refresh token exists.
-      const {
+      // getSession() reads from localStorage and will auto-refresh the access
+      // token if it is expired but a valid refresh token exists.
+      let {
         data: { session },
       } = await supabase.auth.getSession();
 
+      // iOS Safari PWA recovery: if localStorage was cleared by the OS
+      // (ITP eviction, low storage, system update), getSession() returns null.
+      // Attempt a silent recovery using the refresh token backed up in a
+      // persistent cookie before giving up and redirecting to /login.
+      if (!session) {
+        const backupToken = getBackupRefreshToken();
+        if (backupToken) {
+          const { data: recovered, error: refreshError } = await supabase.auth.refreshSession({
+            refresh_token: backupToken,
+          });
+          if (!refreshError && recovered.session) {
+            session = recovered.session;
+          } else {
+            // Backup token is stale — remove it so we don't retry indefinitely.
+            clearBackupRefreshToken();
+          }
+        }
+      }
+
       if (session?.access_token && session?.refresh_token) {
+        // Keep the cookie backup current with the latest refresh token so
+        // the next recovery attempt (if localStorage is cleared again) works.
+        backupRefreshToken(session.refresh_token);
         // Re-sync server-side cookies on every boot so Next.js API routes
         // can authenticate the user even after a PWA close/reopen.
         await syncSessionToServer(session.access_token, session.refresh_token);
@@ -147,10 +176,20 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'TOKEN_REFRESHED' && session?.access_token && session?.refresh_token) {
+        // Keep the cookie backup current whenever the token is refreshed
+        // (Supabase rotates the refresh token on each refresh).
+        backupRefreshToken(session.refresh_token);
         await syncSessionToServer(session.access_token, session.refresh_token);
       }
 
+      if (event === 'SIGNED_IN' && session?.refresh_token) {
+        // Also back up on initial sign-in (covers the login page path where
+        // session is created and app is redirected to home).
+        backupRefreshToken(session.refresh_token);
+      }
+
       if (event === 'SIGNED_OUT') {
+        clearBackupRefreshToken();
         await clearServerSession();
       }
     });
