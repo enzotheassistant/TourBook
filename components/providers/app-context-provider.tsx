@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { getBrowserSupabaseClient } from '@/lib/supabase/client';
+import { getBrowserSupabaseClient, syncSessionToServer, clearServerSession } from '@/lib/supabase/client';
 import type { BootstrapContext } from '@/lib/types/tenant';
 
 type AppContextValue = BootstrapContext & {
@@ -55,9 +55,19 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
     try {
       const supabase = getBrowserSupabaseClient();
+
+      // Restore session from localStorage (PWA persistence).
+      // getSession() reads from localStorage and will auto-refresh if the
+      // access token is expired but a valid refresh token exists.
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      if (session?.access_token && session?.refresh_token) {
+        // Re-sync server-side cookies on every boot so Next.js API routes
+        // can authenticate the user even after a PWA close/reopen.
+        await syncSessionToServer(session.access_token, session.refresh_token);
+      }
 
       const response = await fetch('/api/me/context', {
         method: 'GET',
@@ -127,6 +137,28 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshContext();
   }, [refreshContext]);
+
+  // Subscribe to Supabase auth state changes so that when the access token is
+  // automatically refreshed (every ~1 hour), we re-sync it to server cookies.
+  // This keeps the server-side session alive for the full refresh-token TTL
+  // without requiring the user to log in again.
+  useEffect(() => {
+    const supabase = getBrowserSupabaseClient();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED' && session?.access_token && session?.refresh_token) {
+        await syncSessionToServer(session.access_token, session.refresh_token);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        await clearServerSession();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     writeStoredValue(WORKSPACE_STORAGE_KEY, bootstrap.activeWorkspaceId);

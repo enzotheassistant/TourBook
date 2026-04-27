@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerSupabaseClient } from '@/lib/supabase/server';
-import { finalizeAuthResponse } from '@/lib/auth';
+import { clearSessionCookies, finalizeAuthResponse } from '@/lib/auth';
 
 type Body = {
   accessToken?: string;
@@ -32,4 +32,11 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   }
+}
+
+// DELETE — called on logout to clear server-side session cookies.
+export async function DELETE(request: NextRequest) {
+  const response = NextResponse.json({ ok: true });
+  clearSessionCookies(response);
+  return response;
 }

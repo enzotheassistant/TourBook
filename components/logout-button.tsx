@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { getBrowserSupabaseClient } from '@/lib/supabase/client';
+import { getBrowserSupabaseClient, clearServerSession } from '@/lib/supabase/client';
 
 export function LogoutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
@@ -9,6 +9,8 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
   async function handleLogout() {
     const supabase = getBrowserSupabaseClient();
     await supabase.auth.signOut();
+    // Clear server-side session cookies too.
+    await clearServerSession();
     router.replace('/login');
     router.refresh();
   }
