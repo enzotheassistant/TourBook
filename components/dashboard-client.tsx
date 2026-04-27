@@ -291,6 +291,18 @@ export function DashboardClient() {
     }
   }
 
+  // Reset all filters, stale shows, and errors when the active project changes
+  // Must run before the data loading effect so resets happen first in the batch
+  useEffect(() => {
+    setUpcomingTour('All');
+    setPastTour('All');
+    setUpcomingSearch('');
+    setPastSearch('');
+    setShows([]);
+    setHasLoadedOnce(false);
+    setLoadError(null);
+  }, [activeProjectId]);
+
   useEffect(() => {
     let active = true;
     async function load() {
@@ -350,16 +362,6 @@ export function DashboardClient() {
   const upcomingTours = useMemo(() => ['All', ...sortTourNamesForUpcoming(upcomingShows).filter((tour) => tour !== 'All')], [upcomingShows]);
   const pastTours = useMemo(() => ['All', ...sortTourNamesForPast(pastShows).filter((tour) => tour !== 'All')], [pastShows]);
 
-  // Reset all filters, stale shows, and errors when the active project changes
-  useEffect(() => {
-    setUpcomingTour('All');
-    setPastTour('All');
-    setUpcomingSearch('');
-    setPastSearch('');
-    setShows([]);
-    setLoadError(null);
-  }, [activeProjectId]);
-
   useEffect(() => { if (!upcomingTours.includes(upcomingTour)) setUpcomingTour('All'); }, [upcomingTour, upcomingTours]);
   useEffect(() => { if (!pastTours.includes(pastTour)) setPastTour('All'); }, [pastTour, pastTours]);
 
@@ -388,7 +390,13 @@ export function DashboardClient() {
   const showBlockingLoading = (contextLoading && !hasLoadedOnce) || (loading && !hasLoadedOnce && shows.length === 0);
   const isRefreshing = loading && hasLoadedOnce;
 
-  if (showBlockingLoading) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
+  if (showBlockingLoading) return (
+    <div className="space-y-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="h-24 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />
+      ))}
+    </div>
+  );
 
   if (!activeWorkspaceId) {
     const hasWorkspaceAccess = workspaces.length > 0;
