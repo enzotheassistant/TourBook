@@ -270,7 +270,7 @@ export function DashboardClient() {
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
+  const [statusSource, setStatusSource] = useState<'live' | 'cache'>('live');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [upcomingTour, setUpcomingTour] = useState('All');
@@ -307,7 +307,6 @@ export function DashboardClient() {
       const cached = peekCachedShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       if (cached && active) {
         setShows(cached.data);
-        setDataSource('cache');
         setLastSavedAt(cached.savedAt);
         setHasLoadedOnce(true);
         setLoadError(null);
@@ -320,15 +319,18 @@ export function DashboardClient() {
         const result = await listShows(false, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
         if (!active) return;
         setShows(result.shows);
-        setDataSource(result.source);
+        setStatusSource(result.source);
         setLastSavedAt(result.savedAt);
         setLoadError(null);
         setHasLoadedOnce(true);
       } catch (error) {
         if (!active) return;
-        if (!cached) {
+        if (cached) {
+          setStatusSource('cache');
+          setLoadError(null);
+        } else {
           setLoadError(error instanceof Error ? error.message : 'Unable to load dates.');
-          setDataSource('live');
+          setStatusSource('live');
           setLastSavedAt(null);
         }
       } finally {
@@ -431,7 +433,7 @@ export function DashboardClient() {
       {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
       <OfflineStatus
         savedAt={lastSavedAt}
-        source={dataSource}
+        source={statusSource}
         emptyOfflineMessage={loadError ? 'No recent itinerary is saved on this device yet. Reopen TourBook online once and your latest dates will be available here in weak signal.' : null}
       />
       {isRefreshing ? (

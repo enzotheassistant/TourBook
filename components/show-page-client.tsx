@@ -139,7 +139,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [dataSource, setDataSource] = useState<'live' | 'cache'>('live');
+  const [statusSource, setStatusSource] = useState<'live' | 'cache'>('live');
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -151,7 +151,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
       const cached = peekCachedShow(showId, { workspaceId: activeWorkspaceId });
       if (cached && active) {
         setShow(cached.data);
-        setDataSource('cache');
         setLastSavedAt(cached.savedAt);
         setHasLoadedOnce(true);
         setLoaded(true);
@@ -163,13 +162,17 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         const result = await getShow(showId, { workspaceId: activeWorkspaceId });
         if (!active) return;
         setShow(result.show);
-        setDataSource(result.source);
+        setStatusSource(result.source);
         setLastSavedAt(result.savedAt);
         setHasLoadedOnce(true);
       } catch {
-        if (!active || cached) return;
+        if (!active) return;
+        if (cached) {
+          setStatusSource('cache');
+          return;
+        }
         setShow(null);
-        setDataSource('live');
+        setStatusSource('live');
         setLastSavedAt(null);
       } finally {
         if (active) setLoaded(true);
@@ -298,7 +301,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
           </div>
         ) : null}
 
-        {!dataSource || dataSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />}
+        {statusSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={statusSource} emptyOfflineMessage={null} />}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
           <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
