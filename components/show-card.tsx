@@ -75,17 +75,17 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
       }`}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/14 to-transparent opacity-60" />
-      <div className="relative flex items-start gap-3 p-3 sm:grid sm:grid-cols-[108px,minmax(0,1fr)] sm:items-stretch sm:gap-5 sm:p-5">
+      <div className="relative flex items-start gap-3 p-3 sm:grid sm:grid-cols-[88px,minmax(0,1fr)] sm:items-center sm:gap-4 sm:p-4">
         <div
-          className={`relative flex w-[92px] shrink-0 items-center gap-4 overflow-hidden rounded-[22px] border px-3 py-3 sm:min-h-0 sm:w-auto sm:flex-col sm:items-center sm:justify-center sm:gap-0 sm:px-4 sm:py-4 ${
+          className={`relative flex w-[92px] shrink-0 items-center gap-4 overflow-hidden rounded-[22px] border px-3 py-3 sm:min-h-0 sm:w-auto sm:flex-col sm:items-center sm:justify-center sm:gap-0 sm:px-3 sm:py-3 ${
             today ? 'border-emerald-300/25 bg-emerald-400/[0.075]' : 'border-white/10 bg-black/20'
           }`}
         >
-          <div className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-white/12 sm:inset-x-4 sm:top-0 sm:h-[3px] sm:w-auto sm:rounded-b-full sm:rounded-tr-none ${today ? 'sm:bg-emerald-300/80 bg-emerald-300/80' : ''}`} />
+          <div className={`absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-white/12 sm:inset-x-3 sm:top-0 sm:h-[3px] sm:w-auto sm:rounded-b-full sm:rounded-tr-none ${today ? 'sm:bg-emerald-300/80 bg-emerald-300/80' : ''}`} />
 
           <div className="min-w-0 flex-1 sm:flex-none sm:text-center">
             <div className="flex items-center gap-2 sm:justify-center">
-              <span className={`text-[11px] font-semibold uppercase tracking-[0.26em] ${today ? 'text-emerald-200' : 'text-zinc-400'}`}>{dateBlock.month}</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-[0.22em] ${today ? 'text-emerald-200' : 'text-zinc-400'}`}>{dateBlock.month}</span>
               {today ? (
                 <span className="inline-flex items-center rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-200 sm:hidden">
                   Today
@@ -93,8 +93,8 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
               ) : null}
             </div>
             <div className="mt-1 flex items-end gap-2 sm:mt-2 sm:flex-col sm:items-center sm:gap-0">
-              <span className="text-[2rem] font-semibold leading-none tracking-[-0.05em] text-zinc-50 sm:text-[2.5rem]">{dateBlock.day}</span>
-              <span className={`pb-1 text-[11px] font-medium uppercase tracking-[0.18em] sm:pb-0 sm:pt-1 ${today ? 'text-emerald-200/90' : 'text-zinc-400'}`}>{dateBlock.weekday}</span>
+              <span className="text-[2rem] font-semibold leading-none tracking-[-0.05em] text-zinc-50 sm:text-[2.2rem]">{dateBlock.day}</span>
+              <span className={`pb-1 text-[10px] font-medium uppercase tracking-[0.16em] sm:pb-0 sm:pt-1 ${today ? 'text-emerald-200/90' : 'text-zinc-400'}`}>{dateBlock.weekday}</span>
             </div>
           </div>
         </div>
@@ -107,11 +107,11 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
                   {today ? <span className="inline-flex items-center rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Today</span> : null}
                   <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">{getDayTypeLabel(show.day_type)}</span>
                 </div>
-                <h2 className="mt-1 break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:mt-3 sm:text-[1.6rem]">
+                <h2 className="mt-1 break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:mt-2 sm:text-[1.35rem]">
                   {getCityLine(show)}
                 </h2>
 
-                <p className={`mt-1 break-words text-[13px] leading-5 text-zinc-200/92 sm:mt-2 sm:max-w-[58ch] sm:text-[15px] sm:leading-6 ${clampTextClassName(show.day_type)}`}>
+                <p className={`mt-1 break-words text-[13px] leading-5 text-zinc-200/92 sm:mt-1.5 sm:max-w-[58ch] sm:text-[14px] sm:leading-5 ${clampTextClassName(show.day_type)}`}>
                   {getVenueLine(show)}
                 </p>
               </div>

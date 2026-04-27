@@ -67,44 +67,9 @@ function getLocationTitle(show: Show) {
   return show.venue_name || 'Venue TBA';
 }
 
-function getDayHeroEyebrow(show: Show) {
-  if (show.day_type === 'travel') return 'In transit';
-  if (show.day_type === 'off') return 'Reset window';
-  return 'Show day';
-}
-
-function getDayHeroTitle(show: Show) {
-  if (show.day_type === 'travel') {
-    return show.label || show.venue_name || getCityRegionCountry(show) || 'Travel day';
-  }
-
-  if (show.day_type === 'off') {
-    return show.label || getCityRegionCountry(show) || show.hotel_name || 'Off day';
-  }
-
-  return show.venue_name || `${show.city}${show.region ? `, ${show.region}` : ''}` || 'Show day';
-}
-
-function getDayHeroSummary(show: Show) {
-  if (show.day_type === 'travel') {
-    return joinNonEmpty([
-      getCityRegionCountry(show) || null,
-      show.hotel_name ? `Accommodation: ${show.hotel_name}` : null,
-      show.venue_address ? 'Address available' : null,
-    ]);
-  }
-
-  return joinNonEmpty([
-    getCityRegionCountry(show) || null,
-    show.hotel_name ? `Staying at ${show.hotel_name}` : null,
-    show.schedule_items.some((item) => item.label.trim() && item.time.trim()) ? 'Crew reminders on deck' : null,
-  ]);
-}
-
 function countVisibleScheduleItems(show: Show) {
   return show.schedule_items.filter((item) => item.label.trim() && item.time.trim()).length;
 }
-
 
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -132,58 +97,35 @@ function formatHeaderDate(date: string) {
   return `${weekdayMonthDay} · ${parsed.getFullYear()}`;
 }
 
-function getDayTypeCopy(show: Show) {
+function getHeaderMetaLine(show: Show) {
   if (show.day_type === 'travel') {
-    return {
-      badge: 'Travel day',
-      title: show.label || show.venue_name || show.city || 'Travel day',
-      subtitle: show.city ? `${show.city}${show.region ? `, ${show.region}` : ''}` : 'Routing / transit day',
-    };
+    return joinNonEmpty([
+      getCityRegionCountry(show) || null,
+      show.venue_name || show.label || null,
+    ]);
   }
 
   if (show.day_type === 'off') {
-    return {
-      badge: 'Off day',
-      title: show.label || show.city || 'Off day',
-      subtitle: show.hotel_name || (show.city ? `${show.city}${show.region ? `, ${show.region}` : ''}` : 'Recovery / reset day'),
-    };
+    return joinNonEmpty([
+      getCityRegionCountry(show) || null,
+      show.venue_name || show.hotel_name || show.label || 'Off day',
+    ]);
   }
 
-  return {
-    badge: 'Show day',
-    title: `${show.city}${show.region ? `, ${show.region}` : ''}` || 'Show day',
-    subtitle: show.venue_name || 'Venue TBA',
-  };
+  return joinNonEmpty([
+    getCityRegionCountry(show) || null,
+    show.venue_name || show.label || 'Venue TBA',
+  ]);
 }
 
-function InfoPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{label}</p>
-      <p className="mt-1 text-sm font-medium text-zinc-100">{value}</p>
-    </div>
-  );
-}
-
-function DayOverviewCard({ show }: { show: Show }) {
-  const location = getCityRegionCountry(show);
-  const summary = getDayHeroSummary(show);
+function getHeaderSupportMeta(show: Show) {
   const scheduleCount = countVisibleScheduleItems(show);
-
-  return (
-    <section className="overflow-hidden rounded-[30px] border border-white/10 bg-linear-to-br from-white/[0.08] via-white/[0.05] to-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{getDayHeroEyebrow(show)}</p>
-      <h2 className="mt-3 text-[1.45rem] font-semibold tracking-tight text-zinc-50">{getDayHeroTitle(show)}</h2>
-      {summary ? <p className="mt-2 text-sm leading-6 text-zinc-300">{summary}</p> : null}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <InfoPill label={show.day_type === 'travel' ? 'Destination' : 'City'} value={location || 'TBA'} />
-        <InfoPill label="Date" value={formatHeaderDate(show.date)} />
-        <InfoPill label="Accommodation" value={show.hotel_name || 'Not added yet'} />
-        <InfoPill label={show.day_type === 'off' ? 'Reminders' : 'Timeline'} value={scheduleCount > 0 ? `${scheduleCount} item${scheduleCount === 1 ? '' : 's'}` : 'None yet'} />
-      </div>
-    </section>
-  );
+  return joinNonEmpty([
+    show.day_type === 'travel' ? 'Travel Day' : show.day_type === 'off' ? 'Off Day' : 'Show Day',
+    show.tour_name || null,
+    show.hotel_name ? `Stay: ${show.hotel_name}` : null,
+    scheduleCount > 0 ? `${scheduleCount} timeline item${scheduleCount === 1 ? '' : 's'}` : null,
+  ]);
 }
 
 
@@ -277,7 +219,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   if (contextLoading || !loaded) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
-  const copy = getDayTypeCopy(show);
+  const headerMetaLine = getHeaderMetaLine(show);
+  const headerSupportMeta = getHeaderSupportMeta(show);
   const backHref = adminMode ? `/admin/dates?tab=${returnTab}` : `/?tab=${returnTab}`;
   const editHref = `/admin?edit=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
   const duplicateHref = `/admin?duplicate=${show.id}&returnTo=${encodeURIComponent(backHref)}`;
@@ -300,11 +243,12 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         <div className="grid min-w-0 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
           <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">{copy.badge}</p>
-            <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
-            <p className="mt-0.5 truncate text-base text-zinc-300">{copy.subtitle}</p>
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <p className="min-w-0 text-sm text-zinc-400">{formatHeaderDate(show.date)}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">{formatHeaderDate(show.date)}</h1>
+                {headerMetaLine ? <p className="mt-1 truncate text-sm text-zinc-200 sm:text-[15px]">{headerMetaLine}</p> : null}
+                {headerSupportMeta ? <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{headerSupportMeta}</p> : null}
+              </div>
               {adminMode ? (
                 <div className="relative flex shrink-0 items-center gap-2">
                   <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
@@ -324,10 +268,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
           </div>
         </div>
 
-        {show.tour_name ? <p className="text-sm text-emerald-300">{show.tour_name}</p> : null}
-
-        <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />
-
+        {!dataSource || dataSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={dataSource} emptyOfflineMessage={null} />}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
           <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -348,8 +289,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
             </>
           ) : (
             <>
-              <DayOverviewCard show={show} />
-
               {show.visibility.show_venue && hasLocation(show) ? (
                 <SectionCard title={getDayLocationLabel(show)}>
                   <div className="space-y-3 text-sm text-zinc-200">
