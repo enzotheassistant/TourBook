@@ -2,12 +2,6 @@ import Link from 'next/link';
 import { formatDateBlock, isToday } from '@/lib/date';
 import { Show } from '@/lib/types';
 
-function getDayTypeLabel(dayType: Show['day_type']) {
-  if (dayType === 'travel') return 'Travel day';
-  if (dayType === 'off') return 'Off day';
-  return 'Show day';
-}
-
 function getCityLine(show: Show) {
   if (show.city) {
     if (show.region && show.country) return `${show.city}, ${show.region}, ${show.country}`;
@@ -94,22 +88,17 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
           >
             {dateBlock.weekday}
           </span>
+
+          {today ? (
+            <span className="mt-1.5 text-[8px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              Today
+            </span>
+          ) : null}
         </div>
 
         {/* Show Info — right side */}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-col gap-1.5 sm:gap-2">
-
-            <div className="flex flex-wrap items-center gap-2">
-              {today ? (
-                <span className="inline-flex items-center rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
-                  Today
-                </span>
-              ) : null}
-              <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">
-                {getDayTypeLabel(show.day_type)}
-              </span>
-            </div>
 
             <h2 className="break-words text-[1.05rem] font-semibold leading-[1.05] tracking-[-0.03em] text-zinc-50 sm:text-[1.25rem]">
               {getCityLine(show)}
