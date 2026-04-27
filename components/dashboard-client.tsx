@@ -51,12 +51,12 @@ function summarizeDayTypes(shows: Show[]) {
 
 function FilterSelect({ value, onChange, options, ariaLabel }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel: string }) {
   return (
-    <div className="relative w-full shrink-0 sm:w-[210px]">
+    <div className="relative shrink-0">
       <select
         value={value}
         aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/35 focus:bg-white/[0.03]"
+        className="h-11 w-auto appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/35 focus:bg-white/[0.03]"
       >
         {options.map((option) => <option key={option} value={option}>{option === 'All' ? 'All tours' : option}</option>)}
       </select>
@@ -73,7 +73,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (value: str
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search city, venue, day label, or tour"
+        placeholder="Search"
         aria-label="Search dates"
         className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/35"
       />
@@ -438,9 +438,9 @@ export function DashboardClient() {
         </div>
 
         <div className="px-4 py-4 sm:px-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <SearchInput value={tab === 'past' ? pastSearch : upcomingSearch} onChange={tab === 'past' ? setPastSearch : setUpcomingSearch} />
+          <div className="flex flex-row items-center gap-2">
             <FilterSelect value={tab === 'past' ? pastTour : upcomingTour} onChange={tab === 'past' ? setPastTour : setUpcomingTour} options={tab === 'past' ? pastTours : upcomingTours} ariaLabel={`${tab} dates tour filter`} />
+            <SearchInput value={tab === 'past' ? pastSearch : upcomingSearch} onChange={tab === 'past' ? setPastSearch : setUpcomingSearch} />
           </div>
 
           <div className="mt-3">
@@ -466,6 +466,7 @@ export function DashboardClient() {
 
       {tab === 'past' ? (
         pastByYear.length === 0 ? (
+          pastShows.length === 0 ? (
           <ActivationEmptyState
             title="No past dates yet."
             body="Past dates will appear here after your first show is added and completed."
@@ -479,6 +480,9 @@ export function DashboardClient() {
               role: activeWorkspaceRole,
             }}
           />
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm text-zinc-500">No results</div>
+          )
         ) : (
           <div className="space-y-6">
             {pastByYear.map(([year, items]) => (
@@ -494,22 +498,26 @@ export function DashboardClient() {
           </div>
         )
       ) : filteredUpcomingShows.length === 0 ? (
-        (() => {
-          const firstRunState = getCrewNoUpcomingDatesState(activeWorkspaceRole);
-          return (
-            <ActivationEmptyState
-              title="No upcoming dates yet."
-              body={firstRunState.body}
-              actions={firstRunState.actions}
-              telemetry={{
-                stateType: 'crew.no_upcoming_dates',
-                workspaceId: activeWorkspaceId,
-                projectId: activeProjectId,
-                role: activeWorkspaceRole,
-              }}
-            />
-          );
-        })()
+        upcomingShows.length === 0 ? (
+          (() => {
+            const firstRunState = getCrewNoUpcomingDatesState(activeWorkspaceRole);
+            return (
+              <ActivationEmptyState
+                title="No upcoming dates yet."
+                body={firstRunState.body}
+                actions={firstRunState.actions}
+                telemetry={{
+                  stateType: 'crew.no_upcoming_dates',
+                  workspaceId: activeWorkspaceId,
+                  projectId: activeProjectId,
+                  role: activeWorkspaceRole,
+                }}
+              />
+            );
+          })()
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center text-sm text-zinc-500">No results</div>
+        )
       ) : <div className="grid gap-3">{filteredUpcomingShows.map((show) => <ShowCard key={show.id} show={show} tab="upcoming" />)}</div>}
     </div>
   );

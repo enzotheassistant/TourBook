@@ -235,6 +235,28 @@ function readExpandedSectionsPreference() {
 }
 
 
+function getAdminListPrimaryLabel(show: Show): string {
+  if (show.day_type === 'off') {
+    const loc = show.city || show.venue_name;
+    return loc ? `Off Day \u2014 ${loc}` : 'Off Day';
+  }
+  if (show.day_type === 'travel') {
+    return 'Travel Day';
+  }
+  return `${show.city}${show.region ? `, ${show.region}` : ''}`;
+}
+
+function getAdminListSubLabel(show: Show): string | null {
+  if (show.day_type === 'travel') {
+    return show.venue_name || show.city || null;
+  }
+  if (show.day_type === 'off') {
+    if (show.venue_name && show.venue_name !== show.city) return show.venue_name;
+    return null;
+  }
+  return show.venue_name || null;
+}
+
 function getDayTypeBadge(dayType: TourDayType) {
   if (dayType === 'travel') return 'Travel Day';
   if (dayType === 'off') return 'Off Day';
@@ -3297,10 +3319,10 @@ function ShowListSection({
           <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
             <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
             <div className="mt-1 flex items-center gap-2">
-              <p className="text-sm font-medium">{show.city}{show.region ? `, ${show.region}` : ''}</p>
+              <p className="text-sm font-medium">{getAdminListPrimaryLabel(show)}</p>
               {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}
             </div>
-            <p className="text-sm text-zinc-300">{show.venue_name}</p>
+            {getAdminListSubLabel(show) ? <p className="text-sm text-zinc-300">{getAdminListSubLabel(show)}</p> : null}
           </Link>
 
           <div className="flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
