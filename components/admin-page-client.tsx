@@ -77,7 +77,7 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200' : 'border-white/10 font-normal text-zinc-400 hover:border-white/20 hover:bg-white/5 hover:text-zinc-200'}`;
 }
 
 
@@ -1885,7 +1885,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Operations</span>
+        <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Ops</span>
         <button
           type="button"
           onClick={async () => {
@@ -1944,8 +1944,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           Drafts
         </button>
 
-        <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
-        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
+        <span className="mx-0.5 h-4 w-px bg-white/10" aria-hidden="true" />
+        <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Space</span>
         <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
           Team
         </Link>
@@ -3152,19 +3152,28 @@ function CollapsibleSection({
         <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <h2 className="truncate text-base font-semibold">{title}</h2>
           {!expanded && hasContent ? (
-            <>
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
-              {typeof visibilityState === 'boolean' ? <span className="text-xs font-medium text-zinc-400">{visibilityState ? 'Visible' : 'Hidden'}</span> : null}
-            </>
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-300" />
+          ) : null}
+          {!expanded && typeof visibilityState === 'boolean' ? (
+            <span className={`shrink-0 text-xs font-medium ${visibilityState ? 'text-emerald-400/70' : 'text-zinc-500'}`}>
+              {visibilityState ? 'Crew: visible' : 'Crew: hidden'}
+            </span>
           ) : null}
         </button>
         <div className="flex items-center gap-2">
-          {expanded && typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} /> : null}
+          {expanded && typeof visibilityState === 'boolean' && onVisibilityToggle ? (
+            <div className="flex items-center gap-1.5" title="Controls whether this section is visible to crew">
+              <span className="hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 sm:inline">Crew view</span>
+              <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} />
+            </div>
+          ) : null}
+          <span className="h-4 w-px bg-white/10" aria-hidden="true" />
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
             className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300"
             aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+            title={expanded ? 'Collapse section (admin view only)' : 'Expand section'}
           >
             <span className={`inline-block transition-transform ${expanded ? 'rotate-90' : 'rotate-0'}`}>›</span>
           </button>
