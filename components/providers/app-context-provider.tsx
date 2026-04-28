@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import {
   getBrowserSupabaseClient,
   syncSessionToServer,
@@ -61,6 +62,67 @@ function resetBootstrapState(setBootstrap: Dispatch<SetStateAction<BootstrapCont
   setBootstrap(EMPTY_CONTEXT);
 }
 
+async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Session | null> {
+  authLog('refreshContext: calling supabase.auth.getSession()…');
+  let {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  authLog(
+    session
+      ? `refreshContext: getSession() → session found ✓ (user: ${session.user?.email ?? session.user?.id}, expires: ${new Date((session.expires_at ?? 0) * 1000).toISOString()})`
+      : 'refreshContext: getSession() → null — localStorage is empty or session expired',
+  );
+
+  if (session) {
+    return session;
+  }
+
+  authLog('refreshContext: no session — checking for backup refresh token cookie…');
+  const backupToken = getBackupRefreshTokenWithDiagnostics();
+  if (!backupToken) {
+    authLog('refreshContext: no backup token available');
+    return null;
+  }
+
+  authLog('refreshContext: attempting silent recovery via refreshSession()…');
+  const { data: recovered, error: refreshError } = await supabase.auth.refreshSession({
+    refresh_token: backupToken,
+  });
+
+  if (!refreshError && recovered.session) {
+    authLog(`refreshContext: silent recovery SUCCEEDED ✓ (user: ${recovered.session.user?.email ?? recovered.session.user?.id})`);
+    return recovered.session;
+  }
+
+  authLog('refreshContext: silent recovery FAILED ✗', {
+    error: refreshError?.message ?? refreshError,
+    hasRecoveredSession: !!recovered.session,
+  });
+  clearBackupRefreshToken();
+  return null;
+}
+
+async function syncSessionIfPresent(session: Session | null) {
+  if (!session?.access_token || !session.refresh_token) {
+    return;
+  }
+
+  backupRefreshToken(session.refresh_token);
+  authLog('refreshContext: syncing session to server cookies…');
+  await syncSessionToServer(session.access_token, session.refresh_token);
+  authLog('refreshContext: server sync complete ✓');
+}
+
+async function fetchContext(session: Session | null) {
+  return fetch('/api/me/context', {
+    method: 'GET',
+    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
+}
+
 export function AppContextProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [bootstrap, setBootstrap] = useState<BootstrapContext>(EMPTY_CONTEXT);
@@ -71,68 +133,32 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
     try {
       const supabase = getBrowserSupabaseClient();
+      let session = await getOrRecoverBrowserSession(supabase);
 
-      // Restore session from localStorage (PWA persistence).
-      // getSession() reads from localStorage and will auto-refresh the access
-      // token if it is expired but a valid refresh token exists.
-      authLog("refreshContext: calling supabase.auth.getSession()…");
-      let {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      authLog(
-        session
-          ? `refreshContext: getSession() → session found ✓ (user: ${session.user?.email ?? session.user?.id}, expires: ${new Date((session.expires_at ?? 0) * 1000).toISOString()})`
-          : "refreshContext: getSession() → null — localStorage is empty or session expired",
-      );
-
-      // iOS Safari PWA recovery: if localStorage was cleared by the OS
-      // (ITP eviction, low storage, system update), getSession() returns null.
-      // Attempt a silent recovery using the refresh token backed up in a
-      // persistent cookie before giving up and redirecting to /login.
       if (!session) {
-        authLog("refreshContext: no session — checking for backup refresh token cookie…");
-        const backupToken = getBackupRefreshTokenWithDiagnostics();
-        if (backupToken) {
-          authLog("refreshContext: attempting silent recovery via refreshSession()…");
-          const { data: recovered, error: refreshError } = await supabase.auth.refreshSession({
-            refresh_token: backupToken,
-          });
-          if (!refreshError && recovered.session) {
-            session = recovered.session;
-            authLog(`refreshContext: silent recovery SUCCEEDED ✓ (user: ${session.user?.email ?? session.user?.id})`);
-          } else {
-            authLog("refreshContext: silent recovery FAILED ✗", {
-              error: refreshError?.message ?? refreshError,
-              hasRecoveredSession: !!recovered.session,
-            });
-            // Backup token is stale — remove it so we don't retry indefinitely.
-            clearBackupRefreshToken();
-          }
-        } else {
-          authLog("refreshContext: no backup token — will redirect to /login");
+        authLog('refreshContext: unable to establish browser session — redirecting to /login');
+        resetBootstrapState(setBootstrap);
+        router.replace('/login');
+        router.refresh();
+        return;
+      }
+
+      await syncSessionIfPresent(session);
+
+      let response = await fetchContext(session);
+
+      if (response.status === 401) {
+        authLog('refreshContext: /api/me/context returned 401 — attempting repair-before-redirect');
+        session = await getOrRecoverBrowserSession(supabase);
+
+        if (session) {
+          await syncSessionIfPresent(session);
+          response = await fetchContext(session);
         }
       }
 
-      if (session?.access_token && session?.refresh_token) {
-        // Keep the cookie backup current with the latest refresh token so
-        // the next recovery attempt (if localStorage is cleared again) works.
-        backupRefreshToken(session.refresh_token);
-        // Re-sync server-side cookies on every boot so Next.js API routes
-        // can authenticate the user even after a PWA close/reopen.
-        authLog("refreshContext: syncing session to server cookies…");
-        await syncSessionToServer(session.access_token, session.refresh_token);
-        authLog("refreshContext: server sync complete ✓");
-      }
-
-      const response = await fetch('/api/me/context', {
-        method: 'GET',
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
-        credentials: 'same-origin',
-        cache: 'no-store',
-      });
-
       if (response.status === 401) {
+        authLog('refreshContext: repair failed — redirecting to /login');
         resetBootstrapState(setBootstrap);
         router.replace('/login');
         router.refresh();
@@ -219,12 +245,12 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     const supabase = getBrowserSupabaseClient();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      authLog(`onAuthStateChange: event="${event}" session=${session ? `✓ (user: ${session.user?.email ?? session.user?.id})` : "null"}`);
+      authLog(`onAuthStateChange: event="${event}" session=${session ? `✓ (user: ${session.user?.email ?? session.user?.id})` : 'null'}`);
 
       if (event === 'TOKEN_REFRESHED' && session?.access_token && session?.refresh_token) {
         // Keep the cookie backup current whenever the token is refreshed
         // (Supabase rotates the refresh token on each refresh).
-        authLog("onAuthStateChange: TOKEN_REFRESHED — updating backup cookie + server sync");
+        authLog('onAuthStateChange: TOKEN_REFRESHED — updating backup cookie + server sync');
         backupRefreshToken(session.refresh_token);
         await syncSessionToServer(session.access_token, session.refresh_token);
       }
@@ -232,12 +258,12 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_IN' && session?.refresh_token) {
         // Also back up on initial sign-in (covers the login page path where
         // session is created and app is redirected to home).
-        authLog("onAuthStateChange: SIGNED_IN — writing backup cookie");
+        authLog('onAuthStateChange: SIGNED_IN — writing backup cookie');
         backupRefreshToken(session.refresh_token);
       }
 
       if (event === 'SIGNED_OUT') {
-        authLog("onAuthStateChange: SIGNED_OUT — clearing backup cookie + server session");
+        authLog('onAuthStateChange: SIGNED_OUT — clearing backup cookie + server session');
         clearBackupRefreshToken();
         try {
           await clearServerSession();
