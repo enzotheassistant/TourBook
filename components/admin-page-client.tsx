@@ -42,6 +42,20 @@ function dangerButtonClassName() {
   return 'inline-flex h-11 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
 }
 
+/** Responsive button sizes: h-10 on mobile, h-11 on sm+. Avoids conflicting class stacking. */
+function responsivePrimaryButtonClassName() {
+  return 'inline-flex h-10 sm:h-11 items-center justify-center rounded-full bg-emerald-500 px-3 sm:px-4 text-[13px] sm:text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-60 shrink-0';
+}
+
+function responsiveSecondaryButtonClassName() {
+  return 'inline-flex h-10 sm:h-11 items-center justify-center rounded-full border border-white/10 bg-transparent px-3 sm:px-4 text-[13px] sm:text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05] shrink-0';
+}
+
+/** Small ghost icon button for destructive row actions (e.g. delete schedule row). */
+function rowDeleteButtonClassName() {
+  return 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-500/20 text-red-300/60 transition hover:border-red-400/35 hover:bg-red-500/10 hover:text-red-200';
+}
+
 function filterShows(shows: Show[], search: string, selectedTour: string) {
   const normalizedSearch = search.trim().toLowerCase();
   return shows.filter((show) => {
@@ -2029,10 +2043,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
                       Delete
                     </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={responsiveSecondaryButtonClassName()}>
                       {saving ? 'Saving...' : 'Save'}
                     </button>
-                    <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
+                    <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={responsivePrimaryButtonClassName()}>
                       {saving ? 'Publishing...' : 'Publish'}
                     </button>
                   </>
@@ -2042,13 +2056,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   </button>
                 ) : (
                   <>
-                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={openImportModal} className={responsiveSecondaryButtonClassName()}>
                       Import
                     </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
+                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={responsiveSecondaryButtonClassName()}>
                       {saving ? 'Saving...' : 'Save Draft'}
                     </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
+                    <button type="submit" form="admin-show-form" disabled={saving} className={responsivePrimaryButtonClassName()}>
                       {saving ? 'Saving...' : 'Create'}
                     </button>
                   </>
@@ -2159,10 +2173,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <div className="space-y-3">
                 {form.schedule_items.map((item, index) => (
                   <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
                       <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                      <button type="button" onClick={() => removeScheduleRow(item.id)} className={dangerButtonClassName()}>
-                        Delete
+                      <button
+                        type="button"
+                        onClick={() => removeScheduleRow(item.id)}
+                        className={rowDeleteButtonClassName()}
+                        aria-label={`Remove line ${index + 1}`}
+                        title="Remove this schedule row"
+                      >
+                        <TrashIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
                     <div className="grid gap-3 md:hidden">
@@ -3461,6 +3481,15 @@ function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
       <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M3 6H5H21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6M19 6L18.0557 19.1302C18.0241 19.6088 17.6251 19.9818 17.1455 20H6.8545C6.37491 19.9818 5.97589 19.6088 5.94426 19.1302L5 6H19Z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
