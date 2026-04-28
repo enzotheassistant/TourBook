@@ -37,6 +37,14 @@ export async function POST(request: NextRequest) {
 // DELETE — called on logout to clear server-side session cookies.
 export async function DELETE(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
-  clearSessionCookies(response);
-  return response;
+
+  try {
+    const supabase = createRouteHandlerSupabaseClient(request, response);
+    await supabase.auth.signOut();
+  } catch {
+    return NextResponse.json({ error: 'Unable to clear server session.' }, { status: 500 });
+  }
+
+  clearSessionCookies(request, response);
+  return finalizeAuthResponse(response);
 }

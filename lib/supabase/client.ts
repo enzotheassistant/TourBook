@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { RT_COOKIE } from "@/lib/supabase/constants";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -19,7 +20,6 @@ let browserClient: SupabaseClient | null = null;
 // backup current.
 // ---------------------------------------------------------------------------
 
-const RT_COOKIE = "tb-rt"; // "TourBook refresh token"
 const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
 
 // ---------------------------------------------------------------------------
@@ -165,12 +165,12 @@ export async function syncSessionToServer(accessToken: string, refreshToken: str
  * also invalidated.
  */
 export async function clearServerSession(): Promise<void> {
-  try {
-    await fetch("/api/auth/session", {
-      method: "DELETE",
-      credentials: "same-origin",
-    });
-  } catch {
-    // Best-effort — ignore errors on logout.
+  const response = await fetch("/api/auth/session", {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    throw new Error(response.status >= 500 ? 'Unable to clear server session.' : 'Logout failed.');
   }
 }

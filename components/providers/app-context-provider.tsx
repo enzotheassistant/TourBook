@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getBrowserSupabaseClient,
@@ -12,18 +12,21 @@ import {
   authLog,
 } from '@/lib/supabase/client';
 import type { BootstrapContext } from '@/lib/types/tenant';
+import {
+  PROJECT_STORAGE_KEY,
+  TOUR_STORAGE_KEY,
+  WORKSPACE_STORAGE_KEY,
+  clearAppContextStorage,
+} from '@/lib/app-context-storage';
 
 type AppContextValue = BootstrapContext & {
   isLoading: boolean;
   refreshContext: () => Promise<void>;
+  resetContext: () => void;
   setActiveWorkspaceId: (workspaceId: string | null) => void;
   setActiveProjectId: (projectId: string | null) => void;
   setActiveTourId: (tourId: string | null) => void;
 };
-
-const WORKSPACE_STORAGE_KEY = 'tourbook.activeWorkspaceId';
-const PROJECT_STORAGE_KEY = 'tourbook.activeProjectId';
-const TOUR_STORAGE_KEY = 'tourbook.activeTourId';
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -51,6 +54,11 @@ function writeStoredValue(key: string, value: string | null) {
   } else {
     window.localStorage.removeItem(key);
   }
+}
+
+function resetBootstrapState(setBootstrap: Dispatch<SetStateAction<BootstrapContext>>) {
+  clearAppContextStorage();
+  setBootstrap(EMPTY_CONTEXT);
 }
 
 export function AppContextProvider({ children }: { children: ReactNode }) {
@@ -125,7 +133,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.status === 401) {
-        setBootstrap(EMPTY_CONTEXT);
+        resetBootstrapState(setBootstrap);
         router.replace('/login');
         router.refresh();
         return;
@@ -231,7 +239,11 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_OUT') {
         authLog("onAuthStateChange: SIGNED_OUT — clearing backup cookie + server session");
         clearBackupRefreshToken();
-        await clearServerSession();
+        try {
+          await clearServerSession();
+        } catch (error) {
+          authLog('onAuthStateChange: SIGNED_OUT — server session clear failed', error);
+        }
       }
     });
 
@@ -256,6 +268,9 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     ...bootstrap,
     isLoading,
     refreshContext,
+    resetContext: () => {
+      resetBootstrapState(setBootstrap);
+    },
     setActiveWorkspaceId: (workspaceId) => {
       setBootstrap((current) => {
         const nextProjects = current.projects.filter((project) => project.workspaceId === workspaceId);

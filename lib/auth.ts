@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { RT_COOKIE } from "@/lib/supabase/constants";
 import { createRouteHandlerSupabaseClient, createServerSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
@@ -149,15 +150,32 @@ export function finalizeAuthResponse(response: NextResponse, authState?: AuthSta
   return response;
 }
 
-export function clearSessionCookies(response: NextResponse) {
-  for (const cookie of response.cookies.getAll()) {
-    if (cookie.name.startsWith("sb-")) {
-      response.cookies.set(cookie.name, "", {
-        maxAge: 0,
-        path: "/",
-      });
+export function clearSessionCookies(request: NextRequest, response: NextResponse) {
+  const cookieNames = new Set<string>([RT_COOKIE]);
+
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith('sb-')) {
+      cookieNames.add(cookie.name);
     }
   }
 
+  for (const cookie of authStateCookieCandidates()) {
+    cookieNames.add(cookie);
+  }
+
+  for (const cookieName of cookieNames) {
+    response.cookies.set(cookieName, '', {
+      maxAge: 0,
+      path: '/',
+    });
+  }
+
   return response;
+}
+
+function authStateCookieCandidates() {
+  return [
+    'sb-access-token',
+    'sb-refresh-token',
+  ];
 }
