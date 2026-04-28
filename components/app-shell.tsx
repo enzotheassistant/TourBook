@@ -92,7 +92,7 @@ function AdminProjectSelector() {
           const next = pickNextProjectId(activeProjectId, event.target.value, scopedProjects);
           if (next !== activeProjectId) setActiveProjectId(next);
         }}
-        className="h-8 max-w-[260px] rounded-lg border border-white/15 bg-white/[0.03] px-2 text-xs text-zinc-200 outline-none transition hover:border-white/25 focus:border-white/30"
+        className="h-8 max-w-[260px] rounded-2xl border border-white/15 bg-white/[0.03] px-2 text-xs text-zinc-200 outline-none transition hover:border-white/25 focus:border-white/30"
       >
         {scopedProjects.map((project) => (
           <option key={project.id} value={project.id} className="bg-zinc-900 text-zinc-100">

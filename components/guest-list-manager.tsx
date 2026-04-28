@@ -135,7 +135,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
                     <input
                       value={editingValue}
                       onChange={(event) => setEditingValue(event.target.value)}
-                      className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none focus:border-emerald-400/40"
+                      className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none focus:border-emerald-400/40"
                     />
                     <div className="flex justify-end gap-2">
                       <button type="button" onClick={() => { setEditingId(null); setEditingValue(''); }} className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm text-zinc-300">

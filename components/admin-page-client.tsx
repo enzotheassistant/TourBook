@@ -82,11 +82,11 @@ function adminTabClassName(active: boolean) {
 
 
 function fieldClassName() {
-  return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
+  return 'h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 function filterFieldClassName() {
-  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
+  return 'h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40';
 }
 
 function inlineFilterButtonClassName() {
@@ -1551,7 +1551,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <select
               value={activeWorkspaceId}
               onChange={(event) => handleWorkspaceSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+              className="h-11 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
@@ -1564,7 +1564,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <select
               value=""
               onChange={(event) => handleArtistSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+              className="h-11 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
             >
               <option value="">Select artist…</option>
               {projectsForActiveWorkspace.map((project) => (
@@ -1629,7 +1629,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   value={newArtistName}
                   onChange={(event) => setNewArtistName(event.target.value)}
                   placeholder="Artist name"
-                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+                  className="h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
                 />
                 <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
                   {creatingArtist ? 'Creating…' : 'Create Artist'}
@@ -1829,7 +1829,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                                   value={item.time}
                                   onChange={(event) => updateImportScheduleItem(row.id, item.id, { time: event.target.value })}
                                   placeholder="Time"
-                                  className="h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40 sm:w-44"
+                                  className="h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-emerald-400/40 sm:w-44"
                                 />
                               </div>
                             ))}
@@ -2083,7 +2083,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     value={form.day_type}
                     onChange={(event) => handleDayTypeChange(event.target.value as TourDayType)}
                     aria-label="Day type"
-                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/40 focus:bg-white/[0.03]"
+                    className="h-11 w-full appearance-none rounded-2xl border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-emerald-400/40 focus:bg-white/[0.03]"
                   >
                     <option value="show">Show Day</option>
                     <option value="travel">Travel Day</option>
@@ -2407,7 +2407,7 @@ function ProjectManagementSection({
             value={newArtistName}
             onChange={(event) => onNewArtistNameChange(event.target.value)}
             placeholder="New artist name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
           />
           <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
             {creatingArtist ? 'Creating…' : 'Create artist'}
@@ -2502,7 +2502,7 @@ function ProjectManagementSection({
                     value={renameValue}
                     onChange={(event) => setRenameValue(event.target.value)}
                     placeholder="Artist name"
-                    className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+                    className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
                     autoFocus
                   />
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -2673,14 +2673,14 @@ function InviteManagementSection({
             onChange={(event) => onNameChange(event.target.value)}
             type="text"
             placeholder="Name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
           />
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
             type="email"
             placeholder="teammate@example.com"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
+            className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-400/40"
           />
           <select
             value={role}
@@ -2693,7 +2693,7 @@ function InviteManagementSection({
                 onScopeTourIdsChange([]);
               }
             }}
-            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
+            className="h-11 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40"
           >
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
@@ -3009,7 +3009,7 @@ function EditMemberDialog({
               onProjectIdsChange([]);
               onTourIdsChange([]);
             }
-          }} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40">
+          }} className="h-11 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-emerald-400/40">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
             {canAssignAdmin ? <option value="admin">Admin</option> : null}
