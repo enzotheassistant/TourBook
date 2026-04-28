@@ -85,21 +85,28 @@ function AdminProjectSelector() {
   return (
     <div className="pt-1">
       <label htmlFor="admin-project-selector" className="sr-only">Active project</label>
-      <select
-        id="admin-project-selector"
-        value={currentProject.id}
-        onChange={(event) => {
-          const next = pickNextProjectId(activeProjectId, event.target.value, scopedProjects);
-          if (next !== activeProjectId) setActiveProjectId(next);
-        }}
-        className="h-8 max-w-[260px] rounded-2xl border border-white/15 bg-white/[0.03] px-2 text-xs text-zinc-200 outline-none transition hover:border-white/25 focus:border-white/30"
-      >
-        {scopedProjects.map((project) => (
-          <option key={project.id} value={project.id} className="bg-zinc-900 text-zinc-100">
-            {project.name || project.slug || project.id}
-          </option>
-        ))}
-      </select>
+      <div className="relative flex h-10 max-w-[260px] items-center rounded-2xl border border-white/10 bg-black/20 px-3 transition hover:border-white/20 focus-within:border-white/25">
+        <select
+          id="admin-project-selector"
+          value={currentProject.id}
+          onChange={(event) => {
+            const next = pickNextProjectId(activeProjectId, event.target.value, scopedProjects);
+            if (next !== activeProjectId) setActiveProjectId(next);
+          }}
+          className="w-full appearance-none bg-transparent pr-6 text-xs text-zinc-200 outline-none"
+        >
+          {scopedProjects.map((project) => (
+            <option key={project.id} value={project.id} className="bg-zinc-900 text-zinc-100">
+              {project.name || project.slug || project.id}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden="true">
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+      </div>
     </div>
   );
 }
