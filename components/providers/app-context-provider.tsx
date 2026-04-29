@@ -19,6 +19,20 @@ import {
   WORKSPACE_STORAGE_KEY,
   clearAppContextStorage,
 } from '@/lib/app-context-storage';
+import {
+  logBootstrapStart,
+  logSessionFromStorage,
+  logBackupTokenStatus,
+  logSilentRecoveryAttempt,
+  logSilentRecoveryResult,
+  logContextFetchStart,
+  logContextFetchResult,
+  logServerSessionSync,
+  logLoginRedirect,
+  logAuthStateChange,
+  logSessionError,
+  logAppVisibility,
+} from '@/lib/debug/session-recovery';
 
 type AppContextValue = BootstrapContext & {
   isLoading: boolean;
@@ -64,6 +78,8 @@ function resetBootstrapState(setBootstrap: Dispatch<SetStateAction<BootstrapCont
 
 async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Session | null> {
   authLog('refreshContext: calling supabase.auth.getSession()…');
+  logSessionFromStorage(null); // Will update after call
+  
   let {
     data: { session },
   } = await supabase.auth.getSession();
@@ -75,15 +91,23 @@ async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Ses
   );
 
   if (session) {
+    logSessionFromStorage(session.user?.id);
     return session;
   }
 
+  logSessionFromStorage(null);
+
   authLog('refreshContext: no session — checking for backup refresh token cookie…');
+  logSilentRecoveryAttempt('localStorage_empty_or_expired');
+  
   const backupToken = getBackupRefreshTokenWithDiagnostics();
   if (!backupToken) {
     authLog('refreshContext: no backup token available');
+    logBackupTokenStatus(false);
     return null;
   }
+
+  logBackupTokenStatus(true);
 
   authLog('refreshContext: attempting silent recovery via refreshSession()…');
   const { data: recovered, error: refreshError } = await supabase.auth.refreshSession({
@@ -92,6 +116,7 @@ async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Ses
 
   if (!refreshError && recovered.session) {
     authLog(`refreshContext: silent recovery SUCCEEDED ✓ (user: ${recovered.session.user?.email ?? recovered.session.user?.id})`);
+    logSilentRecoveryResult(true, undefined, recovered.session.user?.id);
     return recovered.session;
   }
 
@@ -99,6 +124,8 @@ async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Ses
     error: refreshError?.message ?? refreshError,
     hasRecoveredSession: !!recovered.session,
   });
+  logSilentRecoveryResult(false, refreshError?.name ?? 'unknown_error', undefined);
+  logSessionError('silent_recovery', refreshError?.name ?? 'refresh_failed', refreshError?.message);
   clearBackupRefreshToken();
   return null;
 }
@@ -110,17 +137,39 @@ async function syncSessionIfPresent(session: Session | null) {
 
   backupRefreshToken(session.refresh_token);
   authLog('refreshContext: syncing session to server cookies…');
-  await syncSessionToServer(session.access_token, session.refresh_token);
-  authLog('refreshContext: server sync complete ✓');
+  
+  try {
+    const syncStart = performance.now();
+    await syncSessionToServer(session.access_token, session.refresh_token);
+    const syncDuration = Math.round(performance.now() - syncStart);
+    authLog('refreshContext: server sync complete ✓');
+    logServerSessionSync(true, undefined, undefined);
+    logSessionError('server_sync', 'none', `completed in ${syncDuration}ms`);
+  } catch (err) {
+    const errorType = err instanceof Error ? err.name : typeof err;
+    authLog('refreshContext: server sync error', err);
+    logServerSessionSync(false, undefined, String(errorType));
+    logSessionError('server_sync', String(errorType), err instanceof Error ? err.message : String(err));
+  }
 }
 
 async function fetchContext(session: Session | null) {
-  return fetch('/api/me/context', {
-    method: 'GET',
-    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
-    credentials: 'same-origin',
-    cache: 'no-store',
-  });
+  logContextFetchStart();
+  try {
+    const response = await fetch('/api/me/context', {
+      method: 'GET',
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    
+    logContextFetchResult(response.ok, response.status, response.ok ? undefined : 'http_error');
+    return response;
+  } catch (err) {
+    const errorType = err instanceof Error ? err.name : 'unknown';
+    logContextFetchResult(false, undefined, errorType);
+    throw err;
+  }
 }
 
 export function AppContextProvider({ children }: { children: ReactNode }) {
@@ -132,6 +181,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
   const refreshContext = useCallback(async () => {
     setIsLoading(true);
+    logBootstrapStart();
 
     try {
       const supabase = getBrowserSupabaseClient();
@@ -139,6 +189,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
       if (!session) {
         authLog('refreshContext: unable to establish browser session — redirecting to /login');
+        logLoginRedirect('session_recovery_failed');
         resetBootstrapState(setBootstrap);
         // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
         if (!isRedirectingRef.current) {
@@ -155,6 +206,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
       if (response.status === 401) {
         authLog('refreshContext: /api/me/context returned 401 — attempting repair-before-redirect');
+        logSessionError('context_fetch', 'unauthorized_initial', 'attempting repair');
         session = await getOrRecoverBrowserSession(supabase);
 
         if (session) {
@@ -165,6 +217,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
       if (response.status === 401) {
         authLog('refreshContext: repair failed — redirecting to /login');
+        logLoginRedirect('context_fetch_unauthorized', { repaired: true });
         resetBootstrapState(setBootstrap);
         // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
         if (!isRedirectingRef.current) {
@@ -176,6 +229,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       }
 
       if (!response.ok) {
+        logSessionError('context_fetch', 'http_error', `status ${response.status}`);
         setBootstrap(EMPTY_CONTEXT);
         return;
       }
@@ -236,6 +290,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   // Debounce the refresh to avoid redirect races when visibility changes rapidly.
   useEffect(() => {
     const handleVisibilityChange = () => {
+      logAppVisibility(document.visibilityState === 'visible');
+      
       if (document.visibilityState === 'visible') {
         // Clear any pending refresh timer to debounce rapid visibility changes.
         if (visibilityRefreshTimeoutRef.current) {
@@ -243,6 +299,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         }
         // Debounce the refresh by 300ms to avoid multiple simultaneous refresh attempts.
         visibilityRefreshTimeoutRef.current = setTimeout(() => {
+          authLog('handleVisibilityChange: triggering context refresh after debounce');
           void refreshContext();
         }, 300);
       }
@@ -267,13 +324,21 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       authLog(`onAuthStateChange: event="${event}" session=${session ? `✓ (user: ${session.user?.email ?? session.user?.id})` : 'null'}`);
+      logAuthStateChange(event, !!session, session?.user?.id);
 
       if (event === 'TOKEN_REFRESHED' && session?.access_token && session?.refresh_token) {
         // Keep the cookie backup current whenever the token is refreshed
         // (Supabase rotates the refresh token on each refresh).
         authLog('onAuthStateChange: TOKEN_REFRESHED — updating backup cookie + server sync');
         backupRefreshToken(session.refresh_token);
-        await syncSessionToServer(session.access_token, session.refresh_token);
+        try {
+          await syncSessionToServer(session.access_token, session.refresh_token);
+          logServerSessionSync(true);
+        } catch (err) {
+          const errorType = err instanceof Error ? err.name : 'unknown';
+          logServerSessionSync(false, undefined, errorType);
+          authLog('onAuthStateChange: TOKEN_REFRESHED — server sync failed', err);
+        }
       }
 
       if (event === 'SIGNED_IN' && session?.refresh_token) {
@@ -290,6 +355,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
           await clearServerSession();
         } catch (error) {
           authLog('onAuthStateChange: SIGNED_OUT — server session clear failed', error);
+          logSessionError('signed_out', 'server_clear_failed', error instanceof Error ? error.message : String(error));
         }
       }
     });

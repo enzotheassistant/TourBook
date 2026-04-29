@@ -34,12 +34,18 @@ function isOptionalBootstrapSchemaDriftError(error: unknown) {
 
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
-  if (authState instanceof NextResponse) return authState;
+  if (authState instanceof NextResponse) {
+    console.info('[TourBook Session] GET /api/me/context — auth required, returning unauthorized');
+    return authState;
+  }
 
   const debug = request.nextUrl.searchParams.get('debug') === '1';
   const debugInfo: Record<string, unknown> = {};
 
   const { user, supabase } = authState;
+  console.info('[TourBook Session] GET /api/me/context — building context', {
+    userId: user.id,
+  });
   const baseContext: BootstrapContext = {
     user,
     memberships: [],
@@ -296,6 +302,17 @@ export async function GET(request: NextRequest) {
     const activeToursForProject = activeProjectId ? tours.filter((tour) => tour.projectId === activeProjectId) : [];
     const activeTourId = activeToursForProject[0]?.id ?? null;
 
+    console.info('[TourBook Session] GET /api/me/context — success', {
+      userId: user.id,
+      workspaceCount: workspaces.length,
+      projectCount: allProjects.length,
+      tourCount: tours.length,
+      membershipCount: memberships.length,
+      hasActiveWorkspace: !!activeWorkspaceId,
+      hasActiveProject: !!activeProjectId,
+      hasActiveTour: !!activeTourId,
+    });
+
     return finalizeAuthResponse(NextResponse.json({
       user,
       memberships,
@@ -308,6 +325,13 @@ export async function GET(request: NextRequest) {
       ...(debug ? { _debug: debugInfo } : {}),
     }), authState);
   } catch (error) {
+    const errorType = error instanceof Error ? error.name : typeof error;
+    console.info('[TourBook Session] GET /api/me/context — error', {
+      userId: user.id,
+      errorType,
+      message: error instanceof Error ? error.message?.substring(0, 100) : String(error),
+    });
+
     await recordApiRuntimeError(request, {
       endpoint: '/api/me/context',
       status: 500,

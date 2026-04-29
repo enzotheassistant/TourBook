@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     const refreshToken = body.refreshToken?.trim();
 
     if (!accessToken || !refreshToken) {
+      console.info('[TourBook Session] POST /api/auth/session — missing tokens');
       return NextResponse.json({ error: 'Missing tokens.' }, { status: 400 });
     }
 
@@ -25,11 +26,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
+      console.info('[TourBook Session] POST /api/auth/session — setSession failed', {
+        errorType: error.name,
+        message: error.message?.substring(0, 100),
+      });
       return NextResponse.json({ error: 'Unable to sync session.' }, { status: 401 });
     }
 
+    console.info('[TourBook Session] POST /api/auth/session — session set successfully');
     return finalizeAuthResponse(response);
-  } catch {
+  } catch (err) {
+    const errorType = err instanceof Error ? err.name : 'unknown';
+    console.info('[TourBook Session] POST /api/auth/session — exception', {
+      errorType,
+      message: err instanceof Error ? err.message?.substring(0, 100) : String(err),
+    });
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   }
 }
@@ -41,10 +52,17 @@ export async function DELETE(request: NextRequest) {
   try {
     const supabase = createRouteHandlerSupabaseClient(request, response);
     await supabase.auth.signOut();
-  } catch {
+    console.info('[TourBook Session] DELETE /api/auth/session — signOut succeeded');
+  } catch (err) {
+    const errorType = err instanceof Error ? err.name : 'unknown';
+    console.info('[TourBook Session] DELETE /api/auth/session — signOut failed', {
+      errorType,
+      message: err instanceof Error ? err.message?.substring(0, 100) : String(err),
+    });
     return NextResponse.json({ error: 'Unable to clear server session.' }, { status: 500 });
   }
 
   clearSessionCookies(request, response);
+  console.info('[TourBook Session] DELETE /api/auth/session — cookies cleared');
   return finalizeAuthResponse(response);
 }
