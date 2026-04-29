@@ -67,7 +67,7 @@ export default function LoginPage() {
   const [inviteToken, setInviteToken] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -183,6 +183,9 @@ export default function LoginPage() {
           routeToApp();
           return;
         }
+
+        // Persist email for prefill on login form, regardless of confirmation status
+        localStorage.setItem("tourbook_last_email", normalizedEmail);
 
         setSuccess("Account created. Check your email to confirm, then sign in.");
         setMode("signin");
