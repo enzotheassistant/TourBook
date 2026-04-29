@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect } from 'react';
 import { formatDateBlock, isToday } from '@/lib/date';
 import { Show } from '@/lib/types';
 
@@ -38,13 +42,26 @@ function clampTextClassName(dayType: Show['day_type']) {
 }
 
 export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcoming' | 'past' }) {
+  const router = useRouter();
   const today = isToday(show.date);
+  const href = `/shows/${show.id}?tab=${tab}`;
+
+  // Prefetch on mount to catch cards in viewport early
+  useEffect(() => {
+    router.prefetch(href);
+  }, [href, router]);
+
+  // Prefetch aggressively on hover to warm up the cache before click
+  const handleMouseEnter = useCallback(() => {
+    router.prefetch(href);
+  }, [href, router]);
   const dateBlock = formatDateBlock(show.date);
   const supportingMeta = getSupportingMeta(show);
 
   return (
     <Link
-      href={`/shows/${show.id}?tab=${tab}`}
+      href={href}
+      onMouseEnter={handleMouseEnter}
       className={`group relative block overflow-hidden rounded-[30px] border transition duration-200 active:scale-[0.99] ${
         today
           ? 'border-sky-400/25 bg-sky-500/[0.065] shadow-[0_10px_36px_rgba(99,102,241,0.08)]'
