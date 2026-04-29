@@ -83,12 +83,33 @@ export default function LoginPage() {
       setSuccess("Password updated. Sign in with your new password.");
     }
 
-    // Load saved email from localStorage > sessionStorage > cookie (robust persistence for mobile Safari PWA eviction).
-    const savedEmail = localStorage.getItem("tourbook_last_email") || sessionStorage.getItem("tourbook_last_email") || getBackupRememberedEmail();
-    if (savedEmail) {
-      setEmail(savedEmail);
-      setRememberEmail(true);
+    // Load saved email: try server-side cookie first (most reliable for PWA),
+    // then fall back to client storage for backward compatibility.
+    async function loadRememberedEmail() {
+      try {
+        const serverResponse = await fetch("/api/auth/remembered-email");
+        if (serverResponse.ok) {
+          const { email } = await serverResponse.json();
+          if (email) {
+            setEmail(email);
+            setRememberEmail(true);
+            return;
+          }
+        }
+      } catch (err) {
+        // Fall through to client-side storage
+        authLog("Failed to fetch server-side remembered email; falling back to client storage");
+      }
+
+      // Fallback: try client-side storage (localStorage > sessionStorage > cookie)
+      const savedEmail = localStorage.getItem("tourbook_last_email") || sessionStorage.getItem("tourbook_last_email") || getBackupRememberedEmail();
+      if (savedEmail) {
+        setEmail(savedEmail);
+        setRememberEmail(true);
+      }
     }
+
+    loadRememberedEmail();
   }, []);
 
   const submitLabel = useMemo(() => {
@@ -100,7 +121,7 @@ export default function LoginPage() {
     return "Sign in";
   }, [loading, mode]);
 
-  async function syncSession(accessToken: string, refreshToken: string) {
+  async function syncSession(accessToken: string, refreshToken: string, emailToRemember?: string) {
     const response = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -108,6 +129,7 @@ export default function LoginPage() {
       body: JSON.stringify({
         accessToken,
         refreshToken,
+        email: emailToRemember,
       }),
     });
 
@@ -157,7 +179,7 @@ export default function LoginPage() {
         authLog("login: signInWithPassword succeeded — writing backup cookie");
         backupRefreshToken(data.session.refresh_token);
         authLog("login: syncing session to server…");
-        await syncSession(data.session.access_token, data.session.refresh_token);
+        await syncSession(data.session.access_token, data.session.refresh_token, rememberEmail ? normalizedEmail : undefined);
         authLog("login: server sync done — routing to app");
         routeToApp();
         return;
@@ -183,7 +205,7 @@ export default function LoginPage() {
         if (data.session) {
           authLog("login: signUp succeeded with immediate session — writing backup cookie");
           backupRefreshToken(data.session.refresh_token);
-          await syncSession(data.session.access_token, data.session.refresh_token);
+          await syncSession(data.session.access_token, data.session.refresh_token, normalizedEmail);
           routeToApp();
           return;
         }

@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { RT_COOKIE } from "@/lib/supabase/constants";
+import { RT_COOKIE, EMAIL_COOKIE } from "@/lib/supabase/constants";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -21,7 +21,6 @@ let browserClient: SupabaseClient | null = null;
 // ---------------------------------------------------------------------------
 
 const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
-const EMAIL_COOKIE = 'tb-email';
 const EMAIL_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year (survives Safari force-close)
 
 // ---------------------------------------------------------------------------

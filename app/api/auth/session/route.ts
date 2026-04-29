@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerSupabaseClient } from '@/lib/supabase/server';
 import { clearSessionCookies, finalizeAuthResponse } from '@/lib/auth';
+import { EMAIL_COOKIE } from '@/lib/supabase/constants';
 
 type Body = {
   accessToken?: string;
   refreshToken?: string;
+  email?: string;
 };
+
+const EMAIL_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Body;
     const accessToken = body.accessToken?.trim();
     const refreshToken = body.refreshToken?.trim();
+    const email = body.email?.trim();
 
     if (!accessToken || !refreshToken) {
       console.info('[TourBook Session] POST /api/auth/session — missing tokens');
@@ -31,6 +36,17 @@ export async function POST(request: NextRequest) {
         message: error.message?.substring(0, 100),
       });
       return NextResponse.json({ error: 'Unable to sync session.' }, { status: 401 });
+    }
+
+    // Set remembered email cookie if provided (server-side Set-Cookie for robust PWA persistence)
+    if (email) {
+      response.cookies.set(EMAIL_COOKIE, email, {
+        maxAge: EMAIL_COOKIE_MAX_AGE_S,
+        path: '/',
+        sameSite: 'lax',
+        secure: true,
+      });
+      console.info('[TourBook Session] POST /api/auth/session — email cookie set ✓');
     }
 
     console.info('[TourBook Session] POST /api/auth/session — session set successfully');
@@ -63,6 +79,11 @@ export async function DELETE(request: NextRequest) {
   }
 
   clearSessionCookies(request, response);
+  // Clear email cookie on logout
+  response.cookies.set(EMAIL_COOKIE, '', {
+    maxAge: 0,
+    path: '/',
+  });
   console.info('[TourBook Session] DELETE /api/auth/session — cookies cleared');
   return finalizeAuthResponse(response);
 }
