@@ -67,6 +67,7 @@ export default function LoginPage() {
   const [inviteToken, setInviteToken] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -80,6 +81,13 @@ export default function LoginPage() {
     if (url.searchParams.get("reset") === "success") {
       setMode("signin");
       setSuccess("Password updated. Sign in with your new password.");
+    }
+
+    // Load saved email from localStorage if available
+    const savedEmail = localStorage.getItem("tourbook_last_email");
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberEmail(true);
     }
   }, []);
 
@@ -131,6 +139,13 @@ export default function LoginPage() {
         if (error || !data.session) {
           setError(mapAuthError(error?.message || "Unable to sign in.", { mode: "signin" }));
           return;
+        }
+
+        // Save email to localStorage if "Remember my email" is checked
+        if (rememberEmail) {
+          localStorage.setItem("tourbook_last_email", normalizedEmail);
+        } else {
+          localStorage.removeItem("tourbook_last_email");
         }
 
         // Back up the refresh token to a cookie so we can recover the session
@@ -256,6 +271,17 @@ export default function LoginPage() {
               placeholder="you@example.com"
               required
             />
+            {mode === "signin" ? (
+              <label className="mt-3 flex items-center text-xs text-zinc-400 transition hover:text-zinc-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(event) => setRememberEmail(event.target.checked)}
+                  className="mr-2 rounded border border-white/10 bg-black/30 text-white transition focus:ring-2 focus:ring-white/20"
+                />
+                Remember my email
+              </label>
+            ) : null}
           </div>
 
           {mode !== "forgot" ? (
