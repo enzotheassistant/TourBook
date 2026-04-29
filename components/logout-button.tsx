@@ -20,17 +20,24 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
     try {
       const supabase = getBrowserSupabaseClient();
 
-      await clearServerSession();
-
-      const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) {
-        throw new Error(signOutError.message || 'Unable to sign out.');
-      }
-
-      resetContext();
-      clearBackupRefreshToken();
+      // Initiate redirect immediately to prevent flash of protected content.
+      // Do not await async operations after this point to ensure navigation happens synchronously.
       router.replace('/login');
-      router.refresh();
+      
+      // Fire off async cleanup in background without awaiting (prevents flash during transition).
+      void (async () => {
+        try {
+          await clearServerSession();
+          const { error: signOutError } = await supabase.auth.signOut();
+          if (signOutError) {
+            throw new Error(signOutError.message || 'Unable to sign out.');
+          }
+        } finally {
+          resetContext();
+          clearBackupRefreshToken();
+          router.refresh();
+        }
+      })();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to log out right now.');
       setIsPending(false);

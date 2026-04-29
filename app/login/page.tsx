@@ -83,8 +83,8 @@ export default function LoginPage() {
       setSuccess("Password updated. Sign in with your new password.");
     }
 
-    // Load saved email from localStorage if available
-    const savedEmail = localStorage.getItem("tourbook_last_email");
+    // Load saved email from localStorage first, fallback to sessionStorage (robust persistence for mobile Safari PWA eviction).
+    const savedEmail = localStorage.getItem("tourbook_last_email") || sessionStorage.getItem("tourbook_last_email");
     if (savedEmail) {
       setEmail(savedEmail);
       setRememberEmail(true);
@@ -141,11 +141,13 @@ export default function LoginPage() {
           return;
         }
 
-        // Save email to localStorage if "Remember my email" is checked
+        // Save email to localStorage and sessionStorage if "Remember my email" is checked (robust persistence for mobile Safari PWA eviction).
         if (rememberEmail) {
           localStorage.setItem("tourbook_last_email", normalizedEmail);
+          sessionStorage.setItem("tourbook_last_email", normalizedEmail);
         } else {
           localStorage.removeItem("tourbook_last_email");
+          sessionStorage.removeItem("tourbook_last_email");
         }
 
         // Back up the refresh token to a cookie so we can recover the session
@@ -184,8 +186,9 @@ export default function LoginPage() {
           return;
         }
 
-        // Persist email for prefill on login form, regardless of confirmation status
+        // Persist email for prefill on login form, regardless of confirmation status (robust persistence for mobile Safari PWA eviction).
         localStorage.setItem("tourbook_last_email", normalizedEmail);
+        sessionStorage.setItem("tourbook_last_email", normalizedEmail);
 
         setSuccess("Account created. Check your email to confirm, then sign in.");
         setMode("signin");

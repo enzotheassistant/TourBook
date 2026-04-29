@@ -152,6 +152,11 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     return () => clearTimeout(timer);
   }, [loaded]);
 
+  // Reset scroll to top when navigating to a detail page (fixes mobile Safari part-scrolled issue).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [showId]);
+
   useEffect(() => {
     let active = true;
     async function load() {
