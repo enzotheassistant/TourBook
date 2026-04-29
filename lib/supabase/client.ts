@@ -21,6 +21,8 @@ let browserClient: SupabaseClient | null = null;
 // ---------------------------------------------------------------------------
 
 const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
+const EMAIL_COOKIE = 'tb-email';
+const EMAIL_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year (survives Safari force-close)
 
 // ---------------------------------------------------------------------------
 // Debug logging helper — uses console.warn so it's visible in Safari Web
@@ -94,6 +96,37 @@ export function clearBackupRefreshToken(): void {
   if (typeof document === "undefined") return;
   document.cookie = `${RT_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax; Secure`;
   authLog("clearBackupRefreshToken: backup cookie cleared");
+}
+
+// ---------------------------------------------------------------------------
+// Remembered email cookie backup
+//
+// Mobile Safari PWA eviction clears both localStorage and sessionStorage,
+// but cookies with long expiry survive the force-close. We store the
+// remembered email in a cookie as a durable fallback.
+// ---------------------------------------------------------------------------
+
+/** Persist the remembered email in a durable cookie (survives Safari force-close). */
+export function backupRememberedEmail(email: string): void {
+  if (typeof document === "undefined") return;
+  const expires = new Date(Date.now() + EMAIL_COOKIE_MAX_AGE_S * 1000).toUTCString();
+  const cookieStr = `${EMAIL_COOKIE}=${encodeURIComponent(email)}; expires=${expires}; path=/; SameSite=Lax; Secure`;
+  document.cookie = cookieStr;
+  authLog("backupRememberedEmail: email cookie WRITTEN ✓");
+}
+
+/** Read the remembered email from the cookie, or null if absent. */
+export function getBackupRememberedEmail(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(^|;\s*)tb-email=([^;]+)/);
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+/** Remove the remembered email cookie (called on sign-out). */
+export function clearBackupRememberedEmail(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${EMAIL_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax; Secure`;
+  authLog("clearBackupRememberedEmail: email cookie cleared");
 }
 
 // ---------------------------------------------------------------------------

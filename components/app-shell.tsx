@@ -226,7 +226,18 @@ export function AppShell({
   showSubtitle?: boolean;
 }) {
   const pathname = usePathname();
-  const { activeWorkspaceId, activeProjectId, projects } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, projects, user, isLoading } = useAppContext();
+  
+  // Guard: Do not render protected content if user is not authenticated and loading is complete.
+  // This prevents the flash of protected UI during logout/session loss.
+  // While loading, render nothing to keep the page blank until auth state is determined.
+  if (!user && !isLoading) {
+    return null;
+  }
+  if (isLoading) {
+    return null;
+  }
+  
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
