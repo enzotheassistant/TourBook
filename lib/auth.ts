@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { RT_COOKIE } from "@/lib/supabase/constants";
+import { RT_COOKIE, EMAIL_COOKIE } from "@/lib/supabase/constants";
 import { createRouteHandlerSupabaseClient, createServerSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
@@ -138,6 +139,22 @@ export async function requireAdminApiAuth(request: NextRequest) {
     { error: 'Deprecated auth helper. Use requireApiAuthForWorkspaceAdmin with explicit workspaceId.' },
     { status: 500 },
   );
+}
+
+/**
+ * Get the remembered email from the server-side cookie.
+ * Use this in Server Components to prefill the login form without client-side timing issues.
+ * Returns null if no email cookie is found.
+ */
+export async function getRememberedEmailFromCookies(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const email = cookieStore.get(EMAIL_COOKIE)?.value;
+    return email ?? null;
+  } catch (err) {
+    // cookies() throws if called outside of Server Component context
+    return null;
+  }
 }
 
 export function finalizeAuthResponse(response: NextResponse, authState?: AuthState) {
