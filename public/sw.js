@@ -3,8 +3,10 @@ const APP_SHELL_CACHE = `${VERSION}-app-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const DATA_CACHE = `${VERSION}-data`;
 const OFFLINE_URL = '/offline';
+const LOGIN_URL = '/login';
 const APP_SHELL_URLS = [
   '/',
+  LOGIN_URL,
   OFFLINE_URL,
   '/manifest.webmanifest',
   '/icon?size=192',
@@ -69,6 +71,15 @@ async function handleNavigation(request) {
   } catch {
     const cached = await caches.match(request);
     if (cached) return cached;
+    
+    // For protected routes that fail to load, redirect to /login as a safe fallback.
+    // This prevents blank screens when the session is stale and network is unavailable.
+    const url = new URL(request.url);
+    if (url.pathname !== LOGIN_URL && url.pathname !== OFFLINE_URL) {
+      const loginCached = await caches.match(LOGIN_URL);
+      if (loginCached) return loginCached;
+    }
+    
     const offline = await caches.match(OFFLINE_URL);
     return offline || Response.error();
   }

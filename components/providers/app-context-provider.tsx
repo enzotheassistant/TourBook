@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -127,6 +127,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [bootstrap, setBootstrap] = useState<BootstrapContext>(EMPTY_CONTEXT);
   const [isLoading, setIsLoading] = useState(true);
+  const visibilityRefreshTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const isRedirectingRef = React.useRef(false);
 
   const refreshContext = useCallback(async () => {
     setIsLoading(true);
@@ -138,8 +140,12 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (!session) {
         authLog('refreshContext: unable to establish browser session — redirecting to /login');
         resetBootstrapState(setBootstrap);
-        router.replace('/login');
-        router.refresh();
+        // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          router.replace('/login');
+          router.refresh();
+        }
         return;
       }
 
@@ -160,8 +166,12 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (response.status === 401) {
         authLog('refreshContext: repair failed — redirecting to /login');
         resetBootstrapState(setBootstrap);
-        router.replace('/login');
-        router.refresh();
+        // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          router.replace('/login');
+          router.refresh();
+        }
         return;
       }
 
@@ -223,10 +233,18 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   // Refresh context whenever the PWA comes to the foreground (visibilitychange).
   // This handles the case where the OS suspends the app and the session expires
   // while the tab is hidden, ensuring a fresh session on resume.
+  // Debounce the refresh to avoid redirect races when visibility changes rapidly.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void refreshContext();
+        // Clear any pending refresh timer to debounce rapid visibility changes.
+        if (visibilityRefreshTimeoutRef.current) {
+          clearTimeout(visibilityRefreshTimeoutRef.current);
+        }
+        // Debounce the refresh by 300ms to avoid multiple simultaneous refresh attempts.
+        visibilityRefreshTimeoutRef.current = setTimeout(() => {
+          void refreshContext();
+        }, 300);
       }
     };
 
@@ -234,6 +252,9 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityRefreshTimeoutRef.current) {
+        clearTimeout(visibilityRefreshTimeoutRef.current);
+      }
     };
   }, [refreshContext]);
 
@@ -289,6 +310,13 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeStoredValue(TOUR_STORAGE_KEY, bootstrap.activeTourId);
   }, [bootstrap.activeTourId]);
+
+  // Reset redirect flag when user becomes authenticated (successful session restore or login).
+  useEffect(() => {
+    if (bootstrap.user) {
+      isRedirectingRef.current = false;
+    }
+  }, [bootstrap.user]);
 
   const value = useMemo<AppContextValue>(() => ({
     ...bootstrap,
