@@ -16,7 +16,7 @@ function makeKey(item: IntakeScheduleItem) {
   return `${cleanLabel(item.label).toLowerCase()}::${cleanTime(item.time).toLowerCase()}`;
 }
 
-const TIME_PATTERN = String.raw`(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s?(?:am|pm)?`;
+const TIME_PATTERN = String.raw`(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s?(?:a\.?m?\.?|p\.?m?\.?)?|(?:12\s*n|12n|noon|midnight|12\s*a|12a|tba|tbd)`;
 const TIME_RANGE_PATTERN = String.raw`${TIME_PATTERN}(?:\s*(?:-|–|—|to)\s*${TIME_PATTERN})?`;
 
 const TIME_FIRST = new RegExp(`^(?:[-•*\\u2022]\\s*)?(?<time>${TIME_RANGE_PATTERN})\\s*(?:[-–—:|]\\s*)?(?<label>.+)$`, 'i');

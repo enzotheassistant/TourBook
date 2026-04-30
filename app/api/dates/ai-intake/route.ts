@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuthForWorkspaceAdmin, type AuthState } from '@/lib/auth';
 import { runIntake } from '@/lib/ai/intake-provider';
-import type { IntakeImageInput, IntakeScheduleItem } from '@/lib/ai/intake-types';
+import type { IntakeImageInput } from '@/lib/ai/intake-types';
+import { finalizeIntakeResult, pickAnchorTime } from '@/lib/ai/intake-normalization';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import { ApiError } from '@/lib/data/server/shared';
 import type { DateFormValues } from '@/lib/types/date-record';
@@ -10,21 +11,6 @@ export const runtime = 'nodejs';
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizeScheduleLabel(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function pickAnchorTime(items: IntakeScheduleItem[] | undefined, labels: string[]) {
-  const normalizedTargets = new Set(labels.map((label) => normalizeScheduleLabel(label)));
-  for (const item of items ?? []) {
-    const normalized = normalizeScheduleLabel(item.label ?? '');
-    if (normalizedTargets.has(normalized) && (item.time ?? '').trim()) {
-      return item.time.trim();
-    }
-  }
-  return '';
 }
 
 function formatDateForStorage(date: Date) {
@@ -242,7 +228,7 @@ export async function POST(request: NextRequest) {
       includeDrafts: true,
     });
 
-    const intake = await runIntake({
+    const intake = finalizeIntakeResult(await runIntake({
       text: parsed.text,
       images: parsed.images,
       existingShows: existingDates.map((date) => ({
@@ -252,14 +238,14 @@ export async function POST(request: NextRequest) {
         venue_name: date.venue_name,
         status: date.status,
       })),
-    });
+    }), parsed.text);
 
     const forcedYear = detectForcedYearFromText(parsed.text);
     const normalizedRows = intake.rows.map((row) => ({
       ...row,
       date: normalizeAiImportDate(row.date, { forcedYear }) || row.date,
     }));
-    const normalizedIntake = { ...intake, rows: normalizedRows };
+    const normalizedIntake = finalizeIntakeResult({ ...intake, rows: normalizedRows }, parsed.text);
 
     if (parsed.previewOnly) {
       return finalizeAuthResponse(NextResponse.json(normalizedIntake), authState);
