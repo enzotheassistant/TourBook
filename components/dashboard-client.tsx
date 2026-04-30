@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import type { WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { OfflineStatus } from '@/components/offline-status';
 import { ShowCard } from '@/components/show-card';
@@ -14,6 +15,17 @@ import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activa
 import { Show } from '@/lib/types';
 
 const PENDING_INVITE_TOKEN_STORAGE_KEY = 'tourbook.pendingInviteToken';
+
+
+type InviteFlowState =
+  | { phase: 'idle' }
+  | { phase: 'accepting' }
+  | { phase: 'joining'; invite: WorkspaceInviteSummary; startedAt: number; attempts: number; lastError?: string | null }
+  | { phase: 'error'; token: string; message: string; invite?: WorkspaceInviteSummary | null };
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 function readPendingInviteToken() {
   if (typeof window === 'undefined') return '';
@@ -133,11 +145,40 @@ function FilterSummary({
   );
 }
 
-function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: { initialToken: string; activeWorkspaceId: string | null; onAccepted: (invite: { workspaceId: string; role: string }) => void | Promise<void> }) {
+function InviteAcceptancePanel({
+  initialToken,
+  flowState,
+  activeWorkspaceId,
+  onAcceptStart,
+  onAccepted,
+}: {
+  initialToken: string;
+  flowState: InviteFlowState;
+  activeWorkspaceId: string | null;
+  onAcceptStart?: () => void;
+  onAccepted: (invite: WorkspaceInviteSummary) => void | Promise<void>;
+}) {
   const [token, setToken] = useState(initialToken);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
   const autoAcceptAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    setToken(initialToken);
+  }, [initialToken]);
+
+  useEffect(() => {
+    if (flowState.phase === 'joining') {
+      setStatus('success');
+      setMessage(`Joining ${flowState.invite.role} access… This can take a few seconds while TourBook loads your workspace.`);
+      return;
+    }
+
+    if (flowState.phase === 'error') {
+      setStatus('error');
+      setMessage(flowState.message);
+    }
+  }, [flowState]);
 
   const handleAccept = useCallback(async () => {
     const trimmed = token.trim();
@@ -147,6 +188,7 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
       return;
     }
 
+    onAcceptStart?.();
     setStatus('loading');
     setMessage('Accepting invite…');
 
@@ -155,14 +197,14 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
       setStatus('success');
       setMessage(`Invite accepted. Workspace access granted as ${result.invite.role}. Loading your access…`);
       await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
-      await onAccepted({ workspaceId: result.invite.workspaceId, role: result.invite.role });
+      await onAccepted(result.invite);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
       setStatus('error');
       setMessage(reason);
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
     }
-  }, [activeWorkspaceId, onAccepted, token]);
+  }, [activeWorkspaceId, onAcceptStart, onAccepted, token]);
 
   useEffect(() => {
     if (!initialToken.trim() || autoAcceptAttemptedRef.current) return;
@@ -308,7 +350,17 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
 }
 
 export function DashboardClient() {
-  const { activeWorkspaceId, activeProjectId, activeTourId, isLoading: contextLoading, workspaces, projects, memberships, refreshContext } = useAppContext();
+  const {
+    activeWorkspaceId,
+    activeProjectId,
+    activeTourId,
+    isLoading: contextLoading,
+    workspaces,
+    projects,
+    memberships,
+    refreshContext,
+    setActiveWorkspaceId,
+  } = useAppContext();
   const [shows, setShows] = useState<Show[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -323,6 +375,7 @@ export function DashboardClient() {
   const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const urlInviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
   const inviteToken = urlInviteToken || readPendingInviteToken();
+  const [inviteFlow, setInviteFlow] = useState<InviteFlowState>({ phase: 'idle' });
 
   useEffect(() => {
     if (urlInviteToken) {
@@ -330,22 +383,82 @@ export function DashboardClient() {
     }
   }, [urlInviteToken]);
 
-  async function handleInviteAccepted(invite: { workspaceId: string; role: string }) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await refreshContext();
-      if (attempt < 2) {
-        await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
-      }
+  const clearInviteArtifacts = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    clearPendingInviteToken();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('inviteToken');
+    url.searchParams.delete('token');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  const beginInviteJoin = useCallback((invite: WorkspaceInviteSummary, lastError?: string | null) => {
+    setInviteFlow((current) => ({
+      phase: 'joining',
+      invite,
+      startedAt: current.phase === 'joining' && current.invite.id === invite.id ? current.startedAt : Date.now(),
+      attempts: current.phase === 'joining' && current.invite.id === invite.id ? current.attempts + 1 : 1,
+      lastError: lastError ?? null,
+    }));
+  }, []);
+
+  async function handleInviteAccepted(invite: WorkspaceInviteSummary) {
+    beginInviteJoin(invite);
+  }
+
+  useEffect(() => {
+    if (!inviteToken && inviteFlow.phase !== 'joining') {
+      if (inviteFlow.phase !== 'idle') setInviteFlow({ phase: 'idle' });
+      return;
     }
 
-    if (typeof window !== 'undefined') {
-      clearPendingInviteToken();
-      const url = new URL(window.location.href);
-      url.searchParams.delete('inviteToken');
-      url.searchParams.delete('token');
-      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    if (inviteFlow.phase !== 'joining') return;
+
+    const hasWorkspace = workspaces.some((workspace) => workspace.id === inviteFlow.invite.workspaceId);
+    if (!hasWorkspace) return;
+
+    if (activeWorkspaceId !== inviteFlow.invite.workspaceId) {
+      setActiveWorkspaceId(inviteFlow.invite.workspaceId);
+      return;
     }
-  }
+
+    clearInviteArtifacts();
+    setInviteFlow({ phase: 'idle' });
+  }, [activeWorkspaceId, clearInviteArtifacts, inviteFlow, inviteToken, setActiveWorkspaceId, workspaces]);
+
+  useEffect(() => {
+    if (inviteFlow.phase !== 'joining') return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      const delays = [0, 300, 750, 1500, 2500, 4000];
+      for (const delay of delays) {
+        if (cancelled) return;
+        if (delay > 0) await wait(delay);
+        if (cancelled) return;
+        try {
+          await refreshContext();
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : 'Unable to refresh workspace access.';
+          if (!cancelled) beginInviteJoin(inviteFlow.invite, reason);
+        }
+      }
+
+      if (cancelled) return;
+      setInviteFlow({
+        phase: 'error',
+        token: inviteToken,
+        invite: inviteFlow.invite,
+        message: 'We accepted your invite, but TourBook is still waiting for that workspace to appear. Retry access below, or ask the workspace owner to confirm the invite scope still points at a live project.',
+      });
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [beginInviteJoin, inviteFlow, inviteToken, refreshContext]);
 
   // Reset all filters, stale shows, and errors when the active project changes
   // Must run before the data loading effect so resets happen first in the batch
@@ -462,25 +575,43 @@ export function DashboardClient() {
 
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
-        {isFirstRun ? (
+        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+        {isFirstRun && inviteFlow.phase === 'idle' ? (
           <SelfServeOnboardingPanel onCompleted={refreshContext} />
         ) : (
           <ActivationEmptyState
-            title={hasPendingInvite ? 'Finishing workspace access…' : hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
-            body={hasPendingInvite
-              ? 'TourBook detected an invite on this sign-in. We are applying that access now. If it does not resolve automatically, use the invite panel above.'
-              : hasWorkspaceAccess
-                ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
-                : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
-            actions={hasAdminAnywhere
-              ? [
-                  { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
-                  { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
-                ]
-              : [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
+            title={inviteFlow.phase === 'joining'
+              ? 'Joining your invited workspace…'
+              : inviteFlow.phase === 'error'
+                ? 'Invite accepted, but access is still loading.'
+                : hasPendingInvite
+                  ? 'Finishing workspace access…'
+                  : hasWorkspaceAccess
+                    ? 'No workspace selected.'
+                    : 'No workspace access yet.'}
+            body={inviteFlow.phase === 'joining'
+              ? 'TourBook accepted your invite and is still syncing the invited workspace or project into this session. Stay on this screen while we keep retrying.'
+              : inviteFlow.phase === 'error'
+                ? inviteFlow.message
+                : hasPendingInvite
+                  ? 'TourBook detected an invite on this sign-in. We are applying that access now. If it does not resolve automatically, use the invite panel above.'
+                  : hasWorkspaceAccess
+                    ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
+                    : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
+            actions={inviteFlow.phase === 'error'
+              ? [{ label: 'Retry invite access', href: '/', tone: 'primary', ctaId: 'retry_invite_access' }]
+              : hasAdminAnywhere
+                ? [
+                    { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+                    { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+                  ]
+                : [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
             telemetry={{
-              stateType: hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
+              stateType: inviteFlow.phase === 'joining'
+                ? 'invite.joining'
+                : inviteFlow.phase === 'error'
+                  ? 'invite.joining_failed'
+                  : hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
             }}
           />
         )}
@@ -493,7 +624,7 @@ export function DashboardClient() {
     const firstRunState = getCrewNoArtistsState(activeWorkspaceRole, hasAnyProject);
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
         <ActivationEmptyState
           title={firstRunState.title}
           body={firstRunState.body}
@@ -510,7 +641,7 @@ export function DashboardClient() {
 
   return (
     <div className="space-y-4">
-      {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+      {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
       <OfflineStatus
         savedAt={lastSavedAt}
         source={statusSource}

@@ -437,7 +437,10 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     throw new ApiError(409, 'Invite has been revoked.');
   }
   if (invite.status === 'accepted') {
-    throw new ApiError(409, 'Invite has already been accepted.');
+    return {
+      invite,
+      membershipCreated: false,
+    };
   }
   if (invite.status === 'expired') {
     await supabase.from('workspace_invites').update({ status: 'expired' }).eq('id', invite.id);
