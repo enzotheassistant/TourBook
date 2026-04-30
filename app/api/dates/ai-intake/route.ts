@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuthForWorkspaceAdmin, type AuthState } from '@/lib/auth';
 import { runIntake } from '@/lib/ai/intake-provider';
-import type { IntakeImageInput } from '@/lib/ai/intake-types';
+import type { IntakeImageInput, IntakeRow } from '@/lib/ai/intake-types';
 import { finalizeIntakeResult, pickAnchorTime } from '@/lib/ai/intake-normalization';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import { ApiError } from '@/lib/data/server/shared';
@@ -164,8 +164,41 @@ function parsePreviewOnly(value: unknown) {
   return false;
 }
 
+function normalizeReviewedRows(rows: unknown): IntakeRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map((row) => {
+    const source = (row ?? {}) as IntakeRow;
+    const scheduleItems = Array.isArray(source.schedule_items)
+      ? source.schedule_items.map((item) => ({
+          label: normalizeText(item?.label),
+          time: normalizeText(item?.time),
+        }))
+      : [];
+
+    return {
+      date: normalizeText(source.date),
+      city: normalizeText(source.city),
+      region: normalizeText(source.region),
+      venue_name: normalizeText(source.venue_name),
+      tour_name: normalizeText(source.tour_name),
+      venue_address: normalizeText(source.venue_address),
+      dos_name: normalizeText(source.dos_name),
+      dos_phone: normalizeText(source.dos_phone),
+      parking_load_info: normalizeText(source.parking_load_info),
+      schedule_items: scheduleItems,
+      hotel_name: normalizeText(source.hotel_name),
+      hotel_address: normalizeText(source.hotel_address),
+      hotel_notes: normalizeText(source.hotel_notes),
+      notes: normalizeText(source.notes),
+      confidence: typeof source.confidence === 'number' ? source.confidence : undefined,
+      flags: Array.isArray(source.flags) ? source.flags.filter((flag): flag is string => typeof flag === 'string' && flag.trim().length > 0) : [],
+    };
+  });
+}
+
 function parseBodyAsJson(payload: unknown) {
-  const body = (payload ?? {}) as { text?: string; workspaceId?: string; projectId?: string; tourId?: string | null; previewOnly?: boolean | string };
+  const body = (payload ?? {}) as { text?: string; workspaceId?: string; projectId?: string; tourId?: string | null; previewOnly?: boolean | string; rows?: unknown };
   return {
     text: normalizeText(body.text),
     workspaceId: normalizeText(body.workspaceId),
@@ -173,6 +206,7 @@ function parseBodyAsJson(payload: unknown) {
     tourId: normalizeText(body.tourId) || null,
     previewOnly: parsePreviewOnly(body.previewOnly),
     images: [] as IntakeImageInput[],
+    rows: normalizeReviewedRows(body.rows),
   };
 }
 
@@ -196,7 +230,7 @@ async function parseBodyAsFormData(request: NextRequest) {
       })),
   );
 
-  return { text, workspaceId, projectId, tourId, previewOnly, images };
+  return { text, workspaceId, projectId, tourId, previewOnly, images, rows: [] as IntakeRow[] };
 }
 
 export async function POST(request: NextRequest) {
@@ -216,8 +250,8 @@ export async function POST(request: NextRequest) {
       return finalizeAuthResponse(NextResponse.json({ error: 'workspaceId and projectId are required.' }, { status: 400 }), authState);
     }
 
-    if (!parsed.text && parsed.images.length === 0) {
-      return finalizeAuthResponse(NextResponse.json({ error: 'Add text or at least one image.' }, { status: 400 }), authState);
+    if (!parsed.text && parsed.images.length === 0 && parsed.rows.length === 0) {
+      return finalizeAuthResponse(NextResponse.json({ error: 'Add text, reviewed rows, or at least one image.' }, { status: 400 }), authState);
     }
 
     const existingDates = await listDatesScoped(authState.supabase, {
@@ -228,24 +262,31 @@ export async function POST(request: NextRequest) {
       includeDrafts: true,
     });
 
-    const intake = finalizeIntakeResult(await runIntake({
-      text: parsed.text,
-      images: parsed.images,
-      existingShows: existingDates.map((date) => ({
-        id: date.id,
-        date: date.date,
-        city: date.city,
-        venue_name: date.venue_name,
-        status: date.status,
-      })),
-    }), parsed.text);
-
     const forcedYear = detectForcedYearFromText(parsed.text);
-    const normalizedRows = intake.rows.map((row) => ({
-      ...row,
-      date: normalizeAiImportDate(row.date, { forcedYear }) || row.date,
-    }));
-    const normalizedIntake = finalizeIntakeResult({ ...intake, rows: normalizedRows }, parsed.text);
+    const normalizedRows = parsed.rows.length
+      ? finalizeIntakeResult({ rows: parsed.rows, provider: 'review', model: 'manual' }, parsed.text).rows.map((row) => ({
+          ...row,
+          date: normalizeAiImportDate(row.date, { forcedYear }) || row.date,
+        }))
+      : finalizeIntakeResult(await runIntake({
+          text: parsed.text,
+          images: parsed.images,
+          existingShows: existingDates.map((date) => ({
+            id: date.id,
+            date: date.date,
+            city: date.city,
+            venue_name: date.venue_name,
+            status: date.status,
+          })),
+        }), parsed.text).rows.map((row) => ({
+          ...row,
+          date: normalizeAiImportDate(row.date, { forcedYear }) || row.date,
+        }));
+    const normalizedIntake = finalizeIntakeResult({
+      rows: normalizedRows,
+      provider: parsed.rows.length ? 'review' : 'ai',
+      model: parsed.rows.length ? 'manual' : 'intake',
+    }, parsed.text);
 
     if (parsed.previewOnly) {
       return finalizeAuthResponse(NextResponse.json(normalizedIntake), authState);

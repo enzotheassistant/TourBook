@@ -1590,27 +1590,53 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     });
 
     try {
-      for (const row of selectedRows) {
-        if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
-        await upsertShow({
-          ...emptyShowForm,
-          date: parseFlexibleDateInput(row.date) || row.date.trim(),
-          city: row.city.trim(),
-          region: row.region.trim().toUpperCase(),
-          venue_name: row.venue_name.trim(),
-          tour_name: row.tour_name?.trim() || '',
-          venue_address: row.venue_address?.trim() || '',
-          dos_name: row.dos_name?.trim() || '',
-          dos_phone: row.dos_phone?.trim() || '',
-          parking_load_info: row.parking_load_info?.trim() || '',
-          schedule_items: row.schedule_items.filter((item) => item.label.trim() || item.time.trim()),
-          hotel_name: row.hotel_name?.trim() || '',
-          hotel_address: row.hotel_address?.trim() || '',
-          hotel_notes: row.hotel_notes?.trim() || '',
-          notes: row.notes?.trim() || '',
-          status: 'draft',
-        }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+
+      const supabase = getBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/dates/ai-intake', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          projectId: activeProjectId,
+          tourId: activeTourId,
+          previewOnly: false,
+          rows: selectedRows.map((row) => ({
+            date: parseFlexibleDateInput(row.date) || row.date.trim(),
+            city: row.city.trim(),
+            region: row.region.trim().toUpperCase(),
+            venue_name: row.venue_name.trim(),
+            tour_name: row.tour_name?.trim() || '',
+            venue_address: row.venue_address?.trim() || '',
+            dos_name: row.dos_name?.trim() || '',
+            dos_phone: row.dos_phone?.trim() || '',
+            parking_load_info: row.parking_load_info?.trim() || '',
+            schedule_items: row.schedule_items
+              .filter((item) => item.label.trim() || item.time.trim())
+              .map((item) => ({ label: item.label.trim(), time: item.time.trim() })),
+            hotel_name: row.hotel_name?.trim() || '',
+            hotel_address: row.hotel_address?.trim() || '',
+            hotel_notes: row.hotel_notes?.trim() || '',
+            notes: row.notes?.trim() || '',
+            confidence: row.confidence,
+            flags: row.flags,
+          })),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to import dates.');
       }
+
       await loadShows();
       setImportOpen(false);
       setImportRows([]);
