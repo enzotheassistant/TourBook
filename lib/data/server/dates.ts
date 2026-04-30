@@ -245,9 +245,26 @@ export function normalizeScheduleItemsForPersistence(scheduleItems: ScheduleItem
 }
 
 async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: ScheduleItemLike[]) {
+  // Guard: date_id, workspace_id, project_id are required for FK constraints and RLS policies.
+  if (!dateId || !workspaceId || !projectId) {
+    const msg = `replaceScheduleItems: missing required IDs (dateId=${dateId}, workspaceId=${workspaceId}, projectId=${projectId})`;
+    console.error('[schedule]', msg);
+    throw new Error(msg);
+  }
+
+  console.log(`[schedule] replaceScheduleItems start: dateId=${dateId}, items=${scheduleItems?.length ?? 0}`);
+
+  // DELETE existing rows for this date.
   const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
-  if (deleteResult.error && !isMissingRelationError(deleteResult.error)) {
-    throw new Error(deleteResult.error.message);
+  if (deleteResult.error) {
+    const errMsg = String(deleteResult.error.message ?? '');
+    console.error('[schedule] DELETE error:', deleteResult.error);
+    if (isMissingRelationError(deleteResult.error)) {
+      // Table doesn't exist in PostgREST schema cache yet — throw so the caller
+      // surfaces a clear 409 instead of continuing to a doomed INSERT.
+      throw new ApiError(409, `Date schedule schema is not ready yet (DELETE failed: ${errMsg})`);
+    }
+    throw new Error(`Failed to delete existing schedule items for date ${dateId}: ${errMsg}`);
   }
 
   const cleaned = (scheduleItems ?? [])
@@ -261,15 +278,23 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
     }))
     .filter((item) => item.label || item.time_text);
 
-  if (!cleaned.length) return;
+  console.log(`[schedule] cleaned items to insert: ${cleaned.length}`, cleaned.map((c) => `"${c.label}" @ ${c.time_text}`));
+
+  if (!cleaned.length) {
+    console.log('[schedule] no items to insert after filtering blanks — skipping INSERT');
+    return;
+  }
 
   const insertResult = await supabase.from('date_schedule_items').insert(cleaned);
   if (insertResult.error) {
+    console.error('[schedule] INSERT error:', insertResult.error);
     if (isMissingRelationError(insertResult.error)) {
-      throw new ApiError(409, 'Date schedule schema is not ready yet.');
+      throw new ApiError(409, `Date schedule schema is not ready yet (INSERT failed: ${insertResult.error.message})`);
     }
-    throw new Error(insertResult.error.message);
+    throw new Error(`Failed to insert schedule items for date ${dateId}: ${insertResult.error.message}`);
   }
+
+  console.log(`[schedule] replaceScheduleItems success: inserted ${cleaned.length} rows for dateId=${dateId}`);
 }
 
 async function assertDateReadable(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
@@ -448,6 +473,7 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const normalizedScheduleItems = normalizeScheduleItemsForPersistence(values.schedule_items as ScheduleItemLike[] | undefined, undefined);
+  console.log(`[schedule] createDate: normalizedScheduleItems count=${normalizedScheduleItems.length} from incoming count=${(values.schedule_items ?? []).length}`);
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, String(data.id));
 }
@@ -510,6 +536,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     values.schedule_items as ScheduleItemLike[] | undefined,
     current.schedule_items as ScheduleItemLike[] | undefined,
   );
+  console.log(`[schedule] updateDate: normalizedScheduleItems count=${normalizedScheduleItems.length} from incoming count=${(values.schedule_items ?? []).length}, fallback count=${(current.schedule_items ?? []).length}`);
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, dateId);
 }
