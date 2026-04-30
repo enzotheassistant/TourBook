@@ -89,8 +89,30 @@ type ExtractedLocation = {
   venueAddress: string;
 };
 
+const KNOWN_REGION_CODES = new Set([
+  'AB', 'AK', 'AL', 'AR', 'AS', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY',
+  'LA', 'MA', 'MB', 'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NB', 'NC', 'ND', 'NE', 'NF', 'NH', 'NJ', 'NL', 'NM', 'NS', 'NT',
+  'NU', 'NV', 'NY', 'OH', 'OK', 'ON', 'OR', 'PA', 'PE', 'PQ', 'PR', 'QC', 'RI', 'SC', 'SD', 'SK', 'TN', 'TX', 'UT', 'VA', 'VI',
+  'VT', 'WA', 'WI', 'WV', 'WY', 'YT',
+]);
+
 function normalizePhone(value: string) {
   return normalizeWhitespace(value.replace(/[;,]+$/g, ''));
+}
+
+function parseCompactCityRegion(value: string) {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized || /\d/.test(normalized)) return null;
+
+  const match = normalized.match(/^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'’\-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'’\-]*)*)\s*,?\s+([A-Za-z]{2})$/);
+  if (!match) return null;
+
+  const city = normalizeWhitespace(match[1]);
+  const region = match[2].toUpperCase();
+  if (!city || city.length < 3 || !KNOWN_REGION_CODES.has(region)) return null;
+  if (/^(?:venue|address|hotel|room|hall|theatre|theater)$/i.test(city)) return null;
+
+  return { city, region };
 }
 
 function extractLabeledValue(line: string, patterns: RegExp[]) {
@@ -209,7 +231,12 @@ function extractSingleLocationFromText(sourceText: string | undefined | null): E
 
     if (!city) {
       const cityMatch = line.match(/^(?:city|market)\s*[:\-]\s*(.+)$/i);
-      if (cityMatch?.[1]) city = normalizeWhitespace(cityMatch[1]);
+      if (cityMatch?.[1]) {
+        const rawCity = normalizeWhitespace(cityMatch[1]);
+        const compact = parseCompactCityRegion(rawCity);
+        city = compact?.city || rawCity;
+        if (!region && compact?.region) region = compact.region;
+      }
     }
 
     if (!region) {
@@ -260,18 +287,26 @@ function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | n
 }
 
 export function finalizeIntakeResult(intake: IntakeResult, sourceText: string | undefined | null): IntakeResult {
-  const rows = intake.rows.map((row) => ({
-    ...row,
-    schedule_items: normalizeScheduleItems(row.schedule_items),
-    city: normalizeText(row.city),
-    region: normalizeText(row.region).toUpperCase(),
-    dos_name: normalizeText(row.dos_name),
-    dos_phone: normalizePhone(normalizeText(row.dos_phone)),
-    venue_name: normalizeText(row.venue_name),
-    venue_address: normalizeText(row.venue_address),
-    notes: normalizeText(row.notes),
-    flags: Array.isArray(row.flags) ? [...new Set(row.flags.map((flag) => normalizeText(flag)).filter(Boolean))] : [],
-  }));
+  const rows = intake.rows.map((row) => {
+    const rawCity = normalizeText(row.city);
+    const rawRegion = normalizeText(row.region).toUpperCase();
+    const compact = parseCompactCityRegion(rawCity);
+    const normalizedCity = compact ? compact.city : rawCity;
+    const normalizedRegion = rawRegion || compact?.region || '';
+
+    return {
+      ...row,
+      schedule_items: normalizeScheduleItems(row.schedule_items),
+      city: normalizedCity,
+      region: normalizedRegion,
+      dos_name: normalizeText(row.dos_name),
+      dos_phone: normalizePhone(normalizeText(row.dos_phone)),
+      venue_name: normalizeText(row.venue_name),
+      venue_address: normalizeText(row.venue_address),
+      notes: normalizeText(row.notes),
+      flags: Array.isArray(row.flags) ? [...new Set(row.flags.map((flag) => normalizeText(flag)).filter(Boolean))] : [],
+    };
+  });
 
   const nextRows = rows.length === 1 ? [maybeEnrichSingleRow(rows[0], sourceText)] : rows;
   const seenDates = new Set<string>();
