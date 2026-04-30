@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { OfflineStatus } from '@/components/offline-status';
@@ -12,6 +12,25 @@ import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
 import { Show } from '@/lib/types';
+
+const PENDING_INVITE_TOKEN_STORAGE_KEY = 'tourbook.pendingInviteToken';
+
+function readPendingInviteToken() {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(PENDING_INVITE_TOKEN_STORAGE_KEY)?.trim() ?? '';
+}
+
+function writePendingInviteToken(token: string) {
+  if (typeof window === 'undefined') return;
+  const trimmed = token.trim();
+  if (!trimmed) return;
+  window.localStorage.setItem(PENDING_INVITE_TOKEN_STORAGE_KEY, trimmed);
+}
+
+function clearPendingInviteToken() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(PENDING_INVITE_TOKEN_STORAGE_KEY);
+}
 
 function normalizeTourName(value: string) {
   return value.trim() || 'All';
@@ -120,14 +139,7 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
   const [message, setMessage] = useState(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
   const autoAcceptAttemptedRef = useRef(false);
 
-  useEffect(() => {
-    setToken(initialToken);
-    setStatus('idle');
-    setMessage(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
-    autoAcceptAttemptedRef.current = false;
-  }, [initialToken]);
-
-  async function handleAccept() {
+  const handleAccept = useCallback(async () => {
     const trimmed = token.trim();
     if (!trimmed) {
       setStatus('error');
@@ -150,13 +162,16 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
       setMessage(reason);
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
     }
-  }
+  }, [activeWorkspaceId, onAccepted, token]);
 
   useEffect(() => {
     if (!initialToken.trim() || autoAcceptAttemptedRef.current) return;
     autoAcceptAttemptedRef.current = true;
-    void handleAccept();
-  }, [initialToken]);
+    const timeoutId = window.setTimeout(() => {
+      void handleAccept();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [handleAccept, initialToken]);
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
@@ -194,6 +209,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
   const [skipTour, setSkipTour] = useState(true);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [message, setMessage] = useState('Create your workspace and first artist to get started.');
+  const [isExpanded, setIsExpanded] = useState(false);
 
   async function handleSubmit() {
     const cleanWorkspace = workspaceName.trim();
@@ -230,45 +246,61 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">Welcome to TourBook</h2>
-        <p className="text-sm text-zinc-400">Start with one workspace and one artist. You can add team members, tours, and more artists later.</p>
-        <label className="block text-sm text-zinc-300">
-          <span className="mb-1 block">Workspace name</span>
-          <input
-            value={workspaceName}
-            onChange={(event) => setWorkspaceName(event.target.value)}
-            placeholder="e.g. Northbound Touring"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
-          />
-        </label>
-        <label className="block text-sm text-zinc-300">
-          <span className="mb-1 block">First artist</span>
-          <input
-            value={artistName}
-            onChange={(event) => setArtistName(event.target.value)}
-            placeholder="e.g. The Midnight Echoes"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
-          <input
-            type="checkbox"
-            checked={skipTour}
-            onChange={(event) => setSkipTour(event.target.checked)}
-            className="h-4 w-4 rounded border-white/20 bg-black/30"
-          />
-          Skip tour setup for now
-        </label>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Welcome to TourBook</h2>
+            <p className="mt-1 text-sm text-zinc-400">Most invited collaborators can ignore workspace setup. Create your own only if you need a separate admin space.</p>
+          </div>
           <button
             type="button"
-            onClick={() => void handleSubmit()}
-            disabled={status === 'loading'}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-sky-400 disabled:opacity-60"
+            onClick={() => setIsExpanded((current) => !current)}
+            className="text-xs font-medium text-zinc-400 transition hover:text-zinc-200"
           >
-            {status === 'loading' ? 'Setting up…' : 'Create workspace and artist'}
+            {isExpanded ? 'Hide setup' : 'Create workspace'}
           </button>
         </div>
+
+        {isExpanded ? (
+          <>
+            <label className="block text-sm text-zinc-300">
+              <span className="mb-1 block">Workspace name</span>
+              <input
+                value={workspaceName}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+                placeholder="e.g. Northbound Touring"
+                className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
+              />
+            </label>
+            <label className="block text-sm text-zinc-300">
+              <span className="mb-1 block">First artist</span>
+              <input
+                value={artistName}
+                onChange={(event) => setArtistName(event.target.value)}
+                placeholder="e.g. The Midnight Echoes"
+                className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={skipTour}
+                onChange={(event) => setSkipTour(event.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-black/30"
+              />
+              Skip tour setup for now
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={status === 'loading'}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-sky-400 disabled:opacity-60"
+              >
+                {status === 'loading' ? 'Setting up…' : 'Create workspace and artist'}
+              </button>
+            </div>
+          </>
+        ) : null}
         <p className={`text-sm ${status === 'error' ? 'text-rose-300' : 'text-zinc-400'}`}>{message}</p>
       </div>
     </section>
@@ -289,7 +321,14 @@ export function DashboardClient() {
   const [pastSearch, setPastSearch] = useState('');
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
-  const inviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
+  const urlInviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
+  const inviteToken = urlInviteToken || readPendingInviteToken();
+
+  useEffect(() => {
+    if (urlInviteToken) {
+      writePendingInviteToken(urlInviteToken);
+    }
+  }, [urlInviteToken]);
 
   async function handleInviteAccepted(invite: { workspaceId: string; role: string }) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -300,6 +339,7 @@ export function DashboardClient() {
     }
 
     if (typeof window !== 'undefined') {
+      clearPendingInviteToken();
       const url = new URL(window.location.href);
       url.searchParams.delete('inviteToken');
       url.searchParams.delete('token');
@@ -422,7 +462,7 @@ export function DashboardClient() {
 
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
         {isFirstRun ? (
           <SelfServeOnboardingPanel onCompleted={refreshContext} />
         ) : (
@@ -453,7 +493,7 @@ export function DashboardClient() {
     const firstRunState = getCrewNoArtistsState(activeWorkspaceRole, hasAnyProject);
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+        {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
         <ActivationEmptyState
           title={firstRunState.title}
           body={firstRunState.body}
@@ -470,7 +510,7 @@ export function DashboardClient() {
 
   return (
     <div className="space-y-4">
-      {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
+      {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
       <OfflineStatus
         savedAt={lastSavedAt}
         source={statusSource}

@@ -9,12 +9,18 @@ import { LoginPageClient } from "./login-client";
  * 
  * The remembered email is passed to the client component as an initial prop for instant prefill.
  */
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ inviteToken?: string; token?: string }>;
+}) {
   // Read the remembered email and remember-email preference server-side at render time.
   // This is more reliable than fetching it client-side in a useEffect, especially for
   // PWAs where the app might be evicted and reopened with a hard-close.
   const rememberedEmail = await getRememberedEmailFromCookies();
   const rememberEmailByDefault = await getRememberEmailPreferenceFromCookies();
+  const params = await searchParams;
+  const inviteToken = String(params?.inviteToken ?? params?.token ?? '').trim();
 
-  return <LoginPageClient initialEmail={rememberedEmail} initialRememberEmail={rememberEmailByDefault} />;
+  return <LoginPageClient initialEmail={rememberedEmail} initialRememberEmail={rememberEmailByDefault} inviteToken={inviteToken} />;
 }
