@@ -390,21 +390,6 @@ type ImportRowIssue = {
 };
 
 const IMPORT_FLAG_META: Record<string, Omit<ImportRowIssue, 'key'>> = {
-  missing_venue_name: {
-    label: 'Venue name missing',
-    detail: 'Add the room or venue name before publishing this draft.',
-    severity: 'warning',
-  },
-  missing_venue_address: {
-    label: 'Venue address missing',
-    detail: 'Street address was not extracted. Add it if routing depends on it.',
-    severity: 'info',
-  },
-  partial_contact_details: {
-    label: 'Partial contact',
-    detail: 'Only part of the DOS/contact info was extracted.',
-    severity: 'warning',
-  },
   ambiguous_contact_details: {
     label: 'Ambiguous contact',
     detail: 'Multiple possible contacts were found. Confirm the right one.',
@@ -430,17 +415,8 @@ function buildImportRowIssues(row: IntakeRow): ImportRowIssue[] {
 
   for (const flag of Array.isArray(row.flags) ? row.flags.filter(Boolean) : []) {
     const meta = IMPORT_FLAG_META[flag];
-    if (meta) {
-      pushIssue({ key: flag, ...meta });
-      continue;
-    }
-
-    pushIssue({
-      key: flag,
-      label: flag.replace(/_/g, ' '),
-      detail: 'Imported row was flagged by the AI response for manual review.',
-      severity: 'warning',
-    });
+    if (!meta) continue;
+    pushIssue({ key: flag, ...meta });
   }
 
   const rawDate = row.date?.trim() || '';
@@ -454,29 +430,11 @@ function buildImportRowIssues(row: IntakeRow): ImportRowIssue[] {
     });
   }
 
-  if (!row.city.trim()) {
-    pushIssue({
-      key: 'check_city',
-      label: 'City missing',
-      detail: 'City was not extracted. Add it so the draft is routeable.',
-      severity: 'warning',
-    });
-  }
-
-  if (!row.venue_name.trim()) {
-    pushIssue({
-      key: 'check_venue',
-      label: 'Check venue',
-      detail: 'Venue field is blank. Confirm whether this is a venue, hotel, or travel day.',
-      severity: 'warning',
-    });
-  }
-
-  if ((row.schedule_items ?? []).some((item) => (item.label || item.time) && !item.label.trim())) {
+  if ((row.schedule_items ?? []).some((item) => item.time.trim() && !item.label.trim())) {
     pushIssue({
       key: 'schedule_blank_label',
-      label: 'Blank schedule label',
-      detail: 'A recovered schedule line is missing its label.',
+      label: 'Recovered schedule needs review',
+      detail: 'A recovered schedule line has a time but no clear label, so assignment may be off.',
       severity: 'info',
     });
   }
@@ -804,24 +762,21 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const includedImportCount = useMemo(() => importRows.filter((row) => row.include).length, [importRows]);
   const importReviewSummary = useMemo(() => {
     let warningRows = 0;
-    let missingVenueRows = 0;
-    let contactRows = 0;
+    let ambiguousRows = 0;
     let dateRows = 0;
     let recoveredScheduleRows = 0;
 
     for (const row of importRows) {
       const issues = buildImportRowIssues(row);
       if (issues.some((issue) => issue.severity === 'warning')) warningRows += 1;
-      if (issues.some((issue) => issue.key === 'missing_venue_name' || issue.key === 'missing_venue_address' || issue.key === 'check_venue')) missingVenueRows += 1;
-      if (issues.some((issue) => issue.key === 'partial_contact_details' || issue.key === 'ambiguous_contact_details')) contactRows += 1;
+      if (issues.some((issue) => issue.key === 'ambiguous_contact_details')) ambiguousRows += 1;
       if (issues.some((issue) => issue.key === 'date_requires_review' || issue.key === 'duplicate_date_in_import' || issue.key === 'check_date')) dateRows += 1;
-      if ((row.schedule_items ?? []).some((item) => item.label.trim() || item.time.trim())) recoveredScheduleRows += 1;
+      if (issues.some((issue) => issue.key === 'schedule_blank_label')) recoveredScheduleRows += 1;
     }
 
     return {
       warningRows,
-      missingVenueRows,
-      contactRows,
+      ambiguousRows,
       dateRows,
       recoveredScheduleRows,
     };
@@ -2019,21 +1974,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 ) : null}
 
                 {importRows.length ? (
-                  <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">Needs attention</p>
                       <p className="mt-1 text-lg font-semibold text-amber-100">{importReviewSummary.warningRows}</p>
-                      <p className="text-xs text-amber-100/70">rows with blocking or unclear intake details</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Venue gaps</p>
-                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.missingVenueRows}</p>
-                      <p className="text-xs text-zinc-500">missing venue name or address</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Contact review</p>
-                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.contactRows}</p>
-                      <p className="text-xs text-zinc-500">partial or ambiguous DOS/contact extraction</p>
+                      <p className="text-xs text-amber-100/70">rows with likely incorrect or risky parsing</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Date review</p>
@@ -2041,9 +1986,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                       <p className="text-xs text-zinc-500">blank, duplicate, or unparsed dates</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Schedule recovered</p>
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Ambiguous rows</p>
+                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.ambiguousRows}</p>
+                      <p className="text-xs text-zinc-500">multiple possible contacts or unclear row assignment</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Recovered schedule</p>
                       <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.recoveredScheduleRows}</p>
-                      <p className="text-xs text-zinc-500">rows carrying recovered schedule lines</p>
+                      <p className="text-xs text-zinc-500">recovered lines that may need confirmation</p>
                     </div>
                   </div>
                 ) : null}

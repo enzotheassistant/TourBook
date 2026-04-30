@@ -200,11 +200,8 @@ export function finalizeIntakeResult(intake: IntakeResult, sourceText: string | 
   });
 
   const warnings = [...(intake.warnings ?? [])];
-  if (finalizedRows.some((row) => row.flags?.includes('missing_venue_name'))) {
-    warnings.push('Some imported rows are missing a venue name and were kept as drafts for review.');
-  }
-  if (finalizedRows.some((row) => row.flags?.includes('partial_contact_details') || row.flags?.includes('ambiguous_contact_details'))) {
-    warnings.push('Some contact details were incomplete or ambiguous and should be reviewed.');
+  if (finalizedRows.some((row) => row.flags?.includes('ambiguous_contact_details'))) {
+    warnings.push('Some contact details matched multiple possible rows or people and should be reviewed.');
   }
   if (finalizedRows.some((row) => row.flags?.includes('date_requires_review') || row.flags?.includes('duplicate_date_in_import'))) {
     warnings.push('Some imported dates need manual review before publishing.');
