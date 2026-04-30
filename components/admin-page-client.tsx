@@ -689,7 +689,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [importOpen]);
 
   const isEditing = useMemo(() => shows.some((show) => show.id === form.id), [form.id, shows]);
-  const draftShows = useMemo(() => shows.filter((show) => show.status === 'draft').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')), [shows]);
+  const draftShows = useMemo(
+    () => shows
+      .filter((show) => show.status === 'draft')
+      .sort((a, b) => a.date.localeCompare(b.date) || (b.created_at || '').localeCompare(a.created_at || '')),
+    [shows],
+  );
   const upcomingShows = useMemo(() => shows.filter((show) => !isPastShow(show.date)).sort((a,b)=>a.date.localeCompare(b.date)), [shows]);
   const pastShows = useMemo(() => shows.filter((show) => isPastShow(show.date)).sort((a, b) => b.date.localeCompare(a.date)), [shows]);
   const upcomingTours = useMemo(() => ['All', 'Hide drafts', ...sortTourNamesForUpcoming(upcomingShows)], [upcomingShows]);
