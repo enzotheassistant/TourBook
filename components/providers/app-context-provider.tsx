@@ -19,6 +19,7 @@ import {
   WORKSPACE_STORAGE_KEY,
   clearAppContextStorage,
   clearPendingInviteScope,
+  isPendingInviteScopeFresh,
   readPendingInviteScope,
 } from '@/lib/app-context-storage';
 import {
@@ -298,8 +299,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
           && (pendingInviteScope.scopeType !== 'projects' || pendingInviteScope.projectIds.length === 0 || pendingInviteScope.projectIds.includes(activeProjectId ?? ''))
           && (pendingInviteScope.scopeType !== 'tours' || pendingInviteScope.tourIds.length === 0 || pendingInviteScope.tourIds.includes(activeTourId ?? ''));
 
-        const inviteUnavailable = !inviteWorkspaceId;
-        if (inviteApplied || inviteUnavailable) {
+        if (inviteApplied || !isPendingInviteScopeFresh(pendingInviteScope)) {
           clearPendingInviteScope();
         }
       }

@@ -14,6 +14,8 @@ export type PendingInviteScope = {
   acceptedAt: number;
 };
 
+export const PENDING_INVITE_SCOPE_MAX_AGE_MS = 15 * 60 * 1000;
+
 function readLocalStorage(key: string) {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(key);
@@ -67,6 +69,12 @@ export function writePendingInviteScope(scope: Omit<PendingInviteScope, 'accepte
 export function clearPendingInviteScope() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(PENDING_INVITE_SCOPE_STORAGE_KEY);
+}
+
+export function isPendingInviteScopeFresh(scope: Pick<PendingInviteScope, 'acceptedAt'> | null | undefined, now = Date.now()) {
+  if (!scope) return false;
+  if (!Number.isFinite(scope.acceptedAt)) return false;
+  return now - scope.acceptedAt <= PENDING_INVITE_SCOPE_MAX_AGE_MS;
 }
 
 export function clearAppContextStorage() {
