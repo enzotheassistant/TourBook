@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
 import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCachedShows } from '@/lib/data-client';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { getWorkspaceRole, canCreateDates } from '@/lib/roles';
+import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
 import { Show } from '@/lib/types';
 
@@ -370,6 +370,7 @@ export function DashboardClient() {
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
   const canCreateDateInWorkspace = canCreateDates(activeWorkspaceRole);
+  const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   const activeCollection = tab === 'past' ? filteredPastShows : filteredUpcomingShows;
   const totalCollection = tab === 'past' ? pastShows : upcomingShows;
   const dayTypeSummary = useMemo(() => summarizeDayTypes(activeCollection), [activeCollection]);
@@ -413,10 +414,12 @@ export function DashboardClient() {
             body={hasWorkspaceAccess
               ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
               : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
-            actions={[
-              { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
-              { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
-            ]}
+            actions={hasAdminAnywhere
+              ? [
+                  { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+                  { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+                ]
+              : [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
             telemetry={{
               stateType: hasWorkspaceAccess ? 'crew.no_workspace_selected' : 'crew.no_workspace_access',
             }}

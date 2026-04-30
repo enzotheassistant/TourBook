@@ -16,14 +16,20 @@ export function getCrewNoArtistsState(role: WorkspaceRole | null | undefined, ha
   const canCreate = canCreateArtists(role);
 
   if (hasAnyProject) {
-    return {
-      title: 'No artist is active for this workspace.',
-      body: 'This workspace has artists, but none is selected in your current session. Open Admin, confirm workspace + artist, then return here.',
-      actions: [
-        { label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
-        { label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
-      ],
-    };
+    return canCreate
+      ? {
+          title: 'No artist is active for this workspace.',
+          body: 'This workspace has artists, but none is selected in your current session. Open Admin, confirm workspace + artist, then return here.',
+          actions: [
+            { label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+            { label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+          ],
+        }
+      : {
+          title: 'No artist is active for this workspace.',
+          body: 'This workspace has artists, but none are available in your current crew context yet. Ask an owner/admin/editor to check your access or publish dates.',
+          actions: [{ label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }],
+        };
   }
 
   if (canCreate) {

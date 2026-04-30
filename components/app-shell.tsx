@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { useAppContext } from '@/hooks/use-app-context';
+import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
 
 function ghostButtonClassName() {
@@ -139,7 +140,7 @@ function ProjectSwitchControl() {
   );
 }
 
-function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
+function CrewMenu({ activeTab, showAdminLink }: { activeTab: 'upcoming' | 'past'; showAdminLink: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -161,10 +162,14 @@ function CrewMenu({ activeTab }: { activeTab: 'upcoming' | 'past' }) {
           <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
             {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
           </Link>
-          <div className="border-b border-white/10" />
-          <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-            Admin
-          </Link>
+          {showAdminLink ? (
+            <>
+              <div className="border-b border-white/10" />
+              <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+                Admin
+              </Link>
+            </>
+          ) : null}
           <div className="px-2 py-2">
             <LogoutButton compact />
           </div>
@@ -226,8 +231,20 @@ export function AppShell({
   showSubtitle?: boolean;
 }) {
   const pathname = usePathname();
-  const { activeWorkspaceId, activeProjectId, projects, user, isLoading } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, projects, memberships, user, isLoading } = useAppContext();
   
+  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const showAdminLink = mode === 'admin'
+    ? true
+    : canAccessAdminWorkspace(activeWorkspaceRole) || hasAnyAdminAccess(memberships);
+  const actionHref = mode === 'admin' ? '/' : '/admin';
+  const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
+  const isCrewList = mode === 'crew' && pathname === '/';
+  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
+  const displayTitle = mode === 'crew' ? (currentProject?.name || currentProject?.slug || title) : title;
+  const shouldShowSubtitle = mode === 'admin' ? showSubtitle : false;
+
   // Guard: Do not render protected content if user is not authenticated and loading is complete.
   // This prevents the flash of protected UI during logout/session loss.
   // While loading, render nothing to keep the page blank until auth state is determined.
@@ -237,14 +254,6 @@ export function AppShell({
   if (isLoading) {
     return null;
   }
-  
-  const actionHref = mode === 'admin' ? '/' : '/admin';
-  const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
-  const isCrewList = mode === 'crew' && pathname === '/';
-  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
-  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
-  const displayTitle = mode === 'crew' ? (currentProject?.name || currentProject?.slug || title) : title;
-  const shouldShowSubtitle = mode === 'admin' ? showSubtitle : false;
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
@@ -264,10 +273,10 @@ export function AppShell({
                           ←
                         </Link>
                       ) : null}
-                      <CrewMenu activeTab={activeTab} />
+                      <CrewMenu activeTab={activeTab} showAdminLink={showAdminLink} />
                     </>
                   ) : (
-                    <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
+                    <HeaderActionMenu actionHref={showAdminLink ? actionHref : '/'} actionLabel={showAdminLink ? actionLabel : 'Crew View'} />
                   )}
                 </div>
                 <div className="mt-3 min-w-0">
@@ -291,14 +300,16 @@ export function AppShell({
                       </Link>
                     ) : null}
                     <ProjectSwitchControl />
-                    <CrewMenu activeTab={activeTab} />
+                    <CrewMenu activeTab={activeTab} showAdminLink={showAdminLink} />
                   </div>
                 ) : (
                   <div className="flex shrink-0 items-center gap-2 self-start">
                     <ProjectSwitchControl />
-                    <Link href={actionHref} className={ghostButtonClassName()}>
-                      {actionLabel}
-                    </Link>
+                    {showAdminLink ? (
+                      <Link href={actionHref} className={ghostButtonClassName()}>
+                        {actionLabel}
+                      </Link>
+                    ) : null}
                     <LogoutButton />
                   </div>
                 )}

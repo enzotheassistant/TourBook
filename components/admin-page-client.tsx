@@ -8,17 +8,17 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { canCreateArtists, canManageInvites, getWorkspaceRole } from '@/lib/roles';
+import { canAccessAdminWorkspace, canCreateArtists, canManageInvites, getFirstAdminWorkspaceId, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
@@ -41,6 +41,10 @@ function secondaryButtonClassName() {
 
 function dangerButtonClassName() {
   return 'inline-flex h-11 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
+}
+
+function onboardingWorkspaceSlug(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function filterShows(shows: Show[], search: string, selectedTour: string) {
@@ -558,6 +562,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
+  const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
+  const firstAdminWorkspaceId = useMemo(() => getFirstAdminWorkspaceId(memberships), [memberships]);
 
   const loadShows = useCallback(async () => {
     if (!activeWorkspaceId || !activeProjectId) {
@@ -654,6 +660,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       window.removeEventListener('tourbook:shows-updated', loadShows);
     };
   }, [activeProjectId, activeTourId, activeWorkspaceId, contextLoading, loadShows]);
+
+  useEffect(() => {
+    if (contextLoading) return;
+    if (!activeWorkspaceId || canAccessAdminWorkspace(activeWorkspaceRole)) return;
+    if (!firstAdminWorkspaceId || firstAdminWorkspaceId === activeWorkspaceId) return;
+    setActiveWorkspaceId(firstAdminWorkspaceId);
+  }, [activeWorkspaceId, activeWorkspaceRole, contextLoading, firstAdminWorkspaceId, setActiveWorkspaceId]);
 
   useEffect(() => {
     if (contextLoading) return;
@@ -1678,6 +1691,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     );
   }
 
+  if (activeWorkspaceId && !canAccessAdminWorkspace(activeWorkspaceRole) && !hasAdminAnywhere) {
+    return (
+      <WorkspaceSelfServeAccessPanel
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={handleWorkspaceSelection}
+        onCreated={async (workspaceId) => {
+          await refreshContext();
+          setActiveWorkspaceId(workspaceId);
+        }}
+      />
+    );
+  }
+
   if (!activeProjectId) {
     const projectsForActiveWorkspace = projects.filter((project) => project.workspaceId === activeWorkspaceId);
     const noArtistGuardrail = getAdminNoArtistsGuardrail(activeWorkspaceRole);
@@ -2099,14 +2126,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           Drafts
         </button>
 
-        <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
-        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
-        <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
-          Team
-        </Link>
-        <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
-          Projects
-        </Link>
+        {canAccessAdminWorkspace(activeWorkspaceRole) ? (
+          <>
+            <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
+            <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
+            <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+              Team
+            </Link>
+            <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+              Projects
+            </Link>
+          </>
+        ) : null}
       </div>
 
       {canManageProjectActions && isProjectsMode ? (
@@ -2500,6 +2531,91 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </section>
         )
       ) : null}
+    </div>
+  );
+}
+
+function WorkspaceSelfServeAccessPanel({
+  workspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
+  onCreated,
+}: {
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
+  onSelectWorkspace: (workspaceId: string | null) => void;
+  onCreated: (workspaceId: string) => Promise<void>;
+}) {
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [message, setMessage] = useState('You currently have crew/view-only access in this workspace. Create your own workspace anytime without affecting your invited access elsewhere.');
+
+  async function handleCreateWorkspace() {
+    const cleanName = workspaceName.trim();
+    if (!cleanName) {
+      setMessage('Enter a workspace name to continue.');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const workspace = await createWorkspace({ name: cleanName, slug: onboardingWorkspaceSlug(cleanName) || null });
+      setWorkspaceName('');
+      setMessage('Workspace created. You now have your own admin workspace.');
+      await onCreated(workspace.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create workspace.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <ActivationEmptyState
+        title="Crew access only in this workspace."
+        body="This workspace is available to you as invited crew/viewer access, so admin setup and management tools stay hidden here."
+        actions={[{ label: 'Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
+        telemetry={{ stateType: 'admin.viewer_guardrail' }}
+      />
+
+      <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Your workspaces</p>
+            <h2 className="mt-1 text-base font-semibold text-zinc-100">Switch context or create your own</h2>
+          </div>
+
+          {workspaces.length > 0 ? (
+            <label className="grid gap-2 text-sm text-zinc-300">
+              <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Current workspace</span>
+              <select
+                value={activeWorkspaceId ?? ''}
+                onChange={(event) => onSelectWorkspace(event.target.value || null)}
+                className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
+              >
+                {workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input
+              value={workspaceName}
+              onChange={(event) => setWorkspaceName(event.target.value)}
+              placeholder="New workspace name"
+              className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
+            />
+            <button type="button" onClick={() => void handleCreateWorkspace()} disabled={creating || !workspaceName.trim()} className={primaryButtonClassName()}>
+              {creating ? 'Creating…' : 'Create my workspace'}
+            </button>
+          </div>
+
+          <p className="text-sm text-zinc-300">{message}</p>
+        </div>
+      </section>
     </div>
   );
 }
