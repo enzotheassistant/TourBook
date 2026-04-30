@@ -680,6 +680,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (contextLoading) return;
     void loadInvites();
     void loadMembers();
+    window.addEventListener('tourbook:invites-updated', loadInvites);
+    return () => {
+      window.removeEventListener('tourbook:invites-updated', loadInvites);
+    };
   }, [contextLoading, loadInvites, loadMembers]);
 
   useEffect(() => {
@@ -1021,8 +1025,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInviteProjectIds([]);
       setInviteTourIds([]);
       setInviteScopeType('workspace');
-      setInvites((current) => [created.invite, ...current]);
       setInviteMessage('An email invite has been sent to your recipient(s).');
+      window.dispatchEvent(new Event('tourbook:invites-updated'));
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to create invite.';
@@ -1040,8 +1044,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     try {
       const revoked = await revokeWorkspaceInvite({ workspaceId: activeWorkspaceId, inviteId: invite.id });
-      setInvites((current) => current.map((item) => (item.id === revoked.id ? revoked : item)));
       setInviteMessage('Invite revoked.');
+      window.dispatchEvent(new Event('tourbook:invites-updated'));
       await trackInviteEvent({ event: 'invite.revoked', workspaceId: revoked.workspaceId, inviteId: revoked.id, role: revoked.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to revoke invite.';
