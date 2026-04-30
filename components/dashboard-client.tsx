@@ -12,9 +12,8 @@ import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCa
 import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
+import { clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
 import { Show } from '@/lib/types';
-
-const PENDING_INVITE_TOKEN_STORAGE_KEY = 'tourbook.pendingInviteToken';
 
 
 type InviteFlowState =
@@ -25,23 +24,6 @@ type InviteFlowState =
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function readPendingInviteToken() {
-  if (typeof window === 'undefined') return '';
-  return window.localStorage.getItem(PENDING_INVITE_TOKEN_STORAGE_KEY)?.trim() ?? '';
-}
-
-function writePendingInviteToken(token: string) {
-  if (typeof window === 'undefined') return;
-  const trimmed = token.trim();
-  if (!trimmed) return;
-  window.localStorage.setItem(PENDING_INVITE_TOKEN_STORAGE_KEY, trimmed);
-}
-
-function clearPendingInviteToken() {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(PENDING_INVITE_TOKEN_STORAGE_KEY);
 }
 
 function normalizeTourName(value: string) {
@@ -403,6 +385,12 @@ export function DashboardClient() {
   }, []);
 
   async function handleInviteAccepted(invite: WorkspaceInviteSummary) {
+    writePendingInviteScope({
+      workspaceId: invite.workspaceId,
+      scopeType: invite.scopeType,
+      projectIds: invite.projectIds,
+      tourIds: invite.tourIds,
+    });
     beginInviteJoin(invite);
   }
 

@@ -18,6 +18,8 @@ import {
   TOUR_STORAGE_KEY,
   WORKSPACE_STORAGE_KEY,
   clearAppContextStorage,
+  clearPendingInviteScope,
+  readPendingInviteScope,
 } from '@/lib/app-context-storage';
 import {
   logBootstrapStart,
@@ -245,35 +247,62 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       const storedWorkspaceId = readStoredValue(WORKSPACE_STORAGE_KEY);
       const storedProjectId = readStoredValue(PROJECT_STORAGE_KEY);
       const storedTourId = readStoredValue(TOUR_STORAGE_KEY);
+      const pendingInviteScope = readPendingInviteScope();
 
       const fallbackWorkspaceId =
         data.workspaces.find((workspace) => data.projects.some((project) => project.workspaceId === workspace.id))?.id
         ?? data.workspaces[0]?.id
         ?? null;
 
-      const activeWorkspaceId = data.workspaces.some((workspace) => workspace.id === storedWorkspaceId)
-        ? storedWorkspaceId
-        : data.activeWorkspaceId ?? fallbackWorkspaceId;
+      const inviteWorkspaceId = data.workspaces.some((workspace) => workspace.id === pendingInviteScope?.workspaceId)
+        ? pendingInviteScope?.workspaceId ?? null
+        : null;
+
+      const activeWorkspaceId = inviteWorkspaceId
+        ?? (data.workspaces.some((workspace) => workspace.id === storedWorkspaceId)
+          ? storedWorkspaceId
+          : data.activeWorkspaceId ?? fallbackWorkspaceId);
 
       const activeProjects = activeWorkspaceId
         ? data.projects.filter((project) => project.workspaceId === activeWorkspaceId)
         : [];
 
-      const activeProjectId = activeProjects.some((project) => project.id === storedProjectId)
-        ? storedProjectId
-        : activeProjects.some((project) => project.id === data.activeProjectId)
-          ? data.activeProjectId
-          : activeProjects[0]?.id ?? null;
+      const inviteProjectId = pendingInviteScope
+        ? activeProjects.find((project) => pendingInviteScope.projectIds.includes(project.id))?.id ?? null
+        : null;
+
+      const activeProjectId = inviteProjectId
+        ?? (activeProjects.some((project) => project.id === storedProjectId)
+          ? storedProjectId
+          : activeProjects.some((project) => project.id === data.activeProjectId)
+            ? data.activeProjectId
+            : activeProjects[0]?.id ?? null);
 
       const activeTours = activeProjectId
         ? data.tours.filter((tour) => tour.projectId === activeProjectId)
         : [];
 
-      const activeTourId = activeTours.some((tour) => tour.id === storedTourId)
-        ? storedTourId
-        : activeTours.some((tour) => tour.id === data.activeTourId)
-          ? data.activeTourId
-          : activeTours[0]?.id ?? null;
+      const inviteTourId = pendingInviteScope
+        ? activeTours.find((tour) => pendingInviteScope.tourIds.includes(tour.id))?.id ?? null
+        : null;
+
+      const activeTourId = inviteTourId
+        ?? (activeTours.some((tour) => tour.id === storedTourId)
+          ? storedTourId
+          : activeTours.some((tour) => tour.id === data.activeTourId)
+            ? data.activeTourId
+            : activeTours[0]?.id ?? null);
+
+      if (pendingInviteScope) {
+        const inviteApplied = pendingInviteScope.workspaceId === activeWorkspaceId
+          && (pendingInviteScope.scopeType !== 'projects' || pendingInviteScope.projectIds.length === 0 || pendingInviteScope.projectIds.includes(activeProjectId ?? ''))
+          && (pendingInviteScope.scopeType !== 'tours' || pendingInviteScope.tourIds.length === 0 || pendingInviteScope.tourIds.includes(activeTourId ?? ''));
+
+        const inviteUnavailable = !inviteWorkspaceId;
+        if (inviteApplied || inviteUnavailable) {
+          clearPendingInviteScope();
+        }
+      }
 
       setBootstrap({
         ...data,
