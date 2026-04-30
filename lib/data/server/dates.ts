@@ -3,7 +3,7 @@ import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRela
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 import { upsertTourByName } from '@/lib/data/server/tours';
-import { buildAnchorScheduleItems as buildAnchorScheduleItemsImpl, normalizeScheduleItemsForPersistence as normalizeScheduleItemsImpl } from './schedule-normalization';
+import { normalizeScheduleItemsForPersistence as normalizeScheduleItemsImpl } from './schedule-normalization';
 import type { ScheduleItemLike } from './schedule-normalization';
 
 const DEFAULT_VISIBILITY: DateVisibility = {
@@ -240,12 +240,8 @@ async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string
   return normalizeScheduleItems(data ?? []);
 }
 
-export function buildAnchorScheduleItems(values: Partial<DateFormValues>) {
-  return buildAnchorScheduleItemsImpl(values);
-}
-
-export function normalizeScheduleItemsForPersistence(scheduleItems: ScheduleItemLike[] | undefined, fallbackValues: Partial<DateFormValues>): Array<Partial<DateScheduleItem>> {
-  return normalizeScheduleItemsImpl(scheduleItems, fallbackValues) as Array<Partial<DateScheduleItem>>;
+export function normalizeScheduleItemsForPersistence(scheduleItems: ScheduleItemLike[] | undefined, fallbackScheduleItems: ScheduleItemLike[] | undefined): Array<Partial<DateScheduleItem>> {
+  return normalizeScheduleItemsImpl(scheduleItems, fallbackScheduleItems) as Array<Partial<DateScheduleItem>>;
 }
 
 async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: ScheduleItemLike[]) {
@@ -451,7 +447,7 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
     throw new ApiError(500, error?.message ?? 'Unable to create date.');
   }
 
-  const normalizedScheduleItems = normalizeScheduleItemsForPersistence(values.schedule_items as ScheduleItemLike[] | undefined, resolvedValues);
+  const normalizedScheduleItems = normalizeScheduleItemsForPersistence(values.schedule_items as ScheduleItemLike[] | undefined, undefined);
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, String(data.id));
 }
@@ -508,16 +504,11 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     throw new ApiError(500, error?.message ?? 'Unable to update date.');
   }
 
-  // Pass current.schedule_items as the schedule_items in fallbackValues so that
-  // normalizeScheduleItemsForPersistence can preserve existing arbitrary rows
-  // (e.g. "Band Soundcheck", "Line Check") even when the incoming payload
-  // sends an empty schedule_items array (which happens when the editor form
-  // has only unfilled placeholder rows). Without this, the fallback would
-  // generate only standard anchor rows (Load In, Doors, etc.) via
-  // buildAnchorScheduleItems, silently dropping non-anchor custom items.
+  // Preserve existing schedule_items from the DB when the incoming payload has
+  // no items (e.g. editor form only had unfilled placeholder rows).
   const normalizedScheduleItems = normalizeScheduleItemsForPersistence(
     values.schedule_items as ScheduleItemLike[] | undefined,
-    { ...current, ...values, schedule_items: values.schedule_items ?? current.schedule_items },
+    current.schedule_items as ScheduleItemLike[] | undefined,
   );
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, dateId);
