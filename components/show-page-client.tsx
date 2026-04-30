@@ -202,7 +202,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   // NOTE: hasLoadedOnce intentionally excluded from deps — including it caused the
   // effect to re-run after the first successful fetch, triggering a second getShow()
   // call and an extra render cycle that produced the first-load strobe/blip.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId, contextLoading, showId]);
 
   // Include any row that has at least a label OR a time — matching the same
@@ -343,7 +342,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
             <>
               {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
               {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><p className="text-sm text-zinc-200">{show.parking_load_info}</p></SectionCard> : null}
-              {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
+              {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList allowPartial items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
               {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
               {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <p>{show.hotel_notes}</p> : null}</div></SectionCard> : null}
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><p className="text-sm text-zinc-200">{show.notes}</p></SectionCard> : null}
@@ -363,6 +362,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.day_type === 'travel' && show.visibility.show_schedule && (travelSchedule.departureItems.length > 0 || travelSchedule.arrivalItems.length > 0) ? (
                 <SectionCard title="Departure & arrival">
                   <KeyValueList
+                    allowPartial
                     items={[
                       ...travelSchedule.departureItems.map((item) => ({ label: item.label, value: item.time })),
                       ...travelSchedule.arrivalItems.map((item) => ({ label: item.label, value: item.time })),
@@ -374,7 +374,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.day_type === 'travel' && ((show.visibility.show_parking_load_info && show.parking_load_info) || (show.visibility.show_schedule && travelSchedule.transportItems.length > 0)) ? (
                 <SectionCard title="Transport">
                   <div className="space-y-4">
-                    {show.visibility.show_schedule && travelSchedule.transportItems.length > 0 ? <KeyValueList items={travelSchedule.transportItems.map((item) => ({ label: item.label, value: item.time }))} /> : null}
+                    {show.visibility.show_schedule && travelSchedule.transportItems.length > 0 ? <KeyValueList allowPartial items={travelSchedule.transportItems.map((item) => ({ label: item.label, value: item.time }))} /> : null}
                     {show.visibility.show_parking_load_info && show.parking_load_info ? <p className="text-sm text-zinc-200">{show.parking_load_info}</p> : null}
                   </div>
                 </SectionCard>
@@ -382,13 +382,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
               {show.day_type === 'travel' && show.visibility.show_schedule && travelSchedule.timelineItems.length > 0 ? (
                 <SectionCard title="Travel timeline">
-                  <KeyValueList items={travelSchedule.timelineItems.map((item) => ({ label: item.label, value: item.time }))} />
+                  <KeyValueList allowPartial items={travelSchedule.timelineItems.map((item) => ({ label: item.label, value: item.time }))} />
                 </SectionCard>
               ) : null}
 
               {show.day_type === 'off' && show.visibility.show_schedule && visibleScheduleItems.length > 0 ? (
                 <SectionCard title="Reminders & appointments">
-                  <KeyValueList items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} />
+                  <KeyValueList allowPartial items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} />
                 </SectionCard>
               ) : null}
 
