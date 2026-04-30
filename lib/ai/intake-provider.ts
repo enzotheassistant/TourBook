@@ -1,4 +1,5 @@
 import { IntakeImageInput, IntakeRequest, IntakeResult, IntakeRow } from '@/lib/ai/intake-types';
+import { backfillScheduleItemsFromSourceText } from '@/lib/ai/schedule-fallback';
 
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -47,6 +48,7 @@ function buildSystemPrompt(existingShows: IntakeRequest['existingShows']) {
     'Never invent facts. If uncertain, leave the field blank or move details into notes. Use flags for uncertainty.',
     'Keep dates in YYYY-MM-DD when possible. If year is omitted: use the current year when that month/day is still upcoming this year; only roll to next year when the current-year month/day is already past today. Do not roll all omitted-year dates to next year.',
     'Schedule items must be an array of objects with label and time. Only include meaningful schedule data.',
+    'When source text contains a multi-line schedule/timeline, preserve every distinct schedule line that has a usable time. Do not collapse a full schedule down to only 1-2 anchor items.',
     'Potential duplicate warnings should go in flags, not by altering other fields.',
     'If the input is a routing list, create one row per date.',
     duplicatesContext ? `Existing shows for duplicate awareness:\n${duplicatesContext}` : '',
@@ -189,6 +191,17 @@ function normalizeResult(payload: any, provider: string, model: string, attempts
     provider,
     model,
     attempts,
+  };
+}
+
+function repairScheduleCoverage(result: IntakeResult, request: IntakeRequest): IntakeResult {
+  const repairedRows = backfillScheduleItemsFromSourceText(result.rows, request.text);
+  if (repairedRows === result.rows) return result;
+
+  return {
+    ...result,
+    rows: repairedRows,
+    warnings: [...(result.warnings ?? []), 'Recovered additional schedule lines directly from the pasted source text.'],
   };
 }
 
@@ -386,13 +399,13 @@ export async function runIntake(request: IntakeRequest): Promise<IntakeResult> {
 
   try {
     if (primaryProvider === 'openrouter') {
-      return await callOpenRouter(request, getOpenRouterModel());
+      return repairScheduleCoverage(await callOpenRouter(request, getOpenRouterModel()), request);
     }
 
-    return await callGemini(request, primaryModel);
+    return repairScheduleCoverage(await callGemini(request, primaryModel), request);
   } catch (primaryError) {
     if (fallbackProvider === 'openrouter' && primaryProvider !== 'openrouter' && process.env.OPENROUTER_API_KEY) {
-      const fallback = await callOpenRouter(request, getOpenRouterModel());
+      const fallback = repairScheduleCoverage(await callOpenRouter(request, getOpenRouterModel()), request);
       return {
         ...fallback,
         warnings: [...(fallback.warnings || []), `Primary ${primaryProvider} request failed and fallback ${fallback.provider} was used.`],
