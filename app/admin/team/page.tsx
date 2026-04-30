@@ -8,7 +8,7 @@ export default function AdminTeamPage() {
   return (
     <AppShell mode="admin" title="TourBook" showSubtitle={false}>
       <Suspense fallback={null}>
-        <AdminPageClient mode="team" />
+        <AdminPageClient key="team" mode="team" />
       </Suspense>
     </AppShell>
   );

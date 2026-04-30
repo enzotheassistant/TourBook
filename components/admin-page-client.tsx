@@ -567,7 +567,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     setShowsLoading(true);
     try {
-      const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+      const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId, tourId: activeTourId });
       const deletedShowIds = deletedShowIdsRef.current;
       const nextShows = deletedShowIds.size > 0
         ? result.shows.filter((show) => !deletedShowIds.has(show.id))
@@ -577,7 +577,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     } finally {
       setShowsLoading(false);
     }
-  }, [activeProjectId, activeWorkspaceId]);
+  }, [activeProjectId, activeTourId, activeWorkspaceId]);
 
   const loadInvites = useCallback(async () => {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) {
@@ -629,8 +629,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setEditingMemberTourIds((current) => current.filter((id) => editAvailableTours.some((tour) => tour.id === id)));
   }, [editAvailableTours]);
 
-  // Reset stale shows, filters, and errors when the active project changes
-  // Must run before the data loading effect so resets happen first
+  // Reset stale shows, filters, and errors whenever the admin view or active scope changes.
+  // This prevents sibling admin routes from briefly reusing an out-of-date list.
   useEffect(() => {
     deletedShowIdsRef.current.clear();
     setShows([]);
@@ -642,12 +642,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setDraftSearch('');
     setDraftTour('All');
     setMessage('');
-  }, [activeProjectId]);
+  }, [activeWorkspaceId, activeProjectId, activeTourId, mode]);
 
   useEffect(() => {
     if (contextLoading || !activeWorkspaceId || !activeProjectId) return;
+
     void loadShows();
-  }, [activeProjectId, activeWorkspaceId, contextLoading, loadShows]);
+    window.addEventListener('tourbook:shows-updated', loadShows);
+    return () => {
+      window.removeEventListener('tourbook:shows-updated', loadShows);
+    };
+  }, [activeProjectId, activeTourId, activeWorkspaceId, contextLoading, loadShows]);
 
   useEffect(() => {
     if (contextLoading) return;
@@ -757,7 +762,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     if (!targetId || !nextAction || handledLoadRef.current === nextAction) return;
     const resolvedTargetId = targetId;
-    if (shows.some((show) => show.id === resolvedTargetId)) return;
 
     let active = true;
 
@@ -805,7 +809,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     return () => {
       active = false;
     };
-  }, [activeWorkspaceId, contextLoading, mode, searchParams, shows]);
+  }, [activeWorkspaceId, contextLoading, mode, searchParams]);
 
   useEffect(() => {
     const routes = ['/admin', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/projects'];
@@ -814,13 +818,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [returnToUrl, router]);
 
   useEffect(() => {
-    if (mode !== 'new' || !shows.length) return;
+    if (mode !== 'new') return;
 
     const editId = searchParams.get('edit');
     const duplicateId = searchParams.get('duplicate');
     const returnTo = searchParams.get('returnTo');
     const returnTab = searchParams.get('returnTab') === 'past' ? 'past' : 'upcoming';
-    const nextAction = duplicateId ? `duplicate:${duplicateId}` : editId ? `edit:${editId}` : null;
 
     if (returnTo && returnTo !== 'dates' && (editId || duplicateId)) {
       setReturnToUrl(returnTo);
@@ -833,41 +836,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setReturnToUrl(`/admin/dates?tab=${returnTab}`);
       setReturnLabel('Existing Dates');
     }
-
-    if (!nextAction || handledLoadRef.current === nextAction) return;
-
-    if (duplicateId) {
-      const source = shows.find((show) => show.id === duplicateId);
-      if (source) {
-        const duplicated = {
-          ...source,
-          id: '',
-          date: '',
-          created_at: undefined,
-          schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-        };
-        setVisibilityModes(visibilityModesForLoadedForm(duplicated));
-        setForm(duplicated);
-        setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
-        setMessage('Tour day duplicated');
-        setDirty(false);
-      }
-    } else if (editId) {
-      const source = shows.find((show) => show.id === editId);
-      if (source) {
-        setVisibilityModes(visibilityModesForLoadedForm(source));
-        setForm(source);
-        setExpandedSections(getExpandedSectionsForPopulatedForm(source));
-        setMessage('Loaded into editor');
-        setDirty(false);
-      }
-    }
-
-    handledLoadRef.current = nextAction;
-    if (typeof window !== 'undefined') {
-      window.history.replaceState({}, '', '/admin');
-    }
-  }, [mode, searchParams, shows]);
+  }, [mode, searchParams]);
 
   function handleWorkspaceSelection(workspaceId: string | null) {
     setActiveWorkspaceId(workspaceId);

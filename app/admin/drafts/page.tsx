@@ -8,7 +8,7 @@ export default function AdminDraftsPage() {
   return (
     <AppShell mode="admin" title="TourBook" showSubtitle={false}>
       <Suspense fallback={null}>
-        <AdminPageClient mode="drafts" />
+        <AdminPageClient key="drafts" mode="drafts" />
       </Suspense>
     </AppShell>
   );

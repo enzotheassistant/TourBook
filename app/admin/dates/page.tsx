@@ -8,7 +8,7 @@ export default function AdminDatesPage() {
   return (
     <AppShell mode="admin" title="TourBook" showSubtitle={false}>
       <Suspense fallback={null}>
-        <AdminPageClient mode="dates" />
+        <AdminPageClient key="dates" mode="dates" />
       </Suspense>
     </AppShell>
   );
