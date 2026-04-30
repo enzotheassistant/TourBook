@@ -10,7 +10,6 @@ import {
   backupRefreshToken,
   getBackupRefreshTokenWithDiagnostics,
   clearBackupRefreshToken,
-  clearBackupRememberedEmail,
   authLog,
 } from '@/lib/supabase/client';
 import type { BootstrapContext } from '@/lib/types/tenant';
@@ -350,9 +349,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_OUT') {
-        authLog('onAuthStateChange: SIGNED_OUT — clearing backup cookies + server session');
+        authLog('onAuthStateChange: SIGNED_OUT — clearing auth backup cookie + server session (remembered email preserved)');
         clearBackupRefreshToken();
-        clearBackupRememberedEmail();
         try {
           await clearServerSession();
         } catch (error) {

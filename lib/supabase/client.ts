@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { RT_COOKIE, EMAIL_COOKIE } from "@/lib/supabase/constants";
+import { RT_COOKIE, EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE } from "@/lib/supabase/constants";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -22,6 +22,7 @@ let browserClient: SupabaseClient | null = null;
 
 const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
 const EMAIL_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year (survives Safari force-close)
+const REMEMBER_EMAIL_PREF_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year
 
 // ---------------------------------------------------------------------------
 // Debug logging helper — uses console.warn so it's visible in Safari Web
@@ -121,11 +122,19 @@ export function getBackupRememberedEmail(): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-/** Remove the remembered email cookie (called on sign-out). */
+/** Remove the remembered email cookie when the user explicitly opts out. */
 export function clearBackupRememberedEmail(): void {
   if (typeof document === "undefined") return;
   document.cookie = `${EMAIL_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax; Secure`;
   authLog("clearBackupRememberedEmail: email cookie cleared");
+}
+
+/** Persist the remember-email checkbox preference; defaults to checked unless explicitly false. */
+export function setRememberEmailPreference(remember: boolean): void {
+  if (typeof document === "undefined") return;
+  const expires = new Date(Date.now() + REMEMBER_EMAIL_PREF_MAX_AGE_S * 1000).toUTCString();
+  document.cookie = `${REMEMBER_EMAIL_PREF_COOKIE}=${remember ? '1' : '0'}; expires=${expires}; path=/; SameSite=Lax; Secure`;
+  authLog(`setRememberEmailPreference: preference ${remember ? 'enabled' : 'disabled'} ✓`);
 }
 
 // ---------------------------------------------------------------------------

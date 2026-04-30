@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { getBrowserSupabaseClient, backupRefreshToken, authLog, backupRememberedEmail, getBackupRememberedEmail, clearBackupRememberedEmail } from "@/lib/supabase/client";
+import { getBrowserSupabaseClient, backupRefreshToken, authLog, backupRememberedEmail, clearBackupRememberedEmail, setRememberEmailPreference } from "@/lib/supabase/client";
 
 interface LoginPageClientProps {
   initialEmail?: string | null;
+  initialRememberEmail?: boolean;
   inviteToken?: string;
 }
 
@@ -67,11 +68,11 @@ function mapAuthError(message?: string, options?: { mode?: AuthMode; fallback?: 
   return raw || fallback;
 }
 
-export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageClientProps) {
+export function LoginPageClient({ initialEmail, initialRememberEmail = true, inviteToken = "" }: LoginPageClientProps) {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState(initialEmail || "");
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(!!initialEmail);
+  const [rememberEmail, setRememberEmail] = useState(initialRememberEmail);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -94,6 +95,7 @@ export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageCli
         accessToken,
         refreshToken,
         email: emailToRemember,
+        rememberEmail,
       }),
     });
 
@@ -132,10 +134,12 @@ export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageCli
           localStorage.setItem("tourbook_last_email", normalizedEmail);
           sessionStorage.setItem("tourbook_last_email", normalizedEmail);
           backupRememberedEmail(normalizedEmail);
+          setRememberEmailPreference(true);
         } else {
           localStorage.removeItem("tourbook_last_email");
           sessionStorage.removeItem("tourbook_last_email");
           clearBackupRememberedEmail();
+          setRememberEmailPreference(false);
         }
 
         // Back up the refresh token to a cookie so we can recover the session
@@ -169,6 +173,7 @@ export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageCli
         if (data.session) {
           authLog("login: signUp succeeded with immediate session — writing backup cookie");
           backupRefreshToken(data.session.refresh_token);
+          setRememberEmailPreference(true);
           await syncSession(data.session.access_token, data.session.refresh_token, normalizedEmail);
           routeToApp();
           return;
@@ -178,6 +183,7 @@ export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageCli
         localStorage.setItem("tourbook_last_email", normalizedEmail);
         sessionStorage.setItem("tourbook_last_email", normalizedEmail);
         backupRememberedEmail(normalizedEmail);
+        setRememberEmailPreference(true);
 
         setSuccess("Account created. Check your email to confirm, then sign in.");
         setMode("signin");
@@ -271,7 +277,24 @@ export function LoginPageClient({ initialEmail, inviteToken = "" }: LoginPageCli
                 <input
                   type="checkbox"
                   checked={rememberEmail}
-                  onChange={(event) => setRememberEmail(event.target.checked)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setRememberEmail(checked);
+                    setRememberEmailPreference(checked);
+
+                    if (checked) {
+                      const normalizedEmail = email.trim().toLowerCase();
+                      if (normalizedEmail) {
+                        localStorage.setItem("tourbook_last_email", normalizedEmail);
+                        sessionStorage.setItem("tourbook_last_email", normalizedEmail);
+                        backupRememberedEmail(normalizedEmail);
+                      }
+                    } else {
+                      localStorage.removeItem("tourbook_last_email");
+                      sessionStorage.removeItem("tourbook_last_email");
+                      clearBackupRememberedEmail();
+                    }
+                  }}
                   className="mr-2 rounded border border-white/10 bg-black/30 text-white transition focus:ring-2 focus:ring-white/20"
                 />
                 Remember my email

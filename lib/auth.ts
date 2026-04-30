@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { RT_COOKIE, EMAIL_COOKIE } from "@/lib/supabase/constants";
+import { RT_COOKIE, EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE } from "@/lib/supabase/constants";
 import { createRouteHandlerSupabaseClient, createServerSupabaseClient, getServerSupabaseConfig } from "@/lib/supabase/server";
 
 export type AuthenticatedUser = {
@@ -154,6 +154,19 @@ export async function getRememberedEmailFromCookies(): Promise<string | null> {
   } catch (err) {
     // cookies() throws if called outside of Server Component context
     return null;
+  }
+}
+
+export async function getRememberEmailPreferenceFromCookies(): Promise<boolean> {
+  try {
+    const cookieStore = await cookies();
+    const raw = cookieStore.get(REMEMBER_EMAIL_PREF_COOKIE)?.value?.trim().toLowerCase();
+    if (raw === '0' || raw === 'false' || raw === 'off' || raw === 'no') {
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
   }
 }
 
