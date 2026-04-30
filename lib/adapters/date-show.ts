@@ -2,7 +2,6 @@ import { normalizeShow } from '@/lib/normalize';
 import { sanitizeShowFormForDayType } from '@/lib/tour-day';
 import type { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import type { DateFormValues, DateRecord, ScopedGuestListEntry } from '@/lib/types/date-record';
-import { scheduleDebugLog } from '@/lib/debug/schedule-debug';
 import { mapShowScheduleItemsToPayload } from './schedule-mapping';
 
 function deriveTourName(date: DateRecord) {
@@ -70,37 +69,7 @@ function pickAnchorTime(show: Partial<ShowFormValues>, labels: string[]) {
 export function mapShowFormToDateForm(show: Partial<ShowFormValues>, scope: { workspaceId: string; projectId: string; tourId?: string | null }): Partial<DateFormValues> {
   const sanitizedShow = sanitizeShowFormForDayType(show as ShowFormValues);
 
-  scheduleDebugLog(
-    {
-      stage: 'api-payload',
-      action: show.id ? 'map-show-form-update' : 'map-show-form-create',
-      dateId: show.id,
-      workspaceId: scope.workspaceId,
-      projectId: scope.projectId,
-      tourId: scope.tourId ?? null,
-      status: sanitizedShow.status,
-      dayType: sanitizedShow.day_type,
-      note: 'mapShowFormToDateForm incoming editor schedule_items before payload remap',
-    },
-    sanitizedShow.schedule_items,
-  );
-
   const scheduleItems = mapShowScheduleItemsToPayload(sanitizedShow.schedule_items);
-
-  scheduleDebugLog(
-    {
-      stage: 'api-payload',
-      action: show.id ? 'map-date-form-update' : 'map-date-form-create',
-      dateId: show.id,
-      workspaceId: scope.workspaceId,
-      projectId: scope.projectId,
-      tourId: scope.tourId ?? null,
-      status: sanitizedShow.status,
-      dayType: sanitizedShow.day_type,
-      note: 'mapShowFormToDateForm outgoing DateFormValues.schedule_items payload',
-    },
-    scheduleItems,
-  );
 
   return {
     id: sanitizedShow.id,

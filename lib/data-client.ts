@@ -5,7 +5,6 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
 import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
-import { scheduleDebugLog } from '@/lib/debug/schedule-debug';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -123,17 +122,6 @@ export async function getShow(id: string, scope?: ScopeInput) {
 
   try {
     const date = await request<any>(`/api/dates/${id}?${params.toString()}`);
-    scheduleDebugLog({
-      stage: 'reopen-response',
-      action: 'data-client-getShow-response',
-      dateId: date?.id ?? id,
-      workspaceId,
-      projectId: date?.project_id ?? null,
-      tourId: date?.tour_id ?? null,
-      status: date?.status ?? null,
-      dayType: date?.day_type ?? null,
-      note: 'raw /api/dates/[id] response before mapDateRecordToShow()',
-    }, date?.schedule_items);
     const show = mapDateRecordToShow(date);
     writeCachedShow({ workspaceId, showId: id }, show);
     return { show, source: 'live' as const, savedAt: new Date().toISOString() };
@@ -149,22 +137,6 @@ export async function getShow(id: string, scope?: ScopeInput) {
 export async function upsertShow(values: ShowFormValues, scope?: ScopeInput) {
   const resolved = requireWorkspaceProjectScope(scope);
   const payload = mapShowFormToDateForm(values, resolved);
-
-  // TEMP DEBUG: tourbook schedule debug — stage 2
-  scheduleDebugLog(
-    {
-      stage: 'api-payload',
-      action: values.id ? 'update-request' : 'create-request',
-      dateId: values.id,
-      workspaceId: resolved.workspaceId,
-      projectId: resolved.projectId,
-      tourId: resolved.tourId,
-      status: values.status,
-      dayType: values.day_type,
-      note: 'outgoing payload to /api/dates',
-    },
-    payload.schedule_items,
-  );
 
   if (values.id) {
     const params = new URLSearchParams({ workspaceId: resolved.workspaceId });
