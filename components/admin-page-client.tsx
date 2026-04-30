@@ -382,14 +382,110 @@ type ParsedImportRow = Omit<IntakeRow, 'schedule_items'> & {
   schedule_items: Array<{ id: string; label: string; time: string }>;
 };
 
+type ImportRowIssue = {
+  key: string;
+  label: string;
+  detail: string;
+  severity: 'warning' | 'info';
+};
+
+const IMPORT_FLAG_META: Record<string, Omit<ImportRowIssue, 'key'>> = {
+  missing_venue_name: {
+    label: 'Venue name missing',
+    detail: 'Add the room or venue name before publishing this draft.',
+    severity: 'warning',
+  },
+  missing_venue_address: {
+    label: 'Venue address missing',
+    detail: 'Street address was not extracted. Add it if routing depends on it.',
+    severity: 'info',
+  },
+  partial_contact_details: {
+    label: 'Partial contact',
+    detail: 'Only part of the DOS/contact info was extracted.',
+    severity: 'warning',
+  },
+  ambiguous_contact_details: {
+    label: 'Ambiguous contact',
+    detail: 'Multiple possible contacts were found. Confirm the right one.',
+    severity: 'warning',
+  },
+  date_requires_review: {
+    label: 'Date needs review',
+    detail: 'The source date was blank or could not be normalized cleanly.',
+    severity: 'warning',
+  },
+  duplicate_date_in_import: {
+    label: 'Duplicate date',
+    detail: 'Another imported row already uses this same date.',
+    severity: 'warning',
+  },
+};
+
+function buildImportRowIssues(row: IntakeRow): ImportRowIssue[] {
+  const issues: ImportRowIssue[] = [];
+  const pushIssue = (issue: ImportRowIssue) => {
+    if (!issues.some((current) => current.key === issue.key)) issues.push(issue);
+  };
+
+  for (const flag of Array.isArray(row.flags) ? row.flags.filter(Boolean) : []) {
+    const meta = IMPORT_FLAG_META[flag];
+    if (meta) {
+      pushIssue({ key: flag, ...meta });
+      continue;
+    }
+
+    pushIssue({
+      key: flag,
+      label: flag.replace(/_/g, ' '),
+      detail: 'Imported row was flagged by the AI response for manual review.',
+      severity: 'warning',
+    });
+  }
+
+  const rawDate = row.date?.trim() || '';
+  const normalizedDate = parseFlexibleDateInput(rawDate);
+  if (!rawDate || (!normalizedDate && rawDate)) {
+    pushIssue({
+      key: 'check_date',
+      label: 'Check date',
+      detail: rawDate ? 'Date format could not be normalized. Use the final show date.' : 'Date is blank and needs to be filled in.',
+      severity: 'warning',
+    });
+  }
+
+  if (!row.city.trim()) {
+    pushIssue({
+      key: 'check_city',
+      label: 'City missing',
+      detail: 'City was not extracted. Add it so the draft is routeable.',
+      severity: 'warning',
+    });
+  }
+
+  if (!row.venue_name.trim()) {
+    pushIssue({
+      key: 'check_venue',
+      label: 'Check venue',
+      detail: 'Venue field is blank. Confirm whether this is a venue, hotel, or travel day.',
+      severity: 'warning',
+    });
+  }
+
+  if ((row.schedule_items ?? []).some((item) => (item.label || item.time) && !item.label.trim())) {
+    pushIssue({
+      key: 'schedule_blank_label',
+      label: 'Blank schedule label',
+      detail: 'A recovered schedule line is missing its label.',
+      severity: 'info',
+    });
+  }
+
+  return issues;
+}
+
 function buildImportRowWarning(row: IntakeRow) {
-  const flags = Array.isArray(row.flags) ? row.flags.filter(Boolean) : [];
-  const normalizedDate = parseFlexibleDateInput(row.date || '');
-  const warnings: string[] = [...flags];
-  if (!row.date || (!normalizedDate && row.date.trim())) warnings.push('Check date');
-  if (!row.city.trim()) warnings.push('Check city');
-  if (!row.venue_name.trim()) warnings.push('Check venue');
-  return Array.from(new Set(warnings)).join(' • ');
+  return buildImportRowIssues(row).map((issue) => issue.label).join(' • ');
 }
 
 function buildImportRows(rows: IntakeRow[]) {
@@ -706,6 +802,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   const filteredDraftShows = useMemo(() => filterShows(draftShows, draftSearch, draftTour), [draftSearch, draftTour, draftShows]);
   const includedImportCount = useMemo(() => importRows.filter((row) => row.include).length, [importRows]);
+  const importReviewSummary = useMemo(() => {
+    let warningRows = 0;
+    let missingVenueRows = 0;
+    let contactRows = 0;
+    let dateRows = 0;
+    let recoveredScheduleRows = 0;
+
+    for (const row of importRows) {
+      const issues = buildImportRowIssues(row);
+      if (issues.some((issue) => issue.severity === 'warning')) warningRows += 1;
+      if (issues.some((issue) => issue.key === 'missing_venue_name' || issue.key === 'missing_venue_address' || issue.key === 'check_venue')) missingVenueRows += 1;
+      if (issues.some((issue) => issue.key === 'partial_contact_details' || issue.key === 'ambiguous_contact_details')) contactRows += 1;
+      if (issues.some((issue) => issue.key === 'date_requires_review' || issue.key === 'duplicate_date_in_import' || issue.key === 'check_date')) dateRows += 1;
+      if ((row.schedule_items ?? []).some((item) => item.label.trim() || item.time.trim())) recoveredScheduleRows += 1;
+    }
+
+    return {
+      warningRows,
+      missingVenueRows,
+      contactRows,
+      dateRows,
+      recoveredScheduleRows,
+    };
+  }, [importRows]);
 
   const pastShowsByYear = useMemo(() => {
     const groups = new Map<string, Show[]>();
@@ -1888,10 +2008,43 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 ) : null}
 
                 {importWarnings.length ? (
-                  <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                    {importWarnings.map((warning, index) => (
-                      <p key={`${warning}-${index}`}>{warning}</p>
-                    ))}
+                  <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                    <p className="mb-1 font-medium text-amber-200">Import warnings</p>
+                    <div className="space-y-1">
+                      {importWarnings.map((warning, index) => (
+                        <p key={`${warning}-${index}`}>• {warning}</p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {importRows.length ? (
+                  <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/80">Needs attention</p>
+                      <p className="mt-1 text-lg font-semibold text-amber-100">{importReviewSummary.warningRows}</p>
+                      <p className="text-xs text-amber-100/70">rows with blocking or unclear intake details</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Venue gaps</p>
+                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.missingVenueRows}</p>
+                      <p className="text-xs text-zinc-500">missing venue name or address</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Contact review</p>
+                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.contactRows}</p>
+                      <p className="text-xs text-zinc-500">partial or ambiguous DOS/contact extraction</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Date review</p>
+                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.dateRows}</p>
+                      <p className="text-xs text-zinc-500">blank, duplicate, or unparsed dates</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Schedule recovered</p>
+                      <p className="mt-1 text-lg font-semibold text-zinc-100">{importReviewSummary.recoveredScheduleRows}</p>
+                      <p className="text-xs text-zinc-500">rows carrying recovered schedule lines</p>
+                    </div>
                   </div>
                 ) : null}
 
@@ -1899,12 +2052,25 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   {importRows.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">No results yet</div>
                   ) : (
-                    importRows.map((row, index) => (
-                      <div key={row.id} className="rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
+                    importRows.map((row, index) => {
+                      const rowIssues = buildImportRowIssues(row);
+                      const rowHasWarning = rowIssues.some((issue) => issue.severity === 'warning');
+                      return (
+                      <div key={row.id} className={`rounded-2xl border p-3 ${rowHasWarning ? 'border-amber-400/30 bg-amber-500/[0.06]' : 'border-white/10 bg-zinc-950/90'}`}>
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Row {index + 1}</p>
-                            {typeof row.confidence === 'number' ? <p className="mt-1 text-[11px] text-zinc-500">Confidence {Math.round(row.confidence * 100)}%</p> : null}
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {typeof row.confidence === 'number' ? <p className="text-[11px] text-zinc-500">Confidence {Math.round(row.confidence * 100)}%</p> : null}
+                              {rowIssues.slice(0, 3).map((issue) => (
+                                <span
+                                  key={issue.key}
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${issue.severity === 'warning' ? 'border border-amber-400/30 bg-amber-500/10 text-amber-200' : 'border border-white/10 bg-white/[0.05] text-zinc-300'}`}
+                                >
+                                  {issue.label}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                           <label className="inline-flex items-center gap-2 text-xs text-zinc-300">
                             <input type="checkbox" checked={row.include} onChange={(event) => updateImportRow(row.id, { include: event.target.checked })} className="h-4 w-4 rounded border-white/10 bg-black/20" />
@@ -1968,9 +2134,21 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                           <Textarea label="Notes" value={row.notes || ''} onChange={(value) => updateImportRow(row.id, { notes: value })} ariaLabel="Import notes" />
                         </div>
 
-                        {row.warning ? <p className="mt-2 text-xs text-amber-300">{row.warning}</p> : null}
+                        {rowIssues.length ? (
+                          <div className={`mt-3 rounded-2xl border px-3 py-2 text-xs ${rowHasWarning ? 'border-amber-400/25 bg-amber-500/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-300'}`}>
+                            <p className={`font-medium ${rowHasWarning ? 'text-amber-200' : 'text-zinc-200'}`}>Review before creating drafts</p>
+                            <div className="mt-2 space-y-1.5">
+                              {rowIssues.map((issue) => (
+                                <div key={issue.key}>
+                                  <p>{issue.label}</p>
+                                  <p className={rowHasWarning ? 'text-amber-100/70' : 'text-zinc-500'}>{issue.detail}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : row.warning ? <p className="mt-2 text-xs text-amber-300">{row.warning}</p> : null}
                       </div>
-                    ))
+                    )})
                   )}
                 </div>
 
