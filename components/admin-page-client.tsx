@@ -1318,7 +1318,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     await saveShow(form.status === 'draft' ? 'draft' : 'published');
   }
 
-  function loadShow(show: Show) {
+  async function loadShow(show: Show) {
 
     if (mode === 'dates') {
       router.push(`/admin?edit=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`);
@@ -1330,7 +1330,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    const normalizedShow = sanitizeShowFormForDayType(show);
+    let nextShow = show;
+    if (activeWorkspaceId) {
+      try {
+        const result = await getShow(show.id, { workspaceId: activeWorkspaceId });
+        nextShow = result.show;
+      } catch {
+        // Fall back to the already-loaded list row so the editor still opens.
+      }
+    }
+
+    const normalizedShow = sanitizeShowFormForDayType(nextShow);
     setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
     setForm(normalizedShow);
     setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
