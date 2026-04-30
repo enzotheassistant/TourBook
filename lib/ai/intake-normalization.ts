@@ -75,8 +75,11 @@ function normalizeScheduleItems(items: IntakeScheduleItem[] | undefined) {
 }
 
 type ExtractedContact = {
+  label: string;
   name: string;
   phone: string;
+  email: string;
+  notes: string;
 };
 
 type ExtractedLocation = {
@@ -90,34 +93,93 @@ function normalizePhone(value: string) {
   return normalizeWhitespace(value.replace(/[;,]+$/g, ''));
 }
 
+function extractLabeledValue(line: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match?.[1]) return normalizeWhitespace(match[1]);
+  }
+  return '';
+}
+
+function sanitizeContactName(value: string) {
+  return normalizeWhitespace(
+    value
+      .replace(/^[\-–—:;,]+\s*/, '')
+      .replace(/\b(?:phone|cell|mobile|tel|email|e-mail|mail)\b.*$/i, '')
+      .replace(/(?:\+?\d[\d().\-\s]{6,}\d).*/i, '')
+      .replace(/[<([]?\S+@\S+[>)]?.*$/i, '')
+      .replace(/[\-|,;]\s*$/, ''),
+  );
+}
+
+function mergeContact(target: ExtractedContact, source: Partial<ExtractedContact>) {
+  if (!target.name && source.name) target.name = source.name;
+  if (!target.phone && source.phone) target.phone = source.phone;
+  if (!target.email && source.email) target.email = source.email;
+  if (!target.notes && source.notes) target.notes = source.notes;
+  return target;
+}
+
 function extractContactsFromText(sourceText: string | undefined | null): ExtractedContact[] {
   const text = typeof sourceText === 'string' ? sourceText : '';
   if (!text.trim()) return [];
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const contacts: ExtractedContact[] = [];
+  const contactHeaderPattern = /^(dos|day of show|day-of-show|dos contact|promoter(?: contact)?|contact|tm|tour manager)\s*(?:contact)?\s*[:\-]?\s*(.*)$/i;
+  const inlineNamePatterns = [/(?:name|contact|promoter|tm|tour manager)\s*[:\-]\s*(.+)$/i];
+  const inlinePhonePatterns = [/(?:phone|cell|mobile|tel)\s*[:\-]\s*(\+?\d[\d().\-\s]{6,}\d)/i];
+  const inlineEmailPatterns = [/(?:email|e-mail|mail)\s*[:\-]\s*([^\s,;<>]+@[^\s,;<>]+)/i];
 
-  for (const line of lines) {
-    if (!/(dos|day of show|day-of-show|promoter|contact)/i.test(line)) continue;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const headerMatch = line.match(contactHeaderPattern);
+    if (!headerMatch) continue;
 
-    const phoneMatch = line.match(/(?:\+?\d[\d().\-\s]{6,}\d)/);
-    const phone = normalizePhone(phoneMatch?.[0] ?? '');
+    const label = normalizeWhitespace(headerMatch[1]).toLowerCase();
+    const inlineRemainder = normalizeWhitespace(headerMatch[2] ?? '');
+    const contact: ExtractedContact = { label, name: '', phone: '', email: '', notes: '' };
 
-    let name = line
-      .replace(/^(?:dos|day of show|day-of-show|promoter|contact)\s*(?:contact)?\s*[:\-]\s*/i, '')
-      .replace(/(?:phone|cell|mobile|tel)\s*[:\-]?\s*(?:\+?\d[\d().\-\s]{6,}\d).*/i, '')
-      .replace(/(?:\+?\d[\d().\-\s]{6,}\d).*/i, '')
-      .replace(/[\-|,;]\s*$/, '');
+    const inlinePhoneMatch = inlineRemainder.match(/(?:\+?\d[\d().\-\s]{6,}\d)/);
+    const inlineEmailMatch = inlineRemainder.match(/[^\s,;<>]+@[^\s,;<>]+/);
+    mergeContact(contact, {
+      name: sanitizeContactName(extractLabeledValue(inlineRemainder, inlineNamePatterns) || inlineRemainder),
+      phone: normalizePhone(extractLabeledValue(inlineRemainder, inlinePhonePatterns) || inlinePhoneMatch?.[0] || ''),
+      email: normalizeWhitespace(extractLabeledValue(inlineRemainder, inlineEmailPatterns) || inlineEmailMatch?.[0] || ''),
+    });
 
-    name = normalizeWhitespace(name);
-    if (!name && !phone) continue;
+    let lookahead = index + 1;
+    while (lookahead < lines.length) {
+      const nextLine = lines[lookahead];
+      if (contactHeaderPattern.test(nextLine)) break;
+      if (/^(?:date|city|market|region|state|province|prov|st|venue|location|address|hotel|notes?)\s*[:\-]/i.test(nextLine)) break;
 
-    contacts.push({ name, phone });
+      const extractedName = sanitizeContactName(extractLabeledValue(nextLine, inlineNamePatterns));
+      const extractedPhone = normalizePhone(extractLabeledValue(nextLine, inlinePhonePatterns) || nextLine.match(/(?:\+?\d[\d().\-\s]{6,}\d)/)?.[0] || '');
+      const extractedEmail = normalizeWhitespace(extractLabeledValue(nextLine, inlineEmailPatterns) || nextLine.match(/[^\s,;<>]+@[^\s,;<>]+/)?.[0] || '');
+      const roleOnly = /^(?:role|title)\s*[:\-]\s*(.+)$/i.exec(nextLine)?.[1];
+      const freeformName = !/^(?:phone|cell|mobile|tel|email|e-mail|mail|role|title)\s*[:\-]/i.test(nextLine)
+        ? sanitizeContactName(nextLine)
+        : '';
+
+      if (!extractedName && !extractedPhone && !extractedEmail && !roleOnly && !freeformName) break;
+
+      mergeContact(contact, {
+        name: extractedName || freeformName,
+        phone: extractedPhone,
+        email: extractedEmail,
+        notes: roleOnly ? normalizeWhitespace(roleOnly) : '',
+      });
+      lookahead += 1;
+    }
+
+    if (!contact.name && !contact.phone && !contact.email) continue;
+    contacts.push(contact);
   }
 
   const seen = new Set<string>();
   return contacts.filter((contact) => {
-    const key = `${contact.name.toLowerCase()}::${contact.phone}`;
+    const key = `${contact.label}::${contact.name.toLowerCase()}::${contact.phone}::${contact.email.toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -167,14 +229,24 @@ function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | n
     dos_phone: normalizePhone(normalizeText(row.dos_phone)),
     venue_name: normalizeText(row.venue_name),
     venue_address: normalizeText(row.venue_address),
+    notes: normalizeText(row.notes),
   };
 
   const contacts = extractContactsFromText(sourceText);
-  if (contacts.length === 1) {
-    const [contact] = contacts;
+  const dosLikeContacts = contacts.filter((contact) => /^(?:dos|day of show|day-of-show|dos contact|tm|tour manager)$/i.test(contact.label));
+  const preferredContacts = dosLikeContacts.length > 0 ? dosLikeContacts : contacts;
+
+  if (preferredContacts.length === 1) {
+    const [contact] = preferredContacts;
     if (!next.dos_name && contact.name) next = { ...next, dos_name: contact.name };
     if (!next.dos_phone && contact.phone) next = { ...next, dos_phone: contact.phone };
-  } else if ((!next.dos_name || !next.dos_phone) && contacts.length > 1) {
+    if (contact.email) {
+      const emailNote = contact.notes ? `${contact.notes} • ${contact.email}` : `Email: ${contact.email}`;
+      if (!normalizeText(next.notes)) next = { ...next, notes: emailNote };
+    } else if (contact.notes && !normalizeText(next.notes)) {
+      next = { ...next, notes: contact.notes };
+    }
+  } else if ((!next.dos_name || !next.dos_phone) && preferredContacts.length > 1) {
     next = { ...next, flags: pushFlag(next.flags, 'ambiguous_contact_details') };
   }
 
@@ -197,6 +269,7 @@ export function finalizeIntakeResult(intake: IntakeResult, sourceText: string | 
     dos_phone: normalizePhone(normalizeText(row.dos_phone)),
     venue_name: normalizeText(row.venue_name),
     venue_address: normalizeText(row.venue_address),
+    notes: normalizeText(row.notes),
     flags: Array.isArray(row.flags) ? [...new Set(row.flags.map((flag) => normalizeText(flag)).filter(Boolean))] : [],
   }));
 
