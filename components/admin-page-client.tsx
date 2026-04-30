@@ -12,6 +12,7 @@ import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, del
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
+import { ensureMinimumScheduleItems } from '@/lib/normalize';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
@@ -150,6 +151,13 @@ function visibilityModesForLoadedForm(form: ShowFormValues): VisibilityModeMap {
   });
 
   return nextModes;
+}
+
+function ensureEditorScheduleRows(form: ShowFormValues, minimumCount = 3): ShowFormValues {
+  return {
+    ...form,
+    schedule_items: ensureMinimumScheduleItems(form.schedule_items, minimumCount),
+  };
 }
 
 function hasScheduleContent(form: ShowFormValues) {
@@ -787,20 +795,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         const source = result.show;
 
         if (duplicateId) {
-          const duplicated = sanitizeShowFormForDayType({
+          const duplicated = ensureEditorScheduleRows(sanitizeShowFormForDayType({
             ...source,
             id: '',
             date: '',
             created_at: undefined,
             schedule_items: source.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-          });
+          }));
           setVisibilityModes(visibilityModesForLoadedForm(duplicated));
           setForm(duplicated);
           setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
           setMessage('Tour day duplicated');
           setDirty(false);
         } else {
-          const normalizedShow = sanitizeShowFormForDayType(source);
+          const normalizedShow = ensureEditorScheduleRows(sanitizeShowFormForDayType(source));
           setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
           setForm(normalizedShow);
           setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
@@ -1248,7 +1256,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setDirty(false);
-      setForm(show);
+      setForm(ensureEditorScheduleRows(show));
       window.dispatchEvent(new Event('tourbook:shows-updated'));
       // Refresh bootstrap context so newly auto-created tour entities appear
       // in the invite-scope tour dropdown without a full page reload.
@@ -1340,7 +1348,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       }
     }
 
-    const normalizedShow = sanitizeShowFormForDayType(nextShow);
+    const normalizedShow = ensureEditorScheduleRows(sanitizeShowFormForDayType(nextShow));
     setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
     setForm(normalizedShow);
     setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
@@ -1356,13 +1364,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    const duplicated = sanitizeShowFormForDayType({
+    const duplicated = ensureEditorScheduleRows(sanitizeShowFormForDayType({
       ...show,
       id: '',
       date: '',
       created_at: undefined,
       schedule_items: show.schedule_items.map((item) => ({ ...item, id: crypto.randomUUID() })),
-    });
+    }));
 
     setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);

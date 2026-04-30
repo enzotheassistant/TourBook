@@ -9,17 +9,34 @@ function makeScheduleId() {
   return `schedule-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function ensureMinimumScheduleItems(items: ScheduleItem[] | undefined, minimumCount = 3): ScheduleItem[] {
+  const normalized = (items ?? []).map((item) => ({
+    id: item.id || makeScheduleId(),
+    label: item.label ?? '',
+    time: item.time ?? '',
+  }));
+
+  if (normalized.length >= minimumCount) {
+    return normalized;
+  }
+
+  return [
+    ...normalized,
+    ...Array.from({ length: minimumCount - normalized.length }, () => ({
+      id: makeScheduleId(),
+      label: '',
+      time: '',
+    })),
+  ];
+}
+
 function normalizeDayType(value: unknown): TourDayType {
   return value === 'travel' || value === 'off' ? value : 'show';
 }
 
 export function normalizeScheduleItems(items: ScheduleItem[] | undefined): ScheduleItem[] {
   const source = items && items.length > 0 ? items : createEmptyScheduleItems();
-  return source.map((item) => ({
-    id: item.id || makeScheduleId(),
-    label: item.label ?? '',
-    time: item.time ?? '',
-  }));
+  return ensureMinimumScheduleItems(source, source.length);
 }
 
 export function normalizeShow(show: Partial<ShowFormValues> & { id?: string }): Show {
