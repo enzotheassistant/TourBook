@@ -2,6 +2,7 @@ import { normalizeShow } from '@/lib/normalize';
 import { sanitizeShowFormForDayType } from '@/lib/tour-day';
 import type { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import type { DateFormValues, DateRecord, ScopedGuestListEntry } from '@/lib/types/date-record';
+import { mapShowScheduleItemsToPayload } from './schedule-mapping';
 
 function deriveTourName(date: DateRecord) {
   return String(date.legacy_tour_name ?? '').trim();
@@ -67,14 +68,7 @@ function pickAnchorTime(show: Partial<ShowFormValues>, labels: string[]) {
 
 export function mapShowFormToDateForm(show: Partial<ShowFormValues>, scope: { workspaceId: string; projectId: string; tourId?: string | null }): Partial<DateFormValues> {
   const sanitizedShow = sanitizeShowFormForDayType(show as ShowFormValues);
-  const scheduleItems = (sanitizedShow.schedule_items ?? [])
-    .map((item, index) => ({
-      id: String(item.id ?? ''),
-      label: String(item.label ?? '').trim(),
-      time_text: String(item.time ?? '').trim(),
-      sort_order: index,
-    }))
-    .filter((item) => item.label || item.time_text);
+  const scheduleItems = mapShowScheduleItemsToPayload(sanitizedShow.schedule_items);
 
   return {
     id: sanitizedShow.id,
