@@ -23,6 +23,7 @@ import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteS
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
+import { scheduleDebugLog } from '@/lib/debug/schedule-debug';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -794,6 +795,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         if (!active) return;
         const source = result.show;
 
+        // TEMP DEBUG: tourbook schedule debug — stage 4a
+        scheduleDebugLog(
+          {
+            stage: 'reopen-response',
+            action: duplicateId ? 'duplicate-fetch' : 'editor-fetch',
+            dateId: source.id,
+            workspaceId: activeWorkspaceId,
+            status: source.status,
+            dayType: source.day_type,
+            note: `getShow() response before admin editor hydration (source=${result.source})`,
+          },
+          source.schedule_items,
+        );
+
         if (duplicateId) {
           const duplicated = ensureEditorScheduleRows(sanitizeShowFormForDayType({
             ...source,
@@ -809,6 +824,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           setDirty(false);
         } else {
           const normalizedShow = ensureEditorScheduleRows(sanitizeShowFormForDayType(source));
+          // TEMP DEBUG: tourbook schedule debug — stage 4b
+          scheduleDebugLog(
+            {
+              stage: 'reopen-hydration',
+              action: 'editor-hydrate',
+              dateId: normalizedShow.id,
+              workspaceId: activeWorkspaceId,
+              status: normalizedShow.status,
+              dayType: normalizedShow.day_type,
+              note: 'admin editor state after sanitize/ensure rows during reopen bootstrap',
+            },
+            normalizedShow.schedule_items,
+          );
           setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
           setForm(normalizedShow);
           setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
@@ -1253,6 +1281,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         tour_name: form.tour_name.trim(),
         region: form.region.trim().toUpperCase(),
       });
+
+      // TEMP DEBUG: tourbook schedule debug — stage 1
+      scheduleDebugLog(
+        {
+          stage: 'editor-before-save',
+          action: isEditing ? 'update' : 'create',
+          dateId: cleanedForm.id,
+          workspaceId: activeWorkspaceId,
+          projectId: activeProjectId,
+          tourId: activeTourId,
+          status: requestedStatus,
+          dayType: cleanedForm.day_type,
+          note: 'admin editor state immediately before upsertShow()',
+        },
+        cleanedForm.schedule_items,
+      );
+
       const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setDirty(false);
@@ -1349,6 +1394,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
 
     const normalizedShow = ensureEditorScheduleRows(sanitizeShowFormForDayType(nextShow));
+    // TEMP DEBUG: tourbook schedule debug — stage 4b
+    scheduleDebugLog(
+      {
+        stage: 'reopen-hydration',
+        action: 'load-show-into-editor',
+        dateId: normalizedShow.id,
+        workspaceId: activeWorkspaceId,
+        status: normalizedShow.status,
+        dayType: normalizedShow.day_type,
+        note: 'admin editor state after reopen from list/detail fetch path',
+      },
+      normalizedShow.schedule_items,
+    );
     setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
     setForm(normalizedShow);
     setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));

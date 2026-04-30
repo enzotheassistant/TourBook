@@ -4,6 +4,7 @@ import { ApiError, parseBooleanSearchParam } from '@/lib/data/server/shared';
 import { createDateScoped, listDatesScoped } from '@/lib/data/server/dates';
 import type { DateFormValues } from '@/lib/types/date-record';
 import { recordApiRuntimeError } from '@/lib/telemetry/runtime-errors';
+import { scheduleDebugLog } from '@/lib/debug/schedule-debug';
 
 export async function GET(request: NextRequest) {
   const authState = await requireApiAuth(request);
@@ -42,6 +43,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as Partial<DateFormValues>;
+    scheduleDebugLog({
+      stage: 'server-save',
+      action: 'api-dates-post-body',
+      dateId: body.id ?? null,
+      workspaceId: body.workspace_id ?? null,
+      projectId: body.project_id ?? null,
+      tourId: body.tour_id ?? null,
+      status: body.status ?? null,
+      dayType: body.day_type ?? null,
+      note: 'POST /api/dates request body schedule_items received by server',
+    }, body.schedule_items);
     const dateRecord = await createDateScoped(authState.supabase, authState.user.id, body);
     return finalizeAuthResponse(NextResponse.json(dateRecord), authState);
   } catch (error) {

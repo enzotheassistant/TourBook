@@ -3,6 +3,7 @@ import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRela
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 import { upsertTourByName } from '@/lib/data/server/tours';
+import { scheduleDebugLog } from '@/lib/debug/schedule-debug';
 import { normalizeScheduleItemsForPersistence as normalizeScheduleItemsImpl } from './schedule-normalization';
 import type { ScheduleItemLike } from './schedule-normalization';
 
@@ -245,6 +246,15 @@ export function normalizeScheduleItemsForPersistence(scheduleItems: ScheduleItem
 }
 
 async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: ScheduleItemLike[]) {
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'replace-schedule-items-start',
+    dateId,
+    workspaceId,
+    projectId,
+    count: scheduleItems?.length ?? 0,
+    note: 'server replaceScheduleItems input before delete/insert',
+  }, scheduleItems);
   // Guard: date_id, workspace_id, project_id are required for FK constraints and RLS policies.
   if (!dateId || !workspaceId || !projectId) {
     const msg = `replaceScheduleItems: missing required IDs (dateId=${dateId}, workspaceId=${workspaceId}, projectId=${projectId})`;
@@ -278,7 +288,15 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
     }))
     .filter((item) => item.label || item.time_text);
 
-  console.log(`[schedule] cleaned items to insert: ${cleaned.length}`, cleaned.map((c) => `"${c.label}" @ ${c.time_text}`));
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'replace-schedule-items-cleaned',
+    dateId,
+    workspaceId,
+    projectId,
+    count: cleaned.length,
+    note: 'server schedule_items after trim/filter before DB insert',
+  }, cleaned);
 
   if (!cleaned.length) {
     console.log('[schedule] no items to insert after filtering blanks — skipping INSERT');
@@ -425,7 +443,19 @@ export async function getDateScoped(supabaseInput: SupabaseClient, userId: strin
   const supabase = requireScopedDataClient(supabaseInput);
   const { row } = await assertDateReadable(supabase, userId, workspaceId, dateId);
   const scheduleItems = await listScheduleItemsForDate(supabase, String(row.id));
-  return normalizeDateRecord(row, scheduleItems);
+  const record = normalizeDateRecord(row, scheduleItems);
+  scheduleDebugLog({
+    stage: 'reopen-response',
+    action: 'get-date-scoped',
+    dateId: record.id,
+    workspaceId: record.workspace_id,
+    projectId: record.project_id,
+    tourId: record.tour_id,
+    status: record.status,
+    dayType: record.day_type,
+    note: 'server getDateScoped() record returned to API layer',
+  }, record.schedule_items);
+  return record;
 }
 
 export async function createDateScoped(supabaseInput: SupabaseClient, userId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
@@ -473,9 +503,32 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   const normalizedScheduleItems = normalizeScheduleItemsForPersistence(values.schedule_items as ScheduleItemLike[] | undefined, undefined);
-  console.log(`[schedule] createDate: normalizedScheduleItems count=${normalizedScheduleItems.length} from incoming count=${(values.schedule_items ?? []).length}`);
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'create-normalized',
+    dateId: String(data.id),
+    workspaceId,
+    projectId,
+    tourId: resolvedValues.tour_id ?? null,
+    status: resolvedValues.status ?? null,
+    dayType: resolvedValues.day_type ?? null,
+    count: normalizedScheduleItems.length,
+    note: `normalized from incoming_count=${(values.schedule_items ?? []).length}`,
+  }, normalizedScheduleItems);
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
-  return getDateScoped(supabase, userId, workspaceId, String(data.id));
+  const saved = await getDateScoped(supabase, userId, workspaceId, String(data.id));
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'create-readback',
+    dateId: saved.id,
+    workspaceId: saved.workspace_id,
+    projectId: saved.project_id,
+    tourId: saved.tour_id,
+    status: saved.status,
+    dayType: saved.day_type,
+    note: 'DB readback after createDateScoped()',
+  }, saved.schedule_items);
+  return saved;
 }
 
 export async function updateDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string, values: Partial<DateFormValues>): Promise<DateRecord> {
@@ -536,9 +589,32 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     values.schedule_items as ScheduleItemLike[] | undefined,
     current.schedule_items as ScheduleItemLike[] | undefined,
   );
-  console.log(`[schedule] updateDate: normalizedScheduleItems count=${normalizedScheduleItems.length} from incoming count=${(values.schedule_items ?? []).length}, fallback count=${(current.schedule_items ?? []).length}`);
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'update-normalized',
+    dateId: String(data.id),
+    workspaceId,
+    projectId,
+    tourId: effectiveTourId ?? null,
+    status: values.status ?? current.status,
+    dayType: values.day_type ?? current.day_type,
+    count: normalizedScheduleItems.length,
+    note: `normalized from incoming_count=${(values.schedule_items ?? []).length} fallback_count=${(current.schedule_items ?? []).length}`,
+  }, normalizedScheduleItems);
   await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
-  return getDateScoped(supabase, userId, workspaceId, dateId);
+  const saved = await getDateScoped(supabase, userId, workspaceId, dateId);
+  scheduleDebugLog({
+    stage: 'server-save',
+    action: 'update-readback',
+    dateId: saved.id,
+    workspaceId: saved.workspace_id,
+    projectId: saved.project_id,
+    tourId: saved.tour_id,
+    status: saved.status,
+    dayType: saved.day_type,
+    note: 'DB readback after updateDateScoped()',
+  }, saved.schedule_items);
+  return saved;
 }
 
 export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
