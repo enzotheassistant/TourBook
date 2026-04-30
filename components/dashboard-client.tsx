@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { OfflineStatus } from '@/components/offline-status';
@@ -114,13 +114,17 @@ function FilterSummary({
   );
 }
 
-function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: { initialToken: string; activeWorkspaceId: string | null; onAccepted: () => void }) {
+function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: { initialToken: string; activeWorkspaceId: string | null; onAccepted: (invite: { workspaceId: string; role: string }) => void | Promise<void> }) {
   const [token, setToken] = useState(initialToken);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [message, setMessage] = useState(initialToken ? 'Invite token detected. Review and accept when ready.' : 'Paste an invite token to join a workspace.');
+  const [message, setMessage] = useState(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
+  const autoAcceptAttemptedRef = useRef(false);
 
   useEffect(() => {
     setToken(initialToken);
+    setStatus('idle');
+    setMessage(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
+    autoAcceptAttemptedRef.current = false;
   }, [initialToken]);
 
   async function handleAccept() {
@@ -137,9 +141,9 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
     try {
       const result = await acceptWorkspaceInvite(trimmed);
       setStatus('success');
-      setMessage(`Invite accepted. Workspace access granted as ${result.invite.role}.`);
+      setMessage(`Invite accepted. Workspace access granted as ${result.invite.role}. Loading your access…`);
       await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
-      onAccepted();
+      await onAccepted({ workspaceId: result.invite.workspaceId, role: result.invite.role });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
       setStatus('error');
@@ -147,6 +151,12 @@ function InviteAcceptancePanel({ initialToken, activeWorkspaceId, onAccepted }: 
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
     }
   }
+
+  useEffect(() => {
+    if (!initialToken.trim() || autoAcceptAttemptedRef.current) return;
+    autoAcceptAttemptedRef.current = true;
+    void handleAccept();
+  }, [initialToken]);
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
@@ -281,8 +291,14 @@ export function DashboardClient() {
   const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const inviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
 
-  async function handleInviteAccepted() {
-    await refreshContext();
+  async function handleInviteAccepted(invite: { workspaceId: string; role: string }) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await refreshContext();
+      if (attempt < 2) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
+
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.delete('inviteToken');
@@ -401,19 +417,22 @@ export function DashboardClient() {
 
   if (!activeWorkspaceId) {
     const hasWorkspaceAccess = workspaces.length > 0;
-    const isFirstRun = memberships.length === 0 && workspaces.length === 0;
+    const hasPendingInvite = inviteToken.length > 0;
+    const isFirstRun = !hasPendingInvite && memberships.length === 0 && workspaces.length === 0;
 
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
+        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
         {isFirstRun ? (
           <SelfServeOnboardingPanel onCompleted={refreshContext} />
         ) : (
           <ActivationEmptyState
-            title={hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
-            body={hasWorkspaceAccess
-              ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
-              : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
+            title={hasPendingInvite ? 'Finishing workspace access…' : hasWorkspaceAccess ? 'No workspace selected.' : 'No workspace access yet.'}
+            body={hasPendingInvite
+              ? 'TourBook detected an invite on this sign-in. We are applying that access now. If it does not resolve automatically, use the invite panel above.'
+              : hasWorkspaceAccess
+                ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
+                : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
             actions={hasAdminAnywhere
               ? [
                   { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
@@ -434,7 +453,7 @@ export function DashboardClient() {
     const firstRunState = getCrewNoArtistsState(activeWorkspaceRole, hasAnyProject);
     return (
       <div className="space-y-3">
-        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
+        {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
         <ActivationEmptyState
           title={firstRunState.title}
           body={firstRunState.body}
@@ -451,7 +470,7 @@ export function DashboardClient() {
 
   return (
     <div className="space-y-4">
-      {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={() => void handleInviteAccepted()} /> : null}
+      {inviteToken ? <InviteAcceptancePanel initialToken={inviteToken} activeWorkspaceId={activeWorkspaceId} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
       <OfflineStatus
         savedAt={lastSavedAt}
         source={statusSource}
