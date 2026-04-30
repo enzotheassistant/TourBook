@@ -36,7 +36,7 @@ import {
 
 type AppContextValue = BootstrapContext & {
   isLoading: boolean;
-  refreshContext: () => Promise<void>;
+  refreshContext: (options?: { silent?: boolean }) => Promise<void>;
   resetContext: () => void;
   setActiveWorkspaceId: (workspaceId: string | null) => void;
   setActiveProjectId: (projectId: string | null) => void;
@@ -179,8 +179,14 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const visibilityRefreshTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const isRedirectingRef = React.useRef(false);
 
-  const refreshContext = useCallback(async () => {
-    setIsLoading(true);
+  const refreshContext = useCallback(async (options?: { silent?: boolean }) => {
+    // When called silently (e.g. from visibilitychange), skip the loading spinner
+    // so that in-progress form edits are not unmounted while the session is refreshed
+    // in the background. Only show the loading state on the initial bootstrap or an
+    // explicit (non-silent) refresh.
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
     logBootstrapStart();
 
     try {
@@ -299,8 +305,10 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         }
         // Debounce the refresh by 300ms to avoid multiple simultaneous refresh attempts.
         visibilityRefreshTimeoutRef.current = setTimeout(() => {
-          authLog('handleVisibilityChange: triggering context refresh after debounce');
-          void refreshContext();
+          authLog('handleVisibilityChange: triggering silent context refresh after debounce');
+          // Use silent=true so the loading spinner is NOT shown — this prevents
+          // in-progress draft edits and invite flows from being unmounted on tab switch.
+          void refreshContext({ silent: true });
         }, 300);
       }
     };
