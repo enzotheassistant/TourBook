@@ -68,7 +68,22 @@ function pickAnchorTime(show: Partial<ShowFormValues>, labels: string[]) {
 
 export function mapShowFormToDateForm(show: Partial<ShowFormValues>, scope: { workspaceId: string; projectId: string; tourId?: string | null }): Partial<DateFormValues> {
   const sanitizedShow = sanitizeShowFormForDayType(show as ShowFormValues);
+
+  if (typeof console !== 'undefined') {
+    console.log(
+      `[schedule/payload] mapShowFormToDateForm: incoming schedule_items count=${(sanitizedShow.schedule_items ?? []).length}`,
+      (sanitizedShow.schedule_items ?? []).map((item) => `"${item.label}" @ "${item.time}"`),
+    );
+  }
+
   const scheduleItems = mapShowScheduleItemsToPayload(sanitizedShow.schedule_items);
+
+  if (typeof console !== 'undefined') {
+    console.log(
+      `[schedule/payload] mapShowFormToDateForm: outgoing schedule_items count=${scheduleItems.length}`,
+      scheduleItems.map((item) => `"${item.label}" @ "${item.time_text}"`),
+    );
+  }
 
   return {
     id: sanitizedShow.id,

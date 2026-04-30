@@ -31,12 +31,24 @@ export type DateSchedulePayloadItem = {
 export function mapShowScheduleItemsToPayload(
   items: ShowScheduleItem[] | undefined,
 ): DateSchedulePayloadItem[] {
-  return (items ?? [])
-    .map((item, index) => ({
-      id: String(item.id ?? ''),
-      label: String(item.label ?? '').trim(),
-      time_text: String(item.time ?? '').trim(),
-      sort_order: index,
-    }))
-    .filter((item) => item.label || item.time_text);
+  const input = items ?? [];
+
+  const mapped = input.map((item, index) => ({
+    id: String(item.id ?? ''),
+    label: String(item.label ?? '').trim(),
+    time_text: String(item.time ?? '').trim(),
+    sort_order: index,
+  }));
+
+  const result = mapped.filter((item) => item.label || item.time_text);
+
+  const dropped = mapped.filter((item) => !item.label && !item.time_text);
+  if (typeof console !== 'undefined') {
+    console.log(
+      `[schedule/payload] mapShowScheduleItemsToPayload: ${input.length} in → ${result.length} kept, ${dropped.length} blank dropped`,
+      result.map((r) => `"${r.label}" @ "${r.time_text}"`),
+    );
+  }
+
+  return result;
 }

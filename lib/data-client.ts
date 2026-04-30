@@ -138,6 +138,11 @@ export async function upsertShow(values: ShowFormValues, scope?: ScopeInput) {
   const resolved = requireWorkspaceProjectScope(scope);
   const payload = mapShowFormToDateForm(values, resolved);
 
+  console.log(
+    `[schedule/payload] upsertShow: sending ${(payload.schedule_items ?? []).length} schedule_items in payload`,
+    (payload.schedule_items ?? []).map((item) => `"${item.label}" @ "${item.time_text}"`),
+  );
+
   if (values.id) {
     const params = new URLSearchParams({ workspaceId: resolved.workspaceId });
     const date = await request<any>(`/api/dates/${values.id}?${params.toString()}`, {
