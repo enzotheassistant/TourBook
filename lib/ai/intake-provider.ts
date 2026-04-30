@@ -48,6 +48,7 @@ function buildSystemPrompt(existingShows: IntakeRequest['existingShows']) {
     'Never invent facts. If uncertain, leave the field blank or move details into notes. Use flags for uncertainty.',
     'Keep dates in YYYY-MM-DD when possible. If year is omitted: use the current year when that month/day is still upcoming this year; only roll to next year when the current-year month/day is already past today. Do not roll all omitted-year dates to next year.',
     'Schedule items must be an array of objects with label and time. Only include meaningful schedule data.',
+    'When the source explicitly labels fields like venue, location, address, city, region, state, or province, copy those values into the matching fields instead of leaving them blank or burying them in notes.',
     'When source text contains a multi-line schedule/timeline, preserve every distinct schedule line that has a usable time. Do not collapse a full schedule down to only 1-2 anchor items.',
     'Potential duplicate warnings should go in flags, not by altering other fields.',
     'If the input is a routing list, create one row per date.',

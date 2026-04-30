@@ -79,6 +79,13 @@ type ExtractedContact = {
   phone: string;
 };
 
+type ExtractedLocation = {
+  city: string;
+  region: string;
+  venueName: string;
+  venueAddress: string;
+};
+
 function normalizePhone(value: string) {
   return normalizeWhitespace(value.replace(/[;,]+$/g, ''));
 }
@@ -117,17 +124,19 @@ function extractContactsFromText(sourceText: string | undefined | null): Extract
   });
 }
 
-function extractSingleVenueFromText(sourceText: string | undefined | null) {
+function extractSingleLocationFromText(sourceText: string | undefined | null): ExtractedLocation {
   const text = typeof sourceText === 'string' ? sourceText : '';
-  if (!text.trim()) return { venueName: '', venueAddress: '' };
+  if (!text.trim()) return { city: '', region: '', venueName: '', venueAddress: '' };
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let city = '';
+  let region = '';
   let venueName = '';
   let venueAddress = '';
 
   for (const line of lines) {
     if (!venueName) {
-      const venueMatch = line.match(/^(?:venue|location|club|room)\s*[:\-]\s*(.+)$/i);
+      const venueMatch = line.match(/^(?:venue|location|club|room|hall|theatre|theater)\s*[:\-]\s*(.+)$/i);
       if (venueMatch?.[1]) venueName = normalizeWhitespace(venueMatch[1]);
     }
 
@@ -135,9 +144,19 @@ function extractSingleVenueFromText(sourceText: string | undefined | null) {
       const addressMatch = line.match(/^(?:address|venue address|location address)\s*[:\-]\s*(.+)$/i);
       if (addressMatch?.[1]) venueAddress = normalizeWhitespace(addressMatch[1]);
     }
+
+    if (!city) {
+      const cityMatch = line.match(/^(?:city|market)\s*[:\-]\s*(.+)$/i);
+      if (cityMatch?.[1]) city = normalizeWhitespace(cityMatch[1]);
+    }
+
+    if (!region) {
+      const regionMatch = line.match(/^(?:region|state|province|prov|st)\s*[:\-]\s*(.+)$/i);
+      if (regionMatch?.[1]) region = normalizeWhitespace(regionMatch[1]).toUpperCase();
+    }
   }
 
-  return { venueName, venueAddress };
+  return { city, region, venueName, venueAddress };
 }
 
 function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | null) {
@@ -159,9 +178,11 @@ function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | n
     next = { ...next, flags: pushFlag(next.flags, 'ambiguous_contact_details') };
   }
 
-  const venue = extractSingleVenueFromText(sourceText);
-  if (!next.venue_name && venue.venueName) next = { ...next, venue_name: venue.venueName };
-  if (!next.venue_address && venue.venueAddress) next = { ...next, venue_address: venue.venueAddress };
+  const location = extractSingleLocationFromText(sourceText);
+  if (!next.city && location.city) next = { ...next, city: location.city };
+  if (!next.region && location.region) next = { ...next, region: location.region };
+  if (!next.venue_name && location.venueName) next = { ...next, venue_name: location.venueName };
+  if (!next.venue_address && location.venueAddress) next = { ...next, venue_address: location.venueAddress };
 
   return next;
 }
@@ -170,6 +191,8 @@ export function finalizeIntakeResult(intake: IntakeResult, sourceText: string | 
   const rows = intake.rows.map((row) => ({
     ...row,
     schedule_items: normalizeScheduleItems(row.schedule_items),
+    city: normalizeText(row.city),
+    region: normalizeText(row.region).toUpperCase(),
     dos_name: normalizeText(row.dos_name),
     dos_phone: normalizePhone(normalizeText(row.dos_phone)),
     venue_name: normalizeText(row.venue_name),
@@ -200,8 +223,8 @@ export function finalizeIntakeResult(intake: IntakeResult, sourceText: string | 
   });
 
   const warnings = [...(intake.warnings ?? [])];
-  if (finalizedRows.some((row) => row.flags?.includes('ambiguous_contact_details'))) {
-    warnings.push('Some contact details matched multiple possible rows or people and should be reviewed.');
+  if (finalizedRows.some((row) => row.flags?.includes('ambiguous_contact_details') || row.flags?.includes('partial_contact_details'))) {
+    warnings.push('Some contact details were incomplete or ambiguous and should be reviewed.');
   }
   if (finalizedRows.some((row) => row.flags?.includes('date_requires_review') || row.flags?.includes('duplicate_date_in_import'))) {
     warnings.push('Some imported dates need manual review before publishing.');
