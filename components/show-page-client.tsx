@@ -11,6 +11,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { KeyValueList } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
+import { filterVisibleScheduleItems } from '@/lib/schedule-items';
 import { ScheduleItem, Show } from '@/lib/types';
 
 function hasAccommodation(show: Show) {
@@ -68,9 +69,7 @@ function getLocationTitle(show: Show) {
 }
 
 function countVisibleScheduleItems(show: Show) {
-  // Show items that have at least a label (time is optional — a label-only row is
-  // intentional, e.g. "TK S/C" pending a time). Fully blank rows are excluded.
-  return show.schedule_items.filter((item) => item.label.trim() || item.time.trim()).length;
+  return filterVisibleScheduleItems(show.schedule_items).length;
 }
 
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
@@ -204,11 +203,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   // call and an extra render cycle that produced the first-load strobe/blip.
   }, [activeWorkspaceId, contextLoading, showId]);
 
-  // Include any row that has at least a label OR a time — matching the same
-  // "non-blank" rule used throughout the form and server normalization.
-  // Previously this used &&, which silently hid label-only rows like "TK S/C"
-  // even though they were correctly saved in the database.
-  const visibleScheduleItems = useMemo(() => show?.schedule_items.filter((item) => item.label.trim() || item.time.trim()) ?? [], [show]);
+  const visibleScheduleItems = useMemo(() => filterVisibleScheduleItems(show?.schedule_items), [show]);
   const travelSchedule = useMemo(() => splitTravelSchedule(visibleScheduleItems), [visibleScheduleItems]);
 
   function requestConfirmation(options: { title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }) {
