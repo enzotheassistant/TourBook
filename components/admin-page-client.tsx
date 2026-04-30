@@ -530,6 +530,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const handledLoadRef = useRef<string | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
   const contextInvitePrefillRef = useRef<string | null>(null);
+  const deletedShowIdsRef = useRef<Set<string>>(new Set());
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
   const workspaceProjects = useMemo(
@@ -567,7 +568,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setShowsLoading(true);
     try {
       const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
-      setShows(result.shows);
+      const deletedShowIds = deletedShowIdsRef.current;
+      const nextShows = deletedShowIds.size > 0
+        ? result.shows.filter((show) => !deletedShowIds.has(show.id))
+        : result.shows;
+      setShows(nextShows);
       setShowsHasLoadedOnce(true);
     } finally {
       setShowsLoading(false);
@@ -627,6 +632,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   // Reset stale shows, filters, and errors when the active project changes
   // Must run before the data loading effect so resets happen first
   useEffect(() => {
+    deletedShowIdsRef.current.clear();
     setShows([]);
     setShowsHasLoadedOnce(false);
     setUpcomingSearch('');
@@ -1378,13 +1384,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!confirmed) return;
 
     if (!activeWorkspaceId) throw new Error('No active workspace selected.');
-    await deleteShow(showId, { workspaceId: activeWorkspaceId });
-    await loadShows();
-    if (form.id === showId) {
-      resetForm();
+
+    deletedShowIdsRef.current.add(showId);
+    setShows((current) => current.filter((show) => show.id !== showId));
+
+    try {
+      await deleteShow(showId, { workspaceId: activeWorkspaceId });
+      await loadShows();
+      if (form.id === showId) {
+        resetForm();
+      }
+      setMessage('Show deleted.');
+      window.dispatchEvent(new Event('tourbook:shows-updated'));
+    } catch (error) {
+      deletedShowIdsRef.current.delete(showId);
+      await loadShows();
+      setMessage(error instanceof Error ? error.message : 'Unable to delete show.');
     }
-    setMessage('Show deleted.');
-    window.dispatchEvent(new Event('tourbook:shows-updated'));
   }
 
 
