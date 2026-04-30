@@ -3,6 +3,8 @@ import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRela
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 import { upsertTourByName } from '@/lib/data/server/tours';
+import { buildAnchorScheduleItems as buildAnchorScheduleItemsImpl, normalizeScheduleItemsForPersistence as normalizeScheduleItemsImpl } from './schedule-normalization';
+import type { ScheduleItemLike } from './schedule-normalization';
 
 const DEFAULT_VISIBILITY: DateVisibility = {
   show_venue: true,
@@ -238,7 +240,15 @@ async function listScheduleItemsForDate(supabase: SupabaseClient, dateId: string
   return normalizeScheduleItems(data ?? []);
 }
 
-async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: Array<Partial<DateScheduleItem>>) {
+export function buildAnchorScheduleItems(values: Partial<DateFormValues>) {
+  return buildAnchorScheduleItemsImpl(values);
+}
+
+export function normalizeScheduleItemsForPersistence(scheduleItems: ScheduleItemLike[] | undefined, fallbackValues: Partial<DateFormValues>): Array<Partial<DateScheduleItem>> {
+  return normalizeScheduleItemsImpl(scheduleItems, fallbackValues) as Array<Partial<DateScheduleItem>>;
+}
+
+async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, workspaceId: string, projectId: string, scheduleItems: ScheduleItemLike[]) {
   const deleteResult = await supabase.from('date_schedule_items').delete().eq('date_id', dateId);
   if (deleteResult.error && !isMissingRelationError(deleteResult.error)) {
     throw new Error(deleteResult.error.message);
@@ -250,7 +260,7 @@ async function replaceScheduleItems(supabase: SupabaseClient, dateId: string, wo
       project_id: projectId,
       date_id: dateId,
       label: String(item.label ?? '').trim(),
-      time_text: String(item.time_text ?? '').trim(),
+      time_text: String(item.time_text ?? item.time ?? '').trim(),
       sort_order: Number.isFinite(item.sort_order) ? Number(item.sort_order) : index,
     }))
     .filter((item) => item.label || item.time_text);
@@ -441,7 +451,8 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
     throw new ApiError(500, error?.message ?? 'Unable to create date.');
   }
 
-  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, values.schedule_items ?? []);
+  const normalizedScheduleItems = normalizeScheduleItemsForPersistence(values.schedule_items as ScheduleItemLike[] | undefined, resolvedValues);
+  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, String(data.id));
 }
 
@@ -497,7 +508,18 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
     throw new ApiError(500, error?.message ?? 'Unable to update date.');
   }
 
-  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, values.schedule_items ?? current.schedule_items);
+  // Pass current.schedule_items as the schedule_items in fallbackValues so that
+  // normalizeScheduleItemsForPersistence can preserve existing arbitrary rows
+  // (e.g. "Band Soundcheck", "Line Check") even when the incoming payload
+  // sends an empty schedule_items array (which happens when the editor form
+  // has only unfilled placeholder rows). Without this, the fallback would
+  // generate only standard anchor rows (Load In, Doors, etc.) via
+  // buildAnchorScheduleItems, silently dropping non-anchor custom items.
+  const normalizedScheduleItems = normalizeScheduleItemsForPersistence(
+    values.schedule_items as ScheduleItemLike[] | undefined,
+    { ...current, ...values, schedule_items: values.schedule_items ?? current.schedule_items },
+  );
+  await replaceScheduleItems(supabase, String(data.id), workspaceId, projectId, normalizedScheduleItems);
   return getDateScoped(supabase, userId, workspaceId, dateId);
 }
 
