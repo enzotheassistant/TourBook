@@ -89,6 +89,16 @@ type ExtractedLocation = {
   venueAddress: string;
 };
 
+type StructuredRowFields = {
+  city: string;
+  region: string;
+  venueName: string;
+  venueAddress: string;
+  dosName: string;
+  dosPhone: string;
+  notes: string;
+};
+
 const KNOWN_REGION_CODES = new Set([
   'AB', 'AK', 'AL', 'AR', 'AS', 'AZ', 'BC', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY',
   'LA', 'MA', 'MB', 'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NB', 'NC', 'ND', 'NE', 'NF', 'NH', 'NJ', 'NL', 'NM', 'NS', 'NT',
@@ -248,6 +258,87 @@ function extractSingleLocationFromText(sourceText: string | undefined | null): E
   return { city, region, venueName, venueAddress };
 }
 
+function extractStructuredFieldsFromNotes(row: IntakeRow): StructuredRowFields | null {
+  const notes = normalizeText(row.notes);
+  if (!notes) return null;
+
+  const remainingLines: string[] = [];
+  let city = '';
+  let region = '';
+  let venueName = '';
+  let venueAddress = '';
+  let dosName = '';
+  let dosPhone = '';
+
+  for (const rawLine of notes.split(/\r?\n/)) {
+    const line = normalizeWhitespace(rawLine);
+    if (!line) continue;
+
+    const cityMatch = line.match(/^(?:city|market)\s*[:\-]\s*(.+)$/i);
+    if (cityMatch?.[1]) {
+      const rawCity = normalizeWhitespace(cityMatch[1]);
+      const compact = parseCompactCityRegion(rawCity);
+      if (!city) city = compact?.city || rawCity;
+      if (!region && compact?.region) region = compact.region;
+      continue;
+    }
+
+    const regionMatch = line.match(/^(?:region|state|province|prov|st)\s*[:\-]\s*(.+)$/i);
+    if (regionMatch?.[1]) {
+      if (!region) region = normalizeWhitespace(regionMatch[1]).toUpperCase();
+      continue;
+    }
+
+    const venueMatch = line.match(/^(?:venue|location|club|room|hall|theatre|theater)\s*[:\-]\s*(.+)$/i);
+    if (venueMatch?.[1]) {
+      if (!venueName) venueName = normalizeWhitespace(venueMatch[1]);
+      continue;
+    }
+
+    const addressMatch = line.match(/^(?:address|venue address|location address)\s*[:\-]\s*(.+)$/i);
+    if (addressMatch?.[1]) {
+      if (!venueAddress) venueAddress = normalizeWhitespace(addressMatch[1]);
+      continue;
+    }
+
+    const dosMatch = line.match(/^(?:dos|day of show|day-of-show|dos contact|tm|tour manager)\s*(?:contact)?\s*[:\-]\s*(.*)$/i);
+    if (dosMatch) {
+      const inline = normalizeWhitespace(dosMatch[1] ?? '');
+      const inlinePhone = normalizePhone(inline.match(/(?:\+?\d[\d().\-\s]{6,}\d)/)?.[0] || '');
+      const inlineName = sanitizeContactName(inline);
+      if (!dosName && inlineName) dosName = inlineName;
+      if (!dosPhone && inlinePhone) dosPhone = inlinePhone;
+      continue;
+    }
+
+    const dosPhoneMatch = line.match(/^(?:dos phone|dos cell|dos mobile|dos tel|phone|cell|mobile|tel)\s*[:\-]\s*(\+?\d[\d().\-\s]{6,}\d)/i);
+    if (dosPhoneMatch?.[1]) {
+      if (!dosPhone) dosPhone = normalizePhone(dosPhoneMatch[1]);
+      continue;
+    }
+
+    const dosNameMatch = line.match(/^(?:dos name|contact name|tm name|tour manager name|name)\s*[:\-]\s*(.+)$/i);
+    if (dosNameMatch?.[1]) {
+      if (!dosName) dosName = sanitizeContactName(dosNameMatch[1]);
+      continue;
+    }
+
+    remainingLines.push(line);
+  }
+
+  if (!city && !region && !venueName && !venueAddress && !dosName && !dosPhone) return null;
+
+  return {
+    city,
+    region,
+    venueName,
+    venueAddress,
+    dosName,
+    dosPhone,
+    notes: remainingLines.join('\n'),
+  };
+}
+
 function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | null) {
   let next: IntakeRow = {
     ...row,
@@ -258,6 +349,17 @@ function maybeEnrichSingleRow(row: IntakeRow, sourceText: string | undefined | n
     venue_address: normalizeText(row.venue_address),
     notes: normalizeText(row.notes),
   };
+
+  const recoveredFromNotes = extractStructuredFieldsFromNotes(next);
+  if (recoveredFromNotes) {
+    if (!next.city && recoveredFromNotes.city) next = { ...next, city: recoveredFromNotes.city };
+    if (!next.region && recoveredFromNotes.region) next = { ...next, region: recoveredFromNotes.region };
+    if (!next.venue_name && recoveredFromNotes.venueName) next = { ...next, venue_name: recoveredFromNotes.venueName };
+    if (!next.venue_address && recoveredFromNotes.venueAddress) next = { ...next, venue_address: recoveredFromNotes.venueAddress };
+    if (!next.dos_name && recoveredFromNotes.dosName) next = { ...next, dos_name: recoveredFromNotes.dosName };
+    if (!next.dos_phone && recoveredFromNotes.dosPhone) next = { ...next, dos_phone: recoveredFromNotes.dosPhone };
+    if (recoveredFromNotes.notes !== next.notes) next = { ...next, notes: recoveredFromNotes.notes };
+  }
 
   const contacts = extractContactsFromText(sourceText);
   const dosLikeContacts = contacts.filter((contact) => /^(?:dos|day of show|day-of-show|dos contact|tm|tour manager)$/i.test(contact.label));
