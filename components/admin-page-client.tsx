@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { createArtist, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
+import { mapDateRecordToShow } from '@/lib/adapters/date-show';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
@@ -1604,6 +1605,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.error || 'Unable to import dates.');
+      }
+
+      const createdShows = Array.isArray(payload?.createdDates)
+        ? (payload.createdDates as any[]).map((date) => mapDateRecordToShow(date))
+        : [];
+
+      if (createdShows.length > 0) {
+        setShows((current) => {
+          const byId = new Map(current.map((show) => [show.id, show]));
+          for (const show of createdShows) {
+            byId.set(show.id, show);
+          }
+          return Array.from(byId.values()).sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
+        });
       }
 
       await loadShows();

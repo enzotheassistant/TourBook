@@ -365,7 +365,13 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
 
-    if (!scheduleResult.error && scheduleResult.data) {
+    if (scheduleResult.error) {
+      if (isMissingRelationError(scheduleResult.error)) {
+        scheduleByDate = new Map<string, DateScheduleItem[]>();
+      } else {
+        throw new Error(scheduleResult.error.message);
+      }
+    } else if (scheduleResult.data) {
       scheduleByDate = scheduleResult.data.reduce((map: Map<string, DateScheduleItem[]>, row: any) => {
         const dateId = String(row.date_id);
         const items = map.get(dateId) ?? [];
