@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writePendingInviteToken } from "@/lib/app-context-storage";
+import { buildInviteContinuationHref } from "@/lib/invites/login-redirect";
 import { getBrowserSupabaseClient, backupRefreshToken, authLog, backupRememberedEmail, clearBackupRememberedEmail, setRememberEmailPreference } from "@/lib/supabase/client";
 
 interface LoginPageClientProps {
@@ -112,7 +113,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     }
     if (routedRef.current) return;
     routedRef.current = true;
-    window.location.assign(inviteToken ? `/?inviteToken=${encodeURIComponent(inviteToken)}` : "/");
+    window.location.assign(inviteToken ? buildInviteContinuationHref(inviteToken) : "/");
   }, [inviteToken]);
 
   const syncSessionAndRouteToApp = useCallback(async (accessToken: string, refreshToken: string, emailToRemember?: string) => {

@@ -1018,7 +1018,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         projectIds: inviteScopeType === 'projects' ? inviteProjectIds : [],
         tourIds: inviteScopeType === 'tours' ? inviteTourIds : [],
       });
-      const inviteLink = `${window.location.origin}/?inviteToken=${encodeURIComponent(created.acceptToken)}`;
+      const inviteLink = `${window.location.origin}/invite/${encodeURIComponent(created.acceptToken)}`;
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteName('');
       setInviteEmail('');

@@ -8,6 +8,11 @@ export function readInviteTokenFromSearch(search: string | URLSearchParams | nul
   return (params?.get('inviteToken') || params?.get('token') || '').trim();
 }
 
+export function buildInviteContinuationHref(token: string) {
+  const trimmed = token.trim();
+  return trimmed ? `/accept-invite?token=${encodeURIComponent(trimmed)}` : '/';
+}
+
 export function buildLoginRedirectHref(search: string | URLSearchParams | null | undefined) {
   const inviteToken = readInviteTokenFromSearch(search);
   return inviteToken ? `/login?inviteToken=${encodeURIComponent(inviteToken)}` : '/login';

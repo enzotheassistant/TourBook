@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
@@ -15,6 +15,7 @@ import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activa
 import { clearPendingInviteScope, clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
 import { shouldClearInviteArtifactsOnError } from '@/lib/invites/client-state';
 import { hasResolvedInviteContext } from '@/lib/invites/join-resolution';
+import { buildInviteContinuationHref } from '@/lib/invites/login-redirect';
 import { Show } from '@/lib/types';
 
 
@@ -350,7 +351,6 @@ export function DashboardClient() {
   const urlInviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
   const inviteToken = urlInviteToken || readPendingInviteToken();
   const [inviteFlow, setInviteFlow] = useState<InviteFlowState>({ phase: 'idle' });
-  const autoAcceptAttemptedTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (urlInviteToken) {
@@ -389,36 +389,10 @@ export function DashboardClient() {
   }, [beginInviteJoin]);
 
   useEffect(() => {
-    if (!inviteToken) {
-      autoAcceptAttemptedTokenRef.current = null;
-      return;
-    }
-
-    if (inviteFlow.phase !== 'idle') return;
-    if (autoAcceptAttemptedTokenRef.current === inviteToken) return;
-
-    autoAcceptAttemptedTokenRef.current = inviteToken;
+    if (!inviteToken) return;
     setInviteFlow({ phase: 'accepting' });
-
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const result = await acceptWorkspaceInvite(inviteToken);
-          await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
-          await handleInviteAccepted(result.invite);
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
-          if (shouldClearInviteArtifactsOnError(reason)) {
-            clearInviteArtifacts();
-          }
-          setInviteFlow({ phase: 'error', token: inviteToken, message: reason });
-          await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
-        }
-      })();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [activeWorkspaceId, clearInviteArtifacts, handleInviteAccepted, inviteFlow.phase, inviteToken]);
+    window.location.replace(buildInviteContinuationHref(inviteToken));
+  }, [inviteToken]);
 
   useEffect(() => {
     if (!inviteToken && inviteFlow.phase !== 'joining') {
