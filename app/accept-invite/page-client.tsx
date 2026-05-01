@@ -104,6 +104,11 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : 'Unable to continue invite access.';
         if (!cancelled) {
+          // If the invite was sent to a different email than the logged-in account,
+          // clear the cached token so the user isn't stuck in a redirect loop.
+          if (reason.includes('Invite email does not match your authenticated account')) {
+            clearPendingInviteToken();
+          }
           setError(reason);
           setMessage(reason);
           await trackInviteEvent({ event: 'invite.failed', reason });
