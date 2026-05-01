@@ -221,34 +221,25 @@ export async function GET(request: NextRequest) {
     if (projectsResult.error) {
       if (!isMissingRelationError(projectsResult.error)) throw projectsResult.error;
     } else {
-      const unfiltered = (projectsResult.data ?? []).map((row: any) => ({
+      // Important: this request runs through the authenticated user-scoped client, so
+      // the projects query is already filtered by RLS. Do not apply a second pass based
+      // on the derived `memberships` summaries here.
+      //
+      // Why: invite acceptance can create a real workspace_members row before the direct
+      // grant-table reads used to build `memberships` become visible in this route (or if
+      // those grant-table selects are blocked/drifted while the security-definer RLS helper
+      // still authorizes the project rows). In that state, `projectsResult` can correctly
+      // contain accessible invited projects while `memberships` is temporarily empty.
+      // Re-filtering by `memberships` would incorrectly drop every project and leave invited
+      // collaborators on the "no active artist" / setup card even though RLS says they have
+      // project access.
+      allProjects = (projectsResult.data ?? []).map((row: any) => ({
         id: String(row.id),
         workspaceId: String(row.workspace_id),
         name: String(row.name ?? ''),
         slug: row.slug ? String(row.slug) : null,
         archivedAt: null,
       }));
-
-      const allowedByWorkspace = memberships.reduce((map: Map<string, Set<string> | null>, membership) => {
-        if (membership.scopeType === 'workspace') {
-          map.set(membership.workspaceId, null);
-        } else if (!map.has(membership.workspaceId)) {
-          map.set(membership.workspaceId, new Set(membership.projectIds));
-        } else {
-          const existing = map.get(membership.workspaceId);
-          if (existing) {
-            membership.projectIds.forEach((projectId) => existing.add(projectId));
-          }
-        }
-        return map;
-      }, new Map<string, Set<string> | null>());
-
-      allProjects = unfiltered.filter((project) => {
-        const allowed = allowedByWorkspace.get(project.workspaceId);
-        if (allowed === null) return true;
-        if (!allowed) return false;
-        return allowed.has(project.id);
-      });
     }
 
     const workspaceWithProjects = workspaces.find((workspace) =>
@@ -274,33 +265,18 @@ export async function GET(request: NextRequest) {
       if (toursResult.error) {
         if (!isOptionalBootstrapSchemaDriftError(toursResult.error)) throw toursResult.error;
       } else {
-        const workspaceMemberships = memberships.filter((membership) => membership.workspaceId === activeWorkspaceId);
-        const allowedProjectIds = new Set(
-          workspaceMemberships.flatMap((membership) => membership.scopeType === 'workspace' ? [] : membership.projectIds),
-        );
-        const allowedTourIds = new Set(
-          workspaceMemberships.flatMap((membership) => membership.scopeType === 'tours' ? membership.tourIds : []),
-        );
-        const hasWorkspaceScope = workspaceMemberships.some((membership) => membership.scopeType === 'workspace');
-        const hasProjectScope = workspaceMemberships.some((membership) => membership.scopeType === 'projects');
-
-        tours = (toursResult.data ?? [])
-          .filter((row: any) => {
-            if (hasWorkspaceScope) return true;
-            const rowProjectId = String(row.project_id);
-            const rowTourId = String(row.id);
-            if (hasProjectScope && allowedProjectIds.has(rowProjectId)) return true;
-            return allowedTourIds.has(rowTourId);
-          })
-          .map((row: any) => ({
-            id: String(row.id),
-            workspaceId: String(row.workspace_id),
-            projectId: String(row.project_id),
-            name: String(row.name ?? ''),
-            status: String(row.status ?? ''),
-            startDate: row.start_date ? String(row.start_date) : null,
-            endDate: row.end_date ? String(row.end_date) : null,
-          }));
+        // Same reasoning as projects above: the authenticated client query is already
+        // RLS-filtered, so trust the returned tour set instead of re-deriving access from
+        // `memberships`, which may lag or be temporarily incomplete during invite join.
+        tours = (toursResult.data ?? []).map((row: any) => ({
+          id: String(row.id),
+          workspaceId: String(row.workspace_id),
+          projectId: String(row.project_id),
+          name: String(row.name ?? ''),
+          status: String(row.status ?? ''),
+          startDate: row.start_date ? String(row.start_date) : null,
+          endDate: row.end_date ? String(row.end_date) : null,
+        }));
       }
     }
 
