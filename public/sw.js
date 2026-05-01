@@ -1,4 +1,4 @@
-const VERSION = 'tourbook-v2';
+const VERSION = 'tourbook-v3';
 const APP_SHELL_CACHE = `${VERSION}-app-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const DATA_CACHE = `${VERSION}-data`;
@@ -6,7 +6,6 @@ const OFFLINE_URL = '/offline';
 const LOGIN_URL = '/login';
 const APP_SHELL_URLS = [
   '/',
-  LOGIN_URL,
   OFFLINE_URL,
   '/manifest.webmanifest',
   '/icon?size=192',
@@ -49,6 +48,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (isSensitiveRequest(request, url)) {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(request));
     return;
@@ -59,27 +63,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(networkOnly(request));
+    return;
+  }
+
   event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
 });
 
 async function handleNavigation(request) {
+  const url = new URL(request.url);
+
   try {
     const response = await fetch(request);
-    const cache = await caches.open(RUNTIME_CACHE);
-    cache.put(request, response.clone());
+
+    if (response.ok && !isSensitiveNavigation(url)) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, response.clone());
+    }
+
     return response;
   } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    
-    // For protected routes that fail to load, redirect to /login as a safe fallback.
-    // This prevents blank screens when the session is stale and network is unavailable.
-    const url = new URL(request.url);
-    if (url.pathname !== LOGIN_URL && url.pathname !== OFFLINE_URL) {
-      const loginCached = await caches.match(LOGIN_URL);
-      if (loginCached) return loginCached;
+    if (!isSensitiveNavigation(url)) {
+      const cached = await caches.match(request);
+      if (cached) return cached;
     }
-    
+
     const offline = await caches.match(OFFLINE_URL);
     return offline || Response.error();
   }
@@ -98,6 +107,32 @@ async function networkFirst(request, cacheName) {
     if (cached) return cached;
     throw new Error('Network unavailable');
   }
+}
+
+async function networkOnly(request) {
+  return fetch(request, { cache: 'no-store' });
+}
+
+function isSensitiveNavigation(url) {
+  if (url.searchParams.has('inviteToken') || url.searchParams.has('token')) {
+    return true;
+  }
+
+  return (
+    url.pathname === LOGIN_URL ||
+    url.pathname === '/reset-password' ||
+    url.pathname.startsWith('/invite/') ||
+    url.pathname.startsWith('/auth/')
+  );
+}
+
+function isSensitiveRequest(request, url) {
+  return (
+    isSensitiveNavigation(url) ||
+    url.pathname === '/api/me/context' ||
+    url.pathname.startsWith('/api/auth/') ||
+    url.pathname.startsWith('/api/session')
+  );
 }
 
 async function staleWhileRevalidate(request, cacheName) {
