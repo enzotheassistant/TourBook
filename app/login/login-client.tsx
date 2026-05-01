@@ -88,7 +88,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     return "Sign in";
   }, [loading, mode]);
 
-  async function syncSession(accessToken: string, refreshToken: string, emailToRemember?: string) {
+  const syncSession = useCallback(async (accessToken: string, refreshToken: string, emailToRemember?: string) => {
     const response = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,7 +104,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     if (!response.ok) {
       throw new Error(response.status >= 500 ? "Server error" : "Unable to sync session.");
     }
-  }
+  }, [rememberEmail]);
 
   const routeToApp = useCallback(() => {
     if (inviteToken) {
@@ -115,6 +115,17 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     window.location.assign(inviteToken ? `/?inviteToken=${encodeURIComponent(inviteToken)}` : "/");
   }, [inviteToken]);
 
+  const syncSessionAndRouteToApp = useCallback(async (accessToken: string, refreshToken: string, emailToRemember?: string) => {
+    if (inviteToken) {
+      writePendingInviteToken(inviteToken);
+    }
+
+    authLog("login: ensuring server session is synced before routing");
+    await syncSession(accessToken, refreshToken, emailToRemember);
+    authLog("login: server session ready — routing to app");
+    routeToApp();
+  }, [inviteToken, routeToApp, syncSession]);
+
   useEffect(() => {
     if (inviteToken) {
       writePendingInviteToken(inviteToken);
@@ -122,17 +133,30 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
 
     const supabase = getBrowserSupabaseClient();
     let active = true;
+    let syncing = false;
 
     void (async () => {
       const { data } = await supabase.auth.getSession();
-      if (active && data.session) {
-        routeToApp();
+      if (!active || !data.session || syncing || routedRef.current) return;
+      syncing = true;
+      try {
+        await syncSessionAndRouteToApp(data.session.access_token, data.session.refresh_token);
+      } catch (err) {
+        authLog("login: existing-session sync before route failed", err);
+      } finally {
+        syncing = false;
       }
     })();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        routeToApp();
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!active || !session || syncing || routedRef.current) return;
+      syncing = true;
+      try {
+        await syncSessionAndRouteToApp(session.access_token, session.refresh_token);
+      } catch (err) {
+        authLog("login: auth-state sync before route failed", err);
+      } finally {
+        syncing = false;
       }
     });
 
@@ -140,7 +164,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [inviteToken, routeToApp]);
+  }, [inviteToken, syncSessionAndRouteToApp]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,10 +204,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
         // if iOS Safari clears localStorage (PWA eviction).
         authLog("login: signInWithPassword succeeded — writing backup cookie");
         backupRefreshToken(data.session.refresh_token);
-        authLog("login: syncing session to server…");
-        await syncSession(data.session.access_token, data.session.refresh_token, rememberEmail ? normalizedEmail : undefined);
-        authLog("login: server sync done — routing to app");
-        routeToApp();
+        await syncSessionAndRouteToApp(data.session.access_token, data.session.refresh_token, rememberEmail ? normalizedEmail : undefined);
         return;
       }
 
@@ -208,8 +229,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
           authLog("login: signUp succeeded with immediate session — writing backup cookie");
           backupRefreshToken(data.session.refresh_token);
           setRememberEmailPreference(true);
-          await syncSession(data.session.access_token, data.session.refresh_token, normalizedEmail);
-          routeToApp();
+          await syncSessionAndRouteToApp(data.session.access_token, data.session.refresh_token, normalizedEmail);
           return;
         }
 
