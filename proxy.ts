@@ -18,12 +18,16 @@ export async function proxy(request: NextRequest) {
 
   if (PUBLIC_PATHS.has(pathname)) {
     if (user) {
-      const destination = new URL("/", request.url);
-      const inviteToken = request.nextUrl.searchParams.get("inviteToken")?.trim();
+      const inviteToken = request.nextUrl.searchParams.get("inviteToken")?.trim()
+        || request.nextUrl.searchParams.get("token")?.trim();
       if (inviteToken) {
-        destination.searchParams.set("inviteToken", inviteToken);
+        // Authenticated user arrived at /login with an invite token —
+        // send them straight to the accept-invite page so the flow is not lost.
+        const destination = new URL("/accept-invite", request.url);
+        destination.searchParams.set("token", inviteToken);
+        return NextResponse.redirect(destination);
       }
-      return NextResponse.redirect(destination);
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return response;
   }
