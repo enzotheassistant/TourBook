@@ -144,7 +144,6 @@ function InviteAcceptancePanel({
   const [token, setToken] = useState(initialToken);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState(initialToken ? 'Invite token detected. Finishing workspace access…' : 'Paste an invite token to join a workspace.');
-  const autoAcceptAttemptedRef = useRef(false);
 
   useEffect(() => {
     setToken(initialToken);
@@ -188,15 +187,6 @@ function InviteAcceptancePanel({
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
     }
   }, [activeWorkspaceId, onAcceptStart, onAccepted, token]);
-
-  useEffect(() => {
-    if (!initialToken.trim() || autoAcceptAttemptedRef.current) return;
-    autoAcceptAttemptedRef.current = true;
-    const timeoutId = window.setTimeout(() => {
-      void handleAccept();
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [handleAccept, initialToken]);
 
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
@@ -359,6 +349,7 @@ export function DashboardClient() {
   const urlInviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
   const inviteToken = urlInviteToken || readPendingInviteToken();
   const [inviteFlow, setInviteFlow] = useState<InviteFlowState>({ phase: 'idle' });
+  const autoAcceptAttemptedTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (urlInviteToken) {
@@ -385,7 +376,7 @@ export function DashboardClient() {
     }));
   }, []);
 
-  async function handleInviteAccepted(invite: WorkspaceInviteSummary) {
+  const handleInviteAccepted = useCallback(async (invite: WorkspaceInviteSummary) => {
     writePendingInviteScope({
       workspaceId: invite.workspaceId,
       scopeType: invite.scopeType,
@@ -393,7 +384,36 @@ export function DashboardClient() {
       tourIds: invite.tourIds,
     });
     beginInviteJoin(invite);
-  }
+  }, [beginInviteJoin]);
+
+  useEffect(() => {
+    if (!inviteToken) {
+      autoAcceptAttemptedTokenRef.current = null;
+      return;
+    }
+
+    if (inviteFlow.phase !== 'idle') return;
+    if (autoAcceptAttemptedTokenRef.current === inviteToken) return;
+
+    autoAcceptAttemptedTokenRef.current = inviteToken;
+    setInviteFlow({ phase: 'accepting' });
+
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await acceptWorkspaceInvite(inviteToken);
+          await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
+          await handleInviteAccepted(result.invite);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
+          setInviteFlow({ phase: 'error', token: inviteToken, message: reason });
+          await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
+        }
+      })();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeWorkspaceId, handleInviteAccepted, inviteFlow.phase, inviteToken]);
 
   useEffect(() => {
     if (!inviteToken && inviteFlow.phase !== 'joining') {
