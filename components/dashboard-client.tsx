@@ -16,7 +16,6 @@ import { clearPendingInviteScope, clearPendingInviteToken, readPendingInviteToke
 import { shouldClearInviteArtifactsOnError } from '@/lib/invites/client-state';
 import { hasResolvedInviteContext } from '@/lib/invites/join-resolution';
 import { buildInviteContinuationHref } from '@/lib/invites/login-redirect';
-import { clearInviteDebugRecord, readInviteDebugRecord, summarizeBootstrapContext, summarizeInvite, writeInviteDebugRecord } from '@/lib/invites/debug';
 import { Show } from '@/lib/types';
 
 
@@ -131,52 +130,6 @@ function FilterSummary({
   );
 }
 
-function InviteDebugPanel() {
-  const [debugRecord, setDebugRecord] = useState(() => readInviteDebugRecord());
-
-  useEffect(() => {
-    const id = window.setInterval(() => setDebugRecord(readInviteDebugRecord()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  if (!debugRecord) return null;
-
-  return (
-    <section className="rounded-[28px] border border-amber-400/20 bg-amber-500/5 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-amber-100">Invite debug</h2>
-          <p className="mt-1 text-xs text-amber-200/80">Temporary diagnostics for invited test users.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            clearInviteDebugRecord();
-            setDebugRecord(readInviteDebugRecord());
-          }}
-          className="text-xs text-amber-200/80 transition hover:text-amber-100"
-        >
-          Clear
-        </button>
-      </div>
-      <div className="mt-3 space-y-1.5 text-xs text-zinc-200">
-        <p>Token detected: {String(Boolean(debugRecord.tokenDetected))}</p>
-        <p>Authenticated user: {debugRecord.authEmail || 'unknown'} {debugRecord.authUserId ? `(${debugRecord.authUserId})` : ''}</p>
-        <p>Accept result: {debugRecord.acceptSucceeded ? 'success' : debugRecord.acceptError ? 'error' : 'pending'}</p>
-        {debugRecord.acceptError ? <p>Accept error: {debugRecord.acceptError}</p> : null}
-        <p>Pending scope: {debugRecord.pendingScope ? `${debugRecord.pendingScope.scopeType} · workspace ${debugRecord.pendingScope.workspaceId}` : 'not set'}</p>
-        {debugRecord.pendingScope?.projectIds?.length ? <p>Pending projects: {debugRecord.pendingScope.projectIds.join(', ')}</p> : null}
-        {debugRecord.pendingScope?.tourIds?.length ? <p>Pending tours: {debugRecord.pendingScope.tourIds.join(', ')}</p> : null}
-        <p>/api/me/context empty after accept: {debugRecord.latestContext ? String(debugRecord.latestContext.isEmpty) : 'unknown'}</p>
-        <p>Latest context counts: {debugRecord.latestContext ? `memberships ${debugRecord.latestContext.membershipCount}, workspaces ${debugRecord.latestContext.workspaceCount}, projects ${debugRecord.latestContext.projectCount}, tours ${debugRecord.latestContext.tourCount}` : 'none yet'}</p>
-        <p>Invite access resolved in context: {typeof debugRecord.latestContext?.hasInviteAccess === 'boolean' ? String(debugRecord.latestContext.hasInviteAccess) : 'unknown'}</p>
-        <p>Redirect attempted: {debugRecord.redirectAttempted ? `yes → ${debugRecord.redirectAttempted.to} (${debugRecord.redirectAttempted.reason})` : 'no'}</p>
-        {debugRecord.notes?.length ? <p>Notes: {debugRecord.notes.join(' · ')}</p> : null}
-      </div>
-    </section>
-  );
-}
-
 function InviteAcceptancePanel({
   initialToken,
   flowState,
@@ -200,11 +153,6 @@ function InviteAcceptancePanel({
 
   useEffect(() => {
     if (flowState.phase === 'joining') {
-      writeInviteDebugRecord((current) => ({
-        ...(current ?? { source: 'dashboard' }),
-        acceptSucceeded: true,
-        acceptedInvite: summarizeInvite(flowState.invite),
-      }));
       setStatus('success');
       setMessage(`Joining ${flowState.invite.role} access… This can take a few seconds while TourBook loads your workspace.`);
       return;
@@ -221,43 +169,21 @@ function InviteAcceptancePanel({
     if (!trimmed) {
       setStatus('error');
       setMessage('Enter an invite token first.');
-      writeInviteDebugRecord({ source: 'dashboard', tokenDetected: false, acceptError: 'Missing invite token.' });
       return;
     }
 
     onAcceptStart?.();
     setStatus('loading');
     setMessage('Accepting invite…');
-    writeInviteDebugRecord({
-      source: 'dashboard',
-      tokenDetected: true,
-      acceptAttemptedAt: Date.now(),
-      acceptSucceeded: false,
-      acceptError: null,
-      redirectAttempted: null,
-    });
 
     try {
       const result = await acceptWorkspaceInvite(trimmed);
-      writeInviteDebugRecord((current) => ({
-        ...(current ?? { source: 'dashboard' }),
-        acceptSucceeded: true,
-        acceptError: null,
-        acceptedInvite: summarizeInvite(result.invite),
-        pendingScope: {
-          workspaceId: result.invite.workspaceId,
-          scopeType: result.invite.scopeType,
-          projectIds: result.invite.projectIds,
-          tourIds: result.invite.tourIds,
-        },
-      }));
       setStatus('success');
       setMessage(`Invite accepted. Workspace access granted as ${result.invite.role}. Loading your access…`);
       await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
       await onAccepted(result.invite);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
-      writeInviteDebugRecord((current) => ({ ...(current ?? { source: 'dashboard' }), acceptError: reason }));
       setStatus('error');
       setMessage(reason);
       await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
@@ -465,12 +391,6 @@ export function DashboardClient() {
   useEffect(() => {
     if (!inviteToken) return;
     setInviteFlow({ phase: 'accepting' });
-    writeInviteDebugRecord((current) => ({
-      ...(current ?? { source: 'dashboard' }),
-      source: 'dashboard',
-      tokenDetected: true,
-      redirectAttempted: { at: Date.now(), to: buildInviteContinuationHref(inviteToken), reason: 'dashboard_auto_handoff' },
-    }));
     window.location.replace(buildInviteContinuationHref(inviteToken));
   }, [inviteToken]);
 
@@ -501,35 +421,6 @@ export function DashboardClient() {
   useEffect(() => {
     if (inviteFlow.phase !== 'joining') return;
 
-    const snapshot = summarizeBootstrapContext({
-      user: null,
-      memberships,
-      workspaces,
-      projects,
-      tours: [],
-      activeWorkspaceId,
-      activeProjectId,
-      activeTourId,
-    }, {
-      hasInviteAccess: hasResolvedInviteContext(inviteFlow.invite, { activeWorkspaceId, activeProjectId, activeTourId }),
-    });
-
-    writeInviteDebugRecord((current) => ({
-      ...(current ?? { source: 'dashboard' }),
-      latestContext: snapshot,
-      contextSnapshots: [...(current?.contextSnapshots ?? []), snapshot].slice(-8),
-      pendingScope: {
-        workspaceId: inviteFlow.invite.workspaceId,
-        scopeType: inviteFlow.invite.scopeType,
-        projectIds: inviteFlow.invite.projectIds,
-        tourIds: inviteFlow.invite.tourIds,
-      },
-    }));
-  }, [activeProjectId, activeTourId, activeWorkspaceId, inviteFlow, memberships, projects, workspaces]);
-
-  useEffect(() => {
-    if (inviteFlow.phase !== 'joining') return;
-
     let cancelled = false;
 
     const run = async () => {
@@ -540,10 +431,6 @@ export function DashboardClient() {
         if (cancelled) return;
         try {
           await refreshContext();
-          writeInviteDebugRecord((current) => ({
-            ...(current ?? { source: 'dashboard' }),
-            notes: [...(current?.notes ?? []), `dashboard refresh attempt after ${delay}ms`].slice(-12),
-          }));
         } catch (error) {
           const reason = error instanceof Error ? error.message : 'Unable to refresh workspace access.';
           if (!cancelled) beginInviteJoin(inviteFlow.invite, reason);
@@ -706,7 +593,6 @@ export function DashboardClient() {
     return (
       <div className="space-y-3">
         {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
-        <InviteDebugPanel />
         {isFirstRun && inviteFlow.phase === 'idle' ? (
           <SelfServeOnboardingPanel onCompleted={refreshContext} />
         ) : (
@@ -756,7 +642,6 @@ export function DashboardClient() {
     return (
       <div className="space-y-3">
         {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
-        <InviteDebugPanel />
         <ActivationEmptyState
           title={firstRunState.title}
           body={firstRunState.body}
@@ -774,7 +659,6 @@ export function DashboardClient() {
   return (
     <div className="space-y-4">
       {inviteToken ? <InviteAcceptancePanel key={`invite:${inviteToken}`} initialToken={inviteFlow.phase === 'error' ? inviteFlow.token : inviteToken} flowState={inviteFlow} activeWorkspaceId={activeWorkspaceId} onAcceptStart={() => setInviteFlow({ phase: 'accepting' })} onAccepted={(invite) => handleInviteAccepted(invite)} /> : null}
-      <InviteDebugPanel />
       <OfflineStatus
         savedAt={lastSavedAt}
         source={statusSource}

@@ -3,7 +3,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writePendingInviteToken } from "@/lib/app-context-storage";
 import { buildInviteContinuationHref } from "@/lib/invites/login-redirect";
-import { writeInviteDebugRecord } from "@/lib/invites/debug";
 import { getBrowserSupabaseClient, backupRefreshToken, authLog, backupRememberedEmail, clearBackupRememberedEmail, setRememberEmailPreference } from "@/lib/supabase/client";
 
 interface LoginPageClientProps {
@@ -111,12 +110,6 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
   const routeToApp = useCallback(() => {
     if (inviteToken) {
       writePendingInviteToken(inviteToken);
-      writeInviteDebugRecord((current) => ({
-        ...(current ?? { source: 'login' }),
-        source: 'login',
-        tokenDetected: true,
-        redirectAttempted: { at: Date.now(), to: buildInviteContinuationHref(inviteToken), reason: 'login_auth_handoff' },
-      }));
     }
     if (routedRef.current) return;
     routedRef.current = true;
@@ -137,11 +130,6 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
   useEffect(() => {
     if (inviteToken) {
       writePendingInviteToken(inviteToken);
-      writeInviteDebugRecord((current) => ({
-        ...(current ?? { source: 'login' }),
-        source: 'login',
-        tokenDetected: true,
-      }));
     }
 
     const supabase = getBrowserSupabaseClient();

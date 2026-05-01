@@ -8,7 +8,6 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { hasResolvedInviteContext } from '@/lib/invites/join-resolution';
 import { resolveActiveContextSelection } from '@/lib/ui/context-bootstrap';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { appendInviteDebugNote, readInviteDebugRecord, summarizeBootstrapContext, summarizeInvite, writeInviteDebugRecord } from '@/lib/invites/debug';
 import type { BootstrapContext } from '@/lib/types/tenant';
 
 interface InviteContinuationClientProps {
@@ -52,50 +51,22 @@ function contextHasInviteAccess(context: BootstrapContext, pendingScope: Pending
 export function InviteContinuationClient({ token }: InviteContinuationClientProps) {
   const [message, setMessage] = useState('Accepting your invite…');
   const [error, setError] = useState<string | null>(null);
-  const [debugRecord, setDebugRecord] = useState(() => readInviteDebugRecord());
 
   const trimmedToken = useMemo(() => token.trim(), [token]);
 
   useEffect(() => {
     if (!trimmedToken) {
-      writeInviteDebugRecord({
-        source: 'accept-invite',
-        tokenDetected: false,
-        redirectAttempted: { at: Date.now(), to: '/', reason: 'missing_token' },
-      });
-      setDebugRecord(readInviteDebugRecord());
       window.location.replace('/');
       return;
     }
 
     writePendingInviteToken(trimmedToken);
-    writeInviteDebugRecord({
-      source: 'accept-invite',
-      tokenDetected: true,
-      acceptSucceeded: false,
-      acceptError: null,
-      redirectAttempted: null,
-      latestContext: null,
-      contextSnapshots: [],
-      notes: ['accept-invite page loaded'],
-    });
-    setDebugRecord(readInviteDebugRecord());
 
     let cancelled = false;
 
     void (async () => {
       try {
         const supabase = getBrowserSupabaseClient();
-        const { data: sessionData } = await supabase.auth.getSession();
-        writeInviteDebugRecord((current) => ({
-          ...(current ?? { source: 'accept-invite' }),
-          tokenDetected: true,
-          authUserId: sessionData.session?.user?.id ?? null,
-          authEmail: sessionData.session?.user?.email ?? null,
-          acceptAttemptedAt: Date.now(),
-        }));
-        setDebugRecord(readInviteDebugRecord());
-
         const accepted = await acceptWorkspaceInvite(trimmedToken);
         const pendingScope: PendingInviteScope = {
           workspaceId: accepted.invite.workspaceId,
@@ -106,14 +77,6 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
         };
 
         writePendingInviteScope(pendingScope);
-        writeInviteDebugRecord((current) => ({
-          ...(current ?? { source: 'accept-invite' }),
-          acceptSucceeded: true,
-          acceptError: null,
-          acceptedInvite: summarizeInvite(accepted.invite),
-          pendingScope,
-        }));
-        setDebugRecord(readInviteDebugRecord());
         setMessage('Invite accepted. Loading your workspace access…');
         await trackInviteEvent({ event: 'invite.accepted', workspaceId: accepted.invite.workspaceId, inviteId: accepted.invite.id, role: accepted.invite.role });
 
@@ -129,22 +92,9 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
           const { data } = await supabase.auth.getSession();
           const context = await fetchBootstrapContext(data.session ?? null);
           const hasInviteAccess = contextHasInviteAccess(context, pendingScope);
-          const snapshot = summarizeBootstrapContext(context, { hasInviteAccess });
-          writeInviteDebugRecord((current) => ({
-            ...(current ?? { source: 'accept-invite' }),
-            latestContext: snapshot,
-            contextSnapshots: [...(current?.contextSnapshots ?? []), snapshot].slice(-8),
-            pendingScope,
-          }));
-          setDebugRecord(readInviteDebugRecord());
+
           if (hasInviteAccess) {
             clearPendingInviteToken();
-            appendInviteDebugNote('invite access detected in /api/me/context');
-            writeInviteDebugRecord((current) => ({
-              ...(current ?? { source: 'accept-invite' }),
-              redirectAttempted: { at: Date.now(), to: '/', reason: 'invite_context_resolved' },
-            }));
-            setDebugRecord(readInviteDebugRecord());
             window.location.replace('/');
             return;
           }
@@ -153,11 +103,6 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
         throw new Error('Invite accepted, but TourBook is still waiting for that workspace to appear in your session.');
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : 'Unable to continue invite access.';
-        writeInviteDebugRecord((current) => ({
-          ...(current ?? { source: 'accept-invite' }),
-          acceptError: reason,
-        }));
-        setDebugRecord(readInviteDebugRecord());
         if (!cancelled) {
           setError(reason);
           setMessage(reason);
@@ -204,29 +149,6 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
               </button>
             </div>
           </div>
-        ) : null}
-
-        {debugRecord ? (
-          <section className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-500/5 p-4 text-xs text-amber-100/90">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold uppercase tracking-[0.18em] text-amber-200">Invite debug</h2>
-              <span className="text-[11px] text-amber-200/70">temporary diagnostics</span>
-            </div>
-            <div className="mt-3 space-y-1.5 text-zinc-200">
-              <p>Token detected: {String(Boolean(debugRecord.tokenDetected))}</p>
-              <p>Authenticated user: {debugRecord.authEmail || 'unknown'} {debugRecord.authUserId ? `(${debugRecord.authUserId})` : ''}</p>
-              <p>Accept result: {debugRecord.acceptSucceeded ? 'success' : debugRecord.acceptError ? 'error' : 'pending'}</p>
-              {debugRecord.acceptError ? <p>Accept error: {debugRecord.acceptError}</p> : null}
-              <p>Pending scope: {debugRecord.pendingScope ? `${debugRecord.pendingScope.scopeType} · workspace ${debugRecord.pendingScope.workspaceId}` : 'not set'}</p>
-              {debugRecord.pendingScope?.projectIds?.length ? <p>Pending projects: {debugRecord.pendingScope.projectIds.join(', ')}</p> : null}
-              {debugRecord.pendingScope?.tourIds?.length ? <p>Pending tours: {debugRecord.pendingScope.tourIds.join(', ')}</p> : null}
-              <p>/api/me/context empty after accept: {debugRecord.latestContext ? String(debugRecord.latestContext.isEmpty) : 'unknown'}</p>
-              <p>Latest context counts: {debugRecord.latestContext ? `memberships ${debugRecord.latestContext.membershipCount}, workspaces ${debugRecord.latestContext.workspaceCount}, projects ${debugRecord.latestContext.projectCount}, tours ${debugRecord.latestContext.tourCount}` : 'none yet'}</p>
-              <p>Invite access resolved in context: {typeof debugRecord.latestContext?.hasInviteAccess === 'boolean' ? String(debugRecord.latestContext.hasInviteAccess) : 'unknown'}</p>
-              <p>Redirect attempted: {debugRecord.redirectAttempted ? `yes → ${debugRecord.redirectAttempted.to} (${debugRecord.redirectAttempted.reason})` : 'no'}</p>
-              {debugRecord.notes?.length ? <p>Notes: {debugRecord.notes.join(' · ')}</p> : null}
-            </div>
-          </section>
         ) : null}
       </div>
     </main>
