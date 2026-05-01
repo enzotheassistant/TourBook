@@ -12,7 +12,8 @@ import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCa
 import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
-import { clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
+import { clearPendingInviteScope, clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
+import { shouldClearInviteArtifactsOnError } from '@/lib/invites/client-state';
 import { hasResolvedInviteContext } from '@/lib/invites/join-resolution';
 import { Show } from '@/lib/types';
 
@@ -360,6 +361,7 @@ export function DashboardClient() {
   const clearInviteArtifacts = useCallback(() => {
     if (typeof window === 'undefined') return;
     clearPendingInviteToken();
+    clearPendingInviteScope();
     const url = new URL(window.location.href);
     url.searchParams.delete('inviteToken');
     url.searchParams.delete('token');
@@ -406,6 +408,9 @@ export function DashboardClient() {
           await handleInviteAccepted(result.invite);
         } catch (error) {
           const reason = error instanceof Error ? error.message : 'Unable to accept invite.';
+          if (shouldClearInviteArtifactsOnError(reason)) {
+            clearInviteArtifacts();
+          }
           setInviteFlow({ phase: 'error', token: inviteToken, message: reason });
           await trackInviteEvent({ event: 'invite.failed', workspaceId: activeWorkspaceId ?? undefined, reason });
         }
@@ -413,7 +418,7 @@ export function DashboardClient() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeWorkspaceId, handleInviteAccepted, inviteFlow.phase, inviteToken]);
+  }, [activeWorkspaceId, clearInviteArtifacts, handleInviteAccepted, inviteFlow.phase, inviteToken]);
 
   useEffect(() => {
     if (!inviteToken && inviteFlow.phase !== 'joining') {
