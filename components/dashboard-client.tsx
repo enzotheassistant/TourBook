@@ -13,6 +13,7 @@ import { trackInviteEvent } from '@/lib/invite-telemetry';
 import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
 import { clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
+import { hasResolvedInviteContext } from '@/lib/invites/join-resolution';
 import { Show } from '@/lib/types';
 
 
@@ -410,9 +411,13 @@ export function DashboardClient() {
       return;
     }
 
+    if (!hasResolvedInviteContext(inviteFlow.invite, { activeWorkspaceId, activeProjectId, activeTourId })) {
+      return;
+    }
+
     clearInviteArtifacts();
     setInviteFlow({ phase: 'idle' });
-  }, [activeWorkspaceId, clearInviteArtifacts, inviteFlow, inviteToken, setActiveWorkspaceId, workspaces]);
+  }, [activeProjectId, activeTourId, activeWorkspaceId, clearInviteArtifacts, inviteFlow, inviteToken, setActiveWorkspaceId, workspaces]);
 
   useEffect(() => {
     if (inviteFlow.phase !== 'joining') return;
