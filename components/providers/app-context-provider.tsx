@@ -21,7 +21,9 @@ import {
   clearPendingInviteScope,
   isPendingInviteScopeFresh,
   readPendingInviteScope,
+  writePendingInviteToken,
 } from '@/lib/app-context-storage';
+import { buildLoginRedirectHref, readInviteTokenFromSearch } from '@/lib/invites/login-redirect';
 import { resolveActiveContextSelection } from '@/lib/ui/context-bootstrap';
 import {
   logBootstrapStart,
@@ -78,6 +80,19 @@ function writeStoredValue(key: string, value: string | null) {
 function resetBootstrapState(setBootstrap: Dispatch<SetStateAction<BootstrapContext>>) {
   clearAppContextStorage();
   setBootstrap(EMPTY_CONTEXT);
+}
+
+function routeToLogin(router: ReturnType<typeof useRouter>, isRedirectingRef: { current: boolean }) {
+  const nextHref = typeof window === 'undefined' ? '/login' : buildLoginRedirectHref(window.location.search);
+  const inviteToken = typeof window === 'undefined' ? '' : readInviteTokenFromSearch(window.location.search);
+  if (inviteToken) {
+    writePendingInviteToken(inviteToken);
+  }
+  if (!isRedirectingRef.current) {
+    isRedirectingRef.current = true;
+    router.replace(nextHref);
+    router.refresh();
+  }
 }
 
 async function getOrRecoverBrowserSession(supabase: SupabaseClient): Promise<Session | null> {
@@ -201,12 +216,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         authLog('refreshContext: unable to establish browser session — redirecting to /login');
         logLoginRedirect('session_recovery_failed');
         resetBootstrapState(setBootstrap);
-        // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
-        if (!isRedirectingRef.current) {
-          isRedirectingRef.current = true;
-          router.replace('/login');
-          router.refresh();
-        }
+        routeToLogin(router, isRedirectingRef);
         return;
       }
 
@@ -229,12 +239,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         authLog('refreshContext: repair failed — redirecting to /login');
         logLoginRedirect('context_fetch_unauthorized', { repaired: true });
         resetBootstrapState(setBootstrap);
-        // Guard against multiple simultaneous redirects during rapid visibility/auth changes.
-        if (!isRedirectingRef.current) {
-          isRedirectingRef.current = true;
-          router.replace('/login');
-          router.refresh();
-        }
+        routeToLogin(router, isRedirectingRef);
         return;
       }
 
