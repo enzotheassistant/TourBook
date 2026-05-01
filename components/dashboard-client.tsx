@@ -545,11 +545,31 @@ export function DashboardClient() {
     });
   }, [filteredPastShows]);
 
-  const showBlockingLoading = (contextLoading && !hasLoadedOnce) || (loading && !hasLoadedOnce && shows.length === 0);
+  // When an invite token is present and the flow is in the auto-processing phase (idle →
+  // accepting → joining), suppress all content and show a seamless loading skeleton.  This
+  // prevents the brief flash of the InviteAcceptancePanel / "Finishing workspace access…"
+  // message that was visible for at least one render frame before the auto-accept fired.
+  // The skeleton gives way naturally once either (a) the joining phase resolves and the
+  // workspace becomes active, or (b) the flow transitions to 'error' and we need to show
+  // the recovery UI.
+  const isAutoProcessingInvite =
+    Boolean(inviteToken) &&
+    (inviteFlow.phase === 'idle' || inviteFlow.phase === 'accepting' || inviteFlow.phase === 'joining');
+
+  const showBlockingLoading =
+    isAutoProcessingInvite ||
+    (contextLoading && !hasLoadedOnce) ||
+    (loading && !hasLoadedOnce && shows.length === 0);
   const isRefreshing = loading && hasLoadedOnce;
 
   if (showBlockingLoading) return (
     <div className="space-y-3">
+      {isAutoProcessingInvite ? (
+        <div className="flex items-center gap-2 px-1 pb-1 text-xs text-zinc-500">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
+          Joining workspace…
+        </div>
+      ) : null}
       {[0, 1, 2].map((i) => (
         <div key={i} className="h-24 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />
       ))}
