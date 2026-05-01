@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { writePendingInviteToken } from "@/lib/app-context-storage";
 import { getBrowserSupabaseClient, backupRefreshToken, authLog, backupRememberedEmail, clearBackupRememberedEmail, setRememberEmailPreference } from "@/lib/supabase/client";
 
 interface LoginPageClientProps {
@@ -76,6 +77,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const routedRef = useRef(false);
 
   const submitLabel = useMemo(() => {
     if (loading && mode === "signin") return "Signing in…";
@@ -104,9 +106,41 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     }
   }
 
-  function routeToApp() {
+  const routeToApp = useCallback(() => {
+    if (inviteToken) {
+      writePendingInviteToken(inviteToken);
+    }
+    if (routedRef.current) return;
+    routedRef.current = true;
     window.location.assign(inviteToken ? `/?inviteToken=${encodeURIComponent(inviteToken)}` : "/");
-  }
+  }, [inviteToken]);
+
+  useEffect(() => {
+    if (inviteToken) {
+      writePendingInviteToken(inviteToken);
+    }
+
+    const supabase = getBrowserSupabaseClient();
+    let active = true;
+
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (active && data.session) {
+        routeToApp();
+      }
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        routeToApp();
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [inviteToken, routeToApp]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
