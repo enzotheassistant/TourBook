@@ -386,70 +386,15 @@ export async function getProjectNamesForInviteScope(workspaceId: string, project
   return projectIds.map((id) => names.get(id) ?? id);
 }
 
-export async function acceptWorkspaceInvitePrivileged(input: {
+async function reconcileAcceptedWorkspaceInvite(input: {
+  supabase: SupabaseClient;
+  invite: WorkspaceInviteSummary;
+  scopeType: WorkspaceScopeType;
+  inviteProjectIds: string[];
+  inviteTourIds: string[];
   userId: string;
-  userEmail: string | null;
-  token: string;
 }) {
-  const userId = String(input.userId ?? '').trim();
-  const token = String(input.token ?? '').trim();
-  const userEmail = normalizeInviteEmail(input.userEmail);
-
-  if (!userId) throw new ApiError(401, 'Unauthorized');
-  if (!userEmail) throw new ApiError(400, 'Your account must have an email address to accept invites.');
-  if (!token) throw new ApiError(400, 'token is required.');
-
-  const supabase = getPrivilegedDataClient();
-  const tokenHash = hashInviteToken(token);
-
-  const { data: inviteRow, error: inviteError } = await supabase
-    .from('workspace_invites')
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
-    .eq('token_hash', tokenHash)
-    .maybeSingle();
-
-  if (inviteError) {
-    if (isMissingRelationError(inviteError)) {
-      throw new ApiError(409, 'Workspace invites schema is not ready yet.');
-    }
-    throw new ApiError(500, inviteError.message);
-  }
-
-  if (!inviteRow) {
-    throw new ApiError(404, 'Invite token is invalid.');
-  }
-
-  const scopeType = normalizeScopeType(inviteRow.scope_type);
-  const inviteId = String(inviteRow.id);
-  const inviteProjectIdsByInvite = await getInviteProjectIds(supabase, [inviteId]);
-  const inviteTourIdsByInvite = await getInviteTourIds(supabase, [inviteId]);
-  const inviteProjectIds = inviteProjectIdsByInvite.get(inviteId) ?? [];
-  const inviteTourIds = inviteTourIdsByInvite.get(inviteId) ?? [];
-  if (scopeType === 'projects' && !inviteProjectIds.length) {
-    throw new ApiError(409, 'Invite scope is invalid: no projects assigned.');
-  }
-  if (scopeType === 'tours' && !inviteTourIds.length) {
-    throw new ApiError(409, 'Invite scope is invalid: no tours assigned.');
-  }
-
-  const invite = mapInviteRow(inviteRow, inviteProjectIds, inviteTourIds);
-  if (invite.status === 'revoked') {
-    throw new ApiError(409, 'Invite has been revoked.');
-  }
-  if (invite.status === 'accepted') {
-    return {
-      invite,
-      membershipCreated: false,
-    };
-  }
-  if (invite.status === 'expired') {
-    await supabase.from('workspace_invites').update({ status: 'expired' }).eq('id', invite.id);
-    throw new ApiError(410, 'Invite has expired.');
-  }
-
-  if (normalizeInviteEmail(invite.email) !== userEmail) {
-    throw new ApiError(403, 'Invite email does not match your authenticated account.');
-  }
+  const { supabase, invite, scopeType, inviteProjectIds, inviteTourIds, userId } = input;
 
   const { data: existingMember, error: existingMemberError } = await supabase
     .from('workspace_members')
@@ -566,6 +511,84 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     }));
     const { error: grantInsertError } = await supabase.from('workspace_member_tours').upsert(grantRows, { onConflict: 'workspace_member_id,tour_id' });
     if (grantInsertError) throw new ApiError(500, grantInsertError.message);
+  }
+
+  return { membershipCreated };
+}
+
+export async function acceptWorkspaceInvitePrivileged(input: {
+  userId: string;
+  userEmail: string | null;
+  token: string;
+}) {
+  const userId = String(input.userId ?? '').trim();
+  const token = String(input.token ?? '').trim();
+  const userEmail = normalizeInviteEmail(input.userEmail);
+
+  if (!userId) throw new ApiError(401, 'Unauthorized');
+  if (!userEmail) throw new ApiError(400, 'Your account must have an email address to accept invites.');
+  if (!token) throw new ApiError(400, 'token is required.');
+
+  const supabase = getPrivilegedDataClient();
+  const tokenHash = hashInviteToken(token);
+
+  const { data: inviteRow, error: inviteError } = await supabase
+    .from('workspace_invites')
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (inviteError) {
+    if (isMissingRelationError(inviteError)) {
+      throw new ApiError(409, 'Workspace invites schema is not ready yet.');
+    }
+    throw new ApiError(500, inviteError.message);
+  }
+
+  if (!inviteRow) {
+    throw new ApiError(404, 'Invite token is invalid.');
+  }
+
+  const scopeType = normalizeScopeType(inviteRow.scope_type);
+  const inviteId = String(inviteRow.id);
+  const inviteProjectIdsByInvite = await getInviteProjectIds(supabase, [inviteId]);
+  const inviteTourIdsByInvite = await getInviteTourIds(supabase, [inviteId]);
+  const inviteProjectIds = inviteProjectIdsByInvite.get(inviteId) ?? [];
+  const inviteTourIds = inviteTourIdsByInvite.get(inviteId) ?? [];
+  if (scopeType === 'projects' && !inviteProjectIds.length) {
+    throw new ApiError(409, 'Invite scope is invalid: no projects assigned.');
+  }
+  if (scopeType === 'tours' && !inviteTourIds.length) {
+    throw new ApiError(409, 'Invite scope is invalid: no tours assigned.');
+  }
+
+  const invite = mapInviteRow(inviteRow, inviteProjectIds, inviteTourIds);
+  if (invite.status === 'revoked') {
+    throw new ApiError(409, 'Invite has been revoked.');
+  }
+  if (invite.status === 'expired') {
+    await supabase.from('workspace_invites').update({ status: 'expired' }).eq('id', invite.id);
+    throw new ApiError(410, 'Invite has expired.');
+  }
+
+  if (normalizeInviteEmail(invite.email) !== userEmail) {
+    throw new ApiError(403, 'Invite email does not match your authenticated account.');
+  }
+
+  const { membershipCreated } = await reconcileAcceptedWorkspaceInvite({
+    supabase,
+    invite,
+    scopeType,
+    inviteProjectIds,
+    inviteTourIds,
+    userId,
+  });
+
+  if (invite.status === 'accepted') {
+    return {
+      invite,
+      membershipCreated,
+    };
   }
 
   const { data: acceptedRow, error: acceptedError } = await supabase
