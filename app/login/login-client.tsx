@@ -210,9 +210,14 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
       }
 
       if (mode === "signup") {
+        // When an invite token is present, redirect straight to /invite/[token] after email
+        // confirmation so the invite flow is entered directly (not via /login with a query
+        // param). Without an invite token, fall back to /login so the user can sign in.
         const emailRedirectTo =
           typeof window !== "undefined"
-            ? `${window.location.origin}/login${inviteToken ? `?inviteToken=${encodeURIComponent(inviteToken)}` : ""}`
+            ? inviteToken
+              ? `${window.location.origin}/invite/${encodeURIComponent(inviteToken)}`
+              : `${window.location.origin}/login`
             : undefined;
 
         const { data, error } = await supabase.auth.signUp({
