@@ -178,11 +178,21 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean) as WorkspaceMemberSummary[];
 
-    if (!memberships.length) {
+    // If the user truly has no workspace_members rows at all, short-circuit with an empty context.
+    // If they DO have raw DB rows but all were filtered out (e.g. project-scoped membership
+    // where workspace_member_projects is empty due to RLS, a race, or missing grants), we must
+    // NOT discard workspace data — the user IS a collaborator and should NOT see the
+    // "Create your first workspace" onboarding panel.
+    if (!memberships.length && !membershipRows.length) {
       return finalizeAuthResponse(NextResponse.json({ ...baseContext, memberships }), authState);
     }
 
-    const workspaceIds = [...new Set(memberships.map((membership) => membership.workspaceId))];
+    // Derive workspace IDs from validated memberships when available, otherwise fall back
+    // to the raw membership rows so we still load workspace info for collaborators whose
+    // project/tour grants could not be resolved.
+    const workspaceIds = memberships.length > 0
+      ? [...new Set(memberships.map((membership) => membership.workspaceId))]
+      : [...new Set(membershipRows.map((row: any) => String(row.workspace_id)))];
 
     const workspacesResult = await supabase
       .from('workspaces')

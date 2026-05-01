@@ -559,6 +559,11 @@ export function DashboardClient() {
   if (!activeWorkspaceId) {
     const hasWorkspaceAccess = workspaces.length > 0;
     const hasPendingInvite = inviteToken.length > 0;
+    // isFirstRun gates the self-serve workspace creation panel.  It must be false whenever the
+    // user is already a collaborator — i.e. has accepted an invite and has workspace_members
+    // rows.  The context API guarantees memberships and workspaces are populated for any
+    // confirmed collaborator, so checking BOTH covers the case where the API returned partial
+    // data (e.g. project-scoped memberships whose grant rows could not be read).
     const isFirstRun = !hasPendingInvite && memberships.length === 0 && workspaces.length === 0;
 
     return (
