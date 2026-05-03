@@ -8,7 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
@@ -1054,6 +1054,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
+  async function handleResendInvite(invite: WorkspaceInviteSummary) {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
+
+    try {
+      await resendWorkspaceInvite({ workspaceId: activeWorkspaceId, inviteId: invite.id });
+      setInviteMessage('Invite resent successfully.');
+      window.dispatchEvent(new Event('tourbook:invites-updated'));
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to resend invite.');
+    }
+  }
+
   function handleStartEditMember(member: WorkspaceMemberDirectoryEntry) {
     if (member.role === 'owner') return;
     setEditingMember(member);
@@ -1802,6 +1814,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             contextProjectId={contextProjectId || activeProjectId}
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
+            onResendInvite={(invite) => void handleResendInvite(invite)}
             onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
           />
         ) : null}
@@ -2217,6 +2230,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           contextProjectId={contextProjectId || activeProjectId}
           onCreateInvite={() => void handleCreateInvite()}
           onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
+            onResendInvite={(invite) => void handleResendInvite(invite)}
           onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
         />
       ) : null}
@@ -2924,6 +2938,7 @@ function InviteManagementSection({
   onScopeTourIdsChange,
   onCreateInvite,
   onRevokeInvite,
+  onResendInvite,
   onCopyValue,
   contextProjectId,
 }: {
@@ -2950,6 +2965,7 @@ function InviteManagementSection({
   onScopeTourIdsChange: (value: string[]) => void;
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
+  onResendInvite: (invite: WorkspaceInviteSummary) => void;
   onCopyValue: (value: string, successMessage: string) => void;
   contextProjectId?: string | null;
 }) {
@@ -3091,7 +3107,12 @@ function InviteManagementSection({
                         subtitle={`${scope.label} · expires ${formatInviteDate(invite.expiresAt)}`}
                         detail={scope.detail}
                         contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
-                        action={<button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>Revoke</button>}
+                        action={
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => onResendInvite(invite)} className={secondaryButtonClassName()}>Resend</button>
+                            <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>Revoke</button>
+                          </div>
+                        }
                       />
                     );
                   })

@@ -371,6 +371,67 @@ export async function revokeWorkspaceInviteScoped(
   return mapInviteRow(data, byInvite.get(inviteId) ?? [], tourByInvite.get(inviteId) ?? []);
 }
 
+export async function resendWorkspaceInviteScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  input: { workspaceId: string; inviteId: string },
+): Promise<{ invite: WorkspaceInviteSummary; token: string }> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const workspaceId = String(input.workspaceId ?? '').trim();
+  const inviteId = String(input.inviteId ?? '').trim();
+
+  if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
+  if (!inviteId) throw new ApiError(400, 'inviteId is required.');
+
+  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+
+  const { data: existing, error: existingError } = await supabase
+    .from('workspace_invites')
+    .select('id, workspace_id, status')
+    .eq('id', inviteId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (existingError) {
+    if (isMissingRelationError(existingError)) {
+      throw new ApiError(409, 'Workspace invites schema is not ready yet.');
+    }
+    throw new ApiError(500, existingError.message);
+  }
+
+  if (!existing) {
+    throw new ApiError(404, 'Invite not found.');
+  }
+
+  const existingStatus = String(existing.status);
+  if (existingStatus !== 'pending') {
+    throw new ApiError(409, 'Only pending invites can be resent.');
+  }
+
+  // Regenerate token and extend expiry
+  const token = generateInviteToken();
+  const tokenHash = hashInviteToken(token);
+  const expiresAt = buildInviteExpiry();
+
+  const { data, error } = await supabase
+    .from('workspace_invites')
+    .update({ token_hash: tokenHash, expires_at: expiresAt, updated_at: new Date().toISOString() })
+    .eq('id', inviteId)
+    .eq('workspace_id', workspaceId)
+    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .single();
+
+  if (error) {
+    throw new ApiError(500, error.message);
+  }
+
+  const byInvite = await getInviteProjectIds(supabase, [inviteId]);
+  const tourByInvite = await getInviteTourIds(supabase, [inviteId]);
+  const invite = mapInviteRow(data, byInvite.get(inviteId) ?? [], tourByInvite.get(inviteId) ?? []);
+
+  return { invite, token };
+}
+
 export async function getProjectNamesForInviteScope(workspaceId: string, projectIds: string[]) {
   if (!projectIds.length) return [];
   const supabase = getPrivilegedDataClient();

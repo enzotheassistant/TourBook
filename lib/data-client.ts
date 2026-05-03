@@ -301,6 +301,13 @@ export async function createWorkspaceInvite(input: { workspaceId: string; name?:
   });
 }
 
+export async function resendWorkspaceInvite(input: { workspaceId: string; inviteId: string }) {
+  return request<{ invite: WorkspaceInviteSummary; acceptToken: string; emailDelivery?: { attempted?: boolean } }>(
+    `/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites/${encodeURIComponent(input.inviteId)}/resend`,
+    { method: 'POST' },
+  );
+}
+
 export async function revokeWorkspaceInvite(input: { workspaceId: string; inviteId: string }) {
   const payload = await request<{ invite: WorkspaceInviteSummary }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites/${encodeURIComponent(input.inviteId)}`, {
     method: 'DELETE',
