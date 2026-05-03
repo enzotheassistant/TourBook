@@ -56,10 +56,12 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
 
   useEffect(() => {
     if (!trimmedToken) {
+      console.log('[invite] No token found — redirecting to home.');
       window.location.replace('/');
       return;
     }
 
+    console.log('[invite] Token detected, starting acceptance flow.', { tokenLength: trimmedToken.length });
     writePendingInviteToken(trimmedToken);
 
     let cancelled = false;
@@ -67,6 +69,7 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
     void (async () => {
       try {
         const supabase = getBrowserSupabaseClient();
+        console.log('[invite] Calling acceptWorkspaceInvite…');
         const accepted = await acceptWorkspaceInvite(trimmedToken);
         const pendingScope: PendingInviteScope = {
           workspaceId: accepted.invite.workspaceId,
@@ -76,6 +79,12 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
           acceptedAt: Date.now(),
         };
 
+        console.log('[invite] Invite accepted.', {
+          workspaceId: accepted.invite.workspaceId,
+          inviteId: accepted.invite.id,
+          role: accepted.invite.role,
+          scopeType: accepted.invite.scopeType,
+        });
         writePendingInviteScope(pendingScope);
         setMessage('Invite accepted. Loading your workspace access…');
         await trackInviteEvent({ event: 'invite.accepted', workspaceId: accepted.invite.workspaceId, inviteId: accepted.invite.id, role: accepted.invite.role });
@@ -93,7 +102,15 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
           const context = await fetchBootstrapContext(data.session ?? null);
           const hasInviteAccess = contextHasInviteAccess(context, pendingScope);
 
+          console.log('[invite] Context poll.', {
+            attempt: delays.indexOf(delay) + 1,
+            delayMs: delay,
+            hasInviteAccess,
+            workspacesInContext: context.workspaces?.length ?? 0,
+          });
+
           if (hasInviteAccess) {
+            console.log('[invite] Workspace access confirmed — redirecting.');
             clearPendingInviteToken();
             window.location.replace('/');
             return;
@@ -103,10 +120,12 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
         throw new Error('Invite accepted, but TourBook is still waiting for that workspace to appear in your session.');
       } catch (cause) {
         const reason = cause instanceof Error ? cause.message : 'Unable to continue invite access.';
+        console.error('[invite] Flow failed.', { reason, cause });
         if (!cancelled) {
           // If the invite was sent to a different email than the logged-in account,
           // clear the cached token so the user isn't stuck in a redirect loop.
           if (reason.includes('Invite email does not match your authenticated account')) {
+            console.log('[invite] Email mismatch — clearing pending invite token.');
             clearPendingInviteToken();
           }
           setError(reason);
