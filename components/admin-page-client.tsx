@@ -2969,8 +2969,15 @@ function InviteManagementSection({
   onCopyValue: (value: string, successMessage: string) => void;
   contextProjectId?: string | null;
 }) {
-  const recentInvites = invites.slice(0, 12);
-  const inviteGroups = splitInvitesByStatus(recentInvites);
+  // Split by status first so pending invites are never truncated by the history cap.
+  // Slicing before splitting caused old-but-still-active pending invites to vanish from the
+  // list (falling past position 12) while still blocking duplicate creation server-side.
+  const allInviteGroups = splitInvitesByStatus(invites);
+  const inviteGroups = {
+    pending: allInviteGroups.pending,
+    history: allInviteGroups.history.slice(0, 12),
+  };
+  const recentInvites = [...inviteGroups.pending, ...inviteGroups.history];
   const projectNameById = useMemo(() => new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id])), [availableProjects]);
   const toursById = useMemo(() => new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [availableTours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
