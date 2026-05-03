@@ -174,7 +174,23 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
   const inviteIds = rows.map((row: any) => String(row.id));
   const byInvite = await getInviteProjectIds(supabase, inviteIds);
   const tourByInvite = await getInviteTourIds(supabase, inviteIds);
-  return rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? [], tourByInvite.get(String(row.id)) ?? []));
+  const mapped = rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? [], tourByInvite.get(String(row.id)) ?? []));
+
+  // Write-back expired status for any invites that are logically expired but still 'pending' in the DB.
+  // This keeps the DB consistent so duplicate-creation checks (which filter by status) remain accurate.
+  const expiredIds = mapped
+    .filter((invite) => invite.status === 'expired')
+    .map((invite) => invite.id);
+  if (expiredIds.length) {
+    // Best-effort: ignore errors so a failed write-back doesn't break the list endpoint.
+    await supabase
+      .from('workspace_invites')
+      .update({ status: 'expired' })
+      .in('id', expiredIds)
+      .eq('status', 'pending');
+  }
+
+  return mapped;
 }
 
 export async function createWorkspaceInviteScoped(
@@ -230,7 +246,8 @@ export async function createWorkspaceInviteScoped(
     .eq('email', email)
     .eq('role', role)
     .eq('scope_type', scopeType)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString());
 
   if (duplicateError) {
     if (isMissingRelationError(duplicateError)) {
