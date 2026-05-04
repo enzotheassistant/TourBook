@@ -1248,12 +1248,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     });
   }
 
+  function buildReturnTarget(targetUrl: string, fallbackTab: 'past' | 'upcoming', messageText: string) {
+    if (targetUrl.startsWith('/shows/') || targetUrl.startsWith('/admin/dates/') || targetUrl.startsWith('/admin/drafts')) {
+      return `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent(messageText)}`;
+    }
+    return `/admin/dates?tab=${fallbackTab}&message=${encodeURIComponent(messageText)}`;
+  }
+
   async function saveShow(requestedStatus: ShowStatus) {
     if (!isValidStoredDate(form.date)) {
       setMessage(
         requestedStatus === 'draft'
-          ? 'Enter a valid date before saving a draft. Use the date picker or YYYY-MM-DD.'
-          : 'Enter a valid date before publishing. Use the date picker or YYYY-MM-DD.',
+          ? 'Enter a valid date before saving as a draft'
+          : 'Enter a valid date before publishing',
       );
       return;
     }
@@ -1281,7 +1288,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       if (requestedStatus === 'draft') {
         if (isEditing) {
-          setMessage('Draft saved.');
+          const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
+          router.push(buildReturnTarget(returnToUrl, nextTab, 'Draft saved.'));
         } else {
           resetForm('Draft saved. Form cleared for the next tour day.');
         }
@@ -1290,12 +1298,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       if (isEditing) {
         if (form.status === 'draft') {
-          router.push(`/admin/dates/${encodeURIComponent(show.id)}?tab=${isPastShow(show.date) ? 'past' : 'upcoming'}&message=${encodeURIComponent('Draft published.')}`);
+          const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
+          const nextMessage = returnToUrl === '/admin/drafts' ? 'Draft published.' : 'Show updated.';
+          router.push(buildReturnTarget(returnToUrl, nextTab, nextMessage));
           return;
         }
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-        const target = (returnToUrl.startsWith('/shows/') || returnToUrl.startsWith('/admin/dates/')) ? `${returnToUrl}${returnToUrl.includes('?') ? '&' : '?'}message=${encodeURIComponent('Show updated.')}` : `/admin/dates?tab=${nextTab}&message=${encodeURIComponent('Show updated.')}`;
-        router.push(target);
+        router.push(buildReturnTarget(returnToUrl, nextTab, 'Show updated.'));
         return;
       }
 
@@ -1378,6 +1387,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     if (mode === 'dates') {
       router.push(`/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=dates&returnTab=${datesTab}`);
+      return;
+    }
+
+    if (mode === 'drafts') {
+      router.push(`/admin?duplicate=${encodeURIComponent(show.id)}&returnTo=${encodeURIComponent('/admin/drafts')}`);
       return;
     }
 
@@ -2194,6 +2208,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       {isTeamMode && canManageInvitesInWorkspace ? (
         <TeamMembersSection
+          key={contextProjectId || activeProjectId || 'workspace-members'}
           members={members}
           loading={membersLoading}
           projects={workspaceProjects}
@@ -3582,7 +3597,7 @@ function ShowListSection({
   function openMenuForShow(show: Show, trigger: HTMLButtonElement) {
     const rect = trigger.getBoundingClientRect();
     const menuWidth = 220;
-    const menuHeight = mode === 'drafts' ? 116 : show.status === 'draft' ? 168 : 168;
+    const menuHeight = mode === 'drafts' ? 168 : show.status === 'draft' ? 168 : 168;
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.right;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : rect.bottom;
     const left = Math.max(16, Math.min(rect.left, viewportWidth - menuWidth - 16));
@@ -3600,6 +3615,7 @@ function ShowListSection({
       return (
         <>
           <MenuButton label="Publish" onClick={() => runMenuAction(() => onPublish?.(show))} />
+          <MenuButton label="Duplicate draft" onClick={() => runMenuAction(() => onDuplicate(show))} />
           <MenuButton label="Delete" destructive onClick={() => runMenuAction(() => onDelete(show.id))} />
         </>
       );
@@ -3704,12 +3720,6 @@ function ShowListSection({
       </div>
 
       <div className="mt-3 space-y-3">
-        {loading && shows.length > 0 ? (
-          <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
-            Refreshing dates…
-          </div>
-        ) : null}
         {shows.length === 0 ? (
           <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">
             {loading ? 'Loading dates…' : totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
