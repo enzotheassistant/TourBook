@@ -3450,6 +3450,30 @@ function TeamMembersSection({
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
 }) {
+  const [openMemberMenuId, setOpenMemberMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: Event) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest('[data-team-member-menu-root="true"]')) return;
+      setOpenMemberMenuId(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpenMemberMenuId(null);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   function renderMemberRoleControl(member: WorkspaceMemberDirectoryEntry) {
     if (member.role === 'owner') return null;
     if (member.role === 'admin') {
@@ -3461,14 +3485,14 @@ function TeamMembersSection({
     }
 
     return (
-      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[11rem] sm:max-w-[12rem] sm:flex-none">
+      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[10rem] sm:max-w-[11rem] sm:flex-none">
         <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">Role</span>
         <select
           value={member.role}
           onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
           disabled={quickRoleMemberId === member.id}
           aria-label={`Change role for ${member.name || member.email || member.userId}`}
-          className="h-10 w-full rounded-full border border-white/10 bg-black/20 px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-9 w-full rounded-full border border-white/10 bg-black/20 px-3 pr-8 text-sm text-zinc-100 outline-none transition focus:border-sky-400/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10"
         >
           <option value="viewer">Viewer</option>
           <option value="editor">Editor</option>
@@ -3534,10 +3558,45 @@ function TeamMembersSection({
                   contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                      <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
                         {renderMemberRoleControl(member)}
-                        {member.role !== 'admin' ? <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>Edit scope</button> : null}
-                        <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button>
+                        <div data-team-member-menu-root="true" className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setOpenMemberMenuId((current) => (current === member.id ? null : member.id))}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] sm:h-10 sm:w-10"
+                            aria-label={`More actions for ${member.name || member.email || member.userId}`}
+                            aria-expanded={openMemberMenuId === member.id}
+                          >
+                            <span aria-hidden="true" className="text-lg leading-none">…</span>
+                          </button>
+                          {openMemberMenuId === member.id ? (
+                            <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60">
+                              {member.role !== 'admin' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenMemberMenuId(null);
+                                    onEditMember(member);
+                                  }}
+                                  className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
+                                >
+                                  Edit scope
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMemberMenuId(null);
+                                  onRemoveMember(member);
+                                }}
+                                className="block w-full px-4 py-3 text-left text-sm text-red-200 transition hover:bg-white/[0.06]"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ) : member.source === 'accepted-invite' ? (
