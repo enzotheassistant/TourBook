@@ -3450,6 +3450,32 @@ function TeamMembersSection({
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
 }) {
+  function renderMemberRoleControl(member: WorkspaceMemberDirectoryEntry) {
+    if (member.role === 'owner') return null;
+    if (member.role === 'admin') {
+      return (
+        <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>
+          Manage admin
+        </button>
+      );
+    }
+
+    return (
+      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[11rem] sm:max-w-[12rem] sm:flex-none">
+        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">Role</span>
+        <select
+          value={member.role}
+          onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
+          disabled={quickRoleMemberId === member.id}
+          aria-label={`Change role for ${member.name || member.email || member.userId}`}
+          className="h-10 w-full rounded-full border border-white/10 bg-black/20 px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+        </select>
+      </label>
+    );
+  }
   const projectNameById = useMemo(() => new Map(projects.map((project) => [project.id, project.name || project.slug || project.id])), [projects]);
   const toursById = useMemo(() => new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [tours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
@@ -3507,29 +3533,10 @@ function TeamMembersSection({
                   detail={scope.detail}
                   contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
                   action={member.source === 'member' && member.role !== 'owner' ? (
-                    <div className="flex w-full flex-col gap-2 sm:w-auto">
-                      {member.role === 'viewer' || member.role === 'editor' ? (
-                        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={() => onQuickRoleChange(member, 'viewer')}
-                            disabled={quickRoleMemberId === member.id || member.role === 'viewer'}
-                            className={member.role === 'viewer' ? primaryButtonClassName() : secondaryButtonClassName()}
-                          >
-                            Viewer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onQuickRoleChange(member, 'editor')}
-                            disabled={quickRoleMemberId === member.id || member.role === 'editor'}
-                            className={member.role === 'editor' ? primaryButtonClassName() : secondaryButtonClassName()}
-                          >
-                            Editor
-                          </button>
-                        </div>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>{member.role === 'admin' ? 'Manage admin' : 'Edit scope'}</button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+                        {renderMemberRoleControl(member)}
+                        {member.role !== 'admin' ? <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>Edit scope</button> : null}
                         <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button>
                       </div>
                     </div>
