@@ -101,30 +101,83 @@ function isAcceptedInviteFallbackFresh(updatedAt: string | null | undefined, now
   return now - parsed <= ACCEPTED_INVITE_FALLBACK_MAX_AGE_MS;
 }
 
+function normalizeDirectoryEmail(value: string | null | undefined) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function getInviteIdentityKeys(invite: WorkspaceInviteSummary) {
+  const keys: string[] = [];
+  const acceptedByUserId = String(invite.acceptedByUserId ?? '').trim();
+  const email = normalizeDirectoryEmail(invite.email);
+  if (acceptedByUserId) keys.push(`user:${acceptedByUserId}`);
+  if (email) keys.push(`email:${email}`);
+  return keys;
+}
+
+function getMemberIdentityKeys(member: WorkspaceMemberDirectoryEntry) {
+  const keys: string[] = [];
+  const userId = String(member.userId ?? '').trim();
+  const email = normalizeDirectoryEmail(member.email);
+  if (userId) keys.push(`user:${userId}`);
+  if (email) keys.push(`email:${email}`);
+  return keys;
+}
+
+function pickLatestInvite(current: WorkspaceInviteSummary | null | undefined, invite: WorkspaceInviteSummary) {
+  if (!current) return invite;
+  const currentTime = Date.parse(current.updatedAt || current.createdAt || '');
+  const inviteTime = Date.parse(invite.updatedAt || invite.createdAt || '');
+  if (!Number.isFinite(currentTime)) return invite;
+  if (!Number.isFinite(inviteTime)) return current;
+  return inviteTime >= currentTime ? invite : current;
+}
+
 export function buildAcceptedTeamDirectory(
   members: WorkspaceMemberDirectoryEntry[],
   invites: WorkspaceInviteSummary[],
 ): AcceptedTeamDirectoryEntry[] {
-  const entries = members.map((member) => ({
-    ...member,
-    source: 'member' as const,
-    memberId: member.id,
-    inviteId: null,
-  }));
+  const latestInviteByIdentity = new Map<string, WorkspaceInviteSummary>();
+  const latestAcceptedInviteByIdentity = new Map<string, WorkspaceInviteSummary>();
 
-  const memberUserIds = new Set(members.map((member) => member.userId).filter(Boolean));
-  const memberEmails = new Set(members.map((member) => String(member.email ?? '').trim().toLowerCase()).filter(Boolean));
+  invites.forEach((invite) => {
+    const identityKeys = getInviteIdentityKeys(invite);
+    if (!identityKeys.length) return;
+
+    identityKeys.forEach((key) => {
+      latestInviteByIdentity.set(key, pickLatestInvite(latestInviteByIdentity.get(key), invite));
+      if (invite.status === 'accepted') {
+        latestAcceptedInviteByIdentity.set(key, pickLatestInvite(latestAcceptedInviteByIdentity.get(key), invite));
+      }
+    });
+  });
+
+  const entries = members.map((member) => {
+    const matchingAcceptedInvite = getMemberIdentityKeys(member).reduce<WorkspaceInviteSummary | null>((latest, key) => {
+      const invite = latestAcceptedInviteByIdentity.get(key);
+      return invite ? pickLatestInvite(latest, invite) : latest;
+    }, null);
+
+    const needsScopeHydration = member.scopeType !== 'workspace'
+      && ((member.scopeType === 'projects' && member.projectIds.length === 0)
+        || (member.scopeType === 'tours' && (member.projectIds.length === 0 || member.tourIds.length === 0)));
+
+    return {
+      ...member,
+      projectIds: needsScopeHydration && matchingAcceptedInvite ? matchingAcceptedInvite.projectIds : member.projectIds,
+      tourIds: needsScopeHydration && matchingAcceptedInvite && member.scopeType === 'tours' ? matchingAcceptedInvite.tourIds : member.tourIds,
+      source: 'member' as const,
+      memberId: member.id,
+      inviteId: null,
+    };
+  });
+
+  const memberIdentityKeys = new Set(entries.flatMap((member) => getMemberIdentityKeys(member)));
 
   const acceptedInviteFallbacks = invites
     .filter((invite) => invite.status === 'accepted')
     .filter((invite) => isAcceptedInviteFallbackFresh(invite.updatedAt))
-    .filter((invite) => {
-      const acceptedByUserId = String(invite.acceptedByUserId ?? '').trim();
-      const inviteEmail = String(invite.email ?? '').trim().toLowerCase();
-      if (acceptedByUserId && memberUserIds.has(acceptedByUserId)) return false;
-      if (inviteEmail && memberEmails.has(inviteEmail)) return false;
-      return true;
-    })
+    .filter((invite) => getInviteIdentityKeys(invite).some((key) => latestInviteByIdentity.get(key)?.id === invite.id))
+    .filter((invite) => getInviteIdentityKeys(invite).every((key) => !memberIdentityKeys.has(key)))
     .map((invite) => ({
       id: `accepted-invite:${invite.id}`,
       workspaceId: invite.workspaceId,
