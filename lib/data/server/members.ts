@@ -11,7 +11,6 @@ function normalizeScopeType(value: unknown): WorkspaceScopeType {
   return 'workspace';
 }
 
-
 async function getMemberProjectIds(supabase: SupabaseClient, memberIds: string[]) {
   if (!memberIds.length) return new Map<string, string[]>();
   const { data, error } = await supabase
@@ -167,9 +166,10 @@ async function readWorkspaceMemberById(supabase: SupabaseClient, workspaceId: st
 }
 
 export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
-  const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const authSupabase = requireScopedDataClient(supabaseInput);
+  await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
 
+  const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
     .from('workspace_members')
     .select('id, workspace_id, user_id, role, scope_type, created_at')
@@ -216,13 +216,14 @@ export async function updateWorkspaceMemberScoped(
   userId: string,
   input: { workspaceId: string; memberId: string; role?: unknown; scopeType?: unknown; projectIds?: unknown; tourIds?: unknown },
 ) {
-  const supabase = requireScopedDataClient(supabaseInput);
+  const authSupabase = requireScopedDataClient(supabaseInput);
+  const supabase = getPrivilegedDataClient();
   const workspaceId = String(input.workspaceId ?? '').trim();
   const memberId = String(input.memberId ?? '').trim();
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
   const targetRole = String(existing.role) as WorkspaceRole;
   const targetUserId = String(existing.user_id);
@@ -329,13 +330,14 @@ export async function removeWorkspaceMemberScoped(
   userId: string,
   input: { workspaceId: string; memberId: string },
 ) {
-  const supabase = requireScopedDataClient(supabaseInput);
+  const authSupabase = requireScopedDataClient(supabaseInput);
+  const supabase = getPrivilegedDataClient();
   const workspaceId = String(input.workspaceId ?? '').trim();
   const memberId = String(input.memberId ?? '').trim();
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
 
   const targetRole = String(existing.role) as WorkspaceRole;

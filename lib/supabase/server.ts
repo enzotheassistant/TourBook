@@ -63,6 +63,14 @@ export function createProxySupabaseClient(request: NextRequest, response: NextRe
 }
 
 export function createServiceRoleSupabaseClient() {
+  const testFactory = (globalThis as typeof globalThis & {
+    __TEST_CREATE_SERVICE_ROLE_SUPABASE_CLIENT__?: null | (() => ReturnType<typeof createClient>);
+  }).__TEST_CREATE_SERVICE_ROLE_SUPABASE_CLIENT__;
+
+  if (typeof testFactory === 'function') {
+    return testFactory();
+  }
+
   const { url, serviceRoleKey } = getServerSupabaseConfig();
 
   if (!serviceRoleKey) {
