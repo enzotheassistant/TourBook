@@ -29,6 +29,11 @@ export function normalizeScopeType(value: unknown): WorkspaceScopeType {
   throw new ApiError(400, 'scopeType must be workspace, projects, or tours.');
 }
 
+function resolveRolePrecedence(currentRole: WorkspaceInviteRole | 'owner', inviteRole: WorkspaceInviteRole) {
+  const precedence = { viewer: 0, editor: 1, admin: 2, owner: 3 } as const;
+  return precedence[inviteRole] > precedence[currentRole] ? inviteRole : currentRole;
+}
+
 function mapInviteRow(row: any, projectIds: string[] = [], tourIds: string[] = []): WorkspaceInviteSummary {
   const now = Date.now();
   const expiresAtMs = new Date(String(row.expires_at)).getTime();
@@ -520,19 +525,21 @@ async function reconcileAcceptedWorkspaceInvite(input: {
 
   const { data: currentMember, error: currentMemberError } = await supabase
     .from('workspace_members')
-    .select('scope_type')
+    .select('role, scope_type')
     .eq('id', workspaceMemberId)
     .single();
 
   if (currentMemberError) throw new ApiError(500, currentMemberError.message);
 
+  const currentRole = String(currentMember.role) as WorkspaceInviteRole | 'owner';
   const currentScope = normalizeScopeType(currentMember.scope_type);
+  const nextRole = resolveRolePrecedence(currentRole, invite.role);
   const nextScope = resolveScopePrecedence(currentScope, scopeType);
 
-  if (nextScope !== currentScope) {
+  if (nextRole !== currentRole || nextScope !== currentScope) {
     const { error: widenError } = await supabase
       .from('workspace_members')
-      .update({ scope_type: nextScope })
+      .update({ role: nextRole, scope_type: nextScope })
       .eq('id', workspaceMemberId);
     if (widenError) throw new ApiError(500, widenError.message);
   }

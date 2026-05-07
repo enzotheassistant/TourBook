@@ -76,6 +76,64 @@ export function splitInvitesByStatus(invites: WorkspaceInviteSummary[]) {
   };
 }
 
+export type AcceptedTeamDirectoryEntry = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: WorkspaceMemberDirectoryEntry['role'];
+  scopeType: WorkspaceScopeType;
+  projectIds: string[];
+  tourIds: string[];
+  createdAt: string | null;
+  source: 'member' | 'accepted-invite';
+  memberId: string | null;
+  inviteId: string | null;
+};
+
+export function buildAcceptedTeamDirectory(
+  members: WorkspaceMemberDirectoryEntry[],
+  invites: WorkspaceInviteSummary[],
+): AcceptedTeamDirectoryEntry[] {
+  const entries = members.map((member) => ({
+    ...member,
+    source: 'member' as const,
+    memberId: member.id,
+    inviteId: null,
+  }));
+
+  const memberUserIds = new Set(members.map((member) => member.userId).filter(Boolean));
+  const memberEmails = new Set(members.map((member) => String(member.email ?? '').trim().toLowerCase()).filter(Boolean));
+
+  const acceptedInviteFallbacks = invites
+    .filter((invite) => invite.status === 'accepted')
+    .filter((invite) => {
+      const acceptedByUserId = String(invite.acceptedByUserId ?? '').trim();
+      const inviteEmail = String(invite.email ?? '').trim().toLowerCase();
+      if (acceptedByUserId && memberUserIds.has(acceptedByUserId)) return false;
+      if (inviteEmail && memberEmails.has(inviteEmail)) return false;
+      return true;
+    })
+    .map((invite) => ({
+      id: `accepted-invite:${invite.id}`,
+      workspaceId: invite.workspaceId,
+      userId: String(invite.acceptedByUserId ?? invite.email),
+      name: invite.name,
+      email: invite.email,
+      role: invite.role,
+      scopeType: invite.scopeType,
+      projectIds: invite.projectIds,
+      tourIds: invite.tourIds,
+      createdAt: invite.updatedAt,
+      source: 'accepted-invite' as const,
+      memberId: null,
+      inviteId: invite.id,
+    }));
+
+  return [...entries, ...acceptedInviteFallbacks];
+}
+
 export function getContextLabel(scopeType: WorkspaceScopeType, matchesContext: boolean, contextProjectName?: string | null) {
   if (!contextProjectName) return null;
   if (matchesContext) {

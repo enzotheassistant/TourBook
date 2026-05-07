@@ -21,7 +21,7 @@ import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
-import { describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
+import { buildAcceptedTeamDirectory, describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 
 function slugify(value: string) {
@@ -511,6 +511,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [editingMemberProjectIds, setEditingMemberProjectIds] = useState<string[]>([]);
   const [editingMemberTourIds, setEditingMemberTourIds] = useState<string[]>([]);
   const [savingMemberEdit, setSavingMemberEdit] = useState(false);
+  const [quickRoleMemberId, setQuickRoleMemberId] = useState<string | null>(null);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -1116,6 +1117,33 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to update member.');
       setSavingMemberEdit(false);
+    }
+  }
+
+  async function handleQuickRoleChange(member: WorkspaceMemberDirectoryEntry, role: 'editor' | 'viewer') {
+    if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
+    if (member.role === 'owner' || member.role === 'admin' || member.role === role) return;
+
+    setQuickRoleMemberId(member.id);
+    try {
+      const updated = await updateWorkspaceMember({
+        workspaceId: activeWorkspaceId,
+        memberId: member.id,
+        role,
+        scopeType: member.scopeType,
+        projectIds: member.scopeType === 'projects' || member.scopeType === 'tours' ? member.projectIds : [],
+        tourIds: member.scopeType === 'tours' ? member.tourIds : [],
+      });
+      setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (editingMember?.id === member.id) {
+        setEditingMember(updated);
+        setEditingMemberRole(updated.role === 'owner' ? 'viewer' : updated.role);
+      }
+      setInviteMessage(`Member role updated to ${updated.role}.`);
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to update member role.');
+    } finally {
+      setQuickRoleMemberId(null);
     }
   }
 
@@ -2210,9 +2238,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         <TeamMembersSection
           key={contextProjectId || activeProjectId || 'workspace-members'}
           members={members}
+          invites={invites}
           loading={membersLoading}
           projects={workspaceProjects}
           tours={workspaceTours}
+          quickRoleMemberId={quickRoleMemberId}
+          onQuickRoleChange={(member, role) => void handleQuickRoleChange(member, role)}
           onEditMember={handleStartEditMember}
           onRemoveMember={(member) => void handleRemoveMember(member)}
           contextProjectId={contextProjectId || activeProjectId}
@@ -3398,17 +3429,23 @@ function EditMemberDialog({
 
 function TeamMembersSection({
   members,
+  invites,
   loading,
   projects,
   tours,
+  quickRoleMemberId,
+  onQuickRoleChange,
   onEditMember,
   onRemoveMember,
   contextProjectId,
 }: {
   members: WorkspaceMemberDirectoryEntry[];
+  invites: WorkspaceInviteSummary[];
   loading: boolean;
   projects: ProjectSummary[];
   tours: TourSummary[];
+  quickRoleMemberId: string | null;
+  onQuickRoleChange: (member: WorkspaceMemberDirectoryEntry, role: 'editor' | 'viewer') => void;
   onEditMember: (member: WorkspaceMemberDirectoryEntry) => void;
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
@@ -3419,7 +3456,8 @@ function TeamMembersSection({
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
-  const sortedMembers = [...members].sort((a, b) => {
+  const acceptedEntries = useMemo(() => buildAcceptedTeamDirectory(members, invites), [members, invites]);
+  const sortedMembers = [...acceptedEntries].sort((a, b) => {
     const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
     const bInContext = matchesProjectContext(b, contextProjectId, toursById) ? 1 : 0;
     if (aInContext !== bInContext) return bInContext - aInContext;
@@ -3449,7 +3487,7 @@ function TeamMembersSection({
 
         {loading ? (
           <p className="text-sm text-zinc-400">Loading members…</p>
-        ) : members.length === 0 ? (
+        ) : acceptedEntries.length === 0 ? (
           <p className="text-sm text-zinc-400">No team members found yet.</p>
         ) : visibleMembers.length === 0 ? (
           <p className="text-sm text-zinc-400">No accepted members match this view yet.</p>
@@ -3467,11 +3505,35 @@ function TeamMembersSection({
                   subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
                   detail={scope.detail}
                   contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
-                  action={member.role !== 'owner' ? (
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>Edit</button>
-                      <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button>
+                  action={member.source === 'member' && member.role !== 'owner' ? (
+                    <div className="flex w-full flex-col gap-2 sm:w-auto">
+                      {member.role === 'viewer' || member.role === 'editor' ? (
+                        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={() => onQuickRoleChange(member, 'viewer')}
+                            disabled={quickRoleMemberId === member.id || member.role === 'viewer'}
+                            className={member.role === 'viewer' ? primaryButtonClassName() : secondaryButtonClassName()}
+                          >
+                            Viewer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onQuickRoleChange(member, 'editor')}
+                            disabled={quickRoleMemberId === member.id || member.role === 'editor'}
+                            className={member.role === 'editor' ? primaryButtonClassName() : secondaryButtonClassName()}
+                          >
+                            Editor
+                          </button>
+                        </div>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>{member.role === 'admin' ? 'Manage admin' : 'Edit scope'}</button>
+                        <button type="button" onClick={() => onRemoveMember(member)} className={dangerButtonClassName()}>Remove</button>
+                      </div>
                     </div>
+                  ) : member.source === 'accepted-invite' ? (
+                    <p className="text-xs text-amber-200/80">Accepted recently. Membership sync will refresh here automatically.</p>
                   ) : null}
                 />
               );
