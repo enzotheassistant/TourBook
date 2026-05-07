@@ -291,9 +291,9 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         onConfirm={() => closeConfirmation(true)}
         onCancel={() => closeConfirmation(false)}
       />
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">
-        <div className="grid min-w-0 grid-cols-[40px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
-          <Link href={backHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)] pt-[max(calc(env(safe-area-inset-top)+0.75rem),1rem)] sm:px-6 sm:pt-6">
+        <div className="grid min-w-0 grid-cols-[44px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
+          <Link href={backHref} aria-label="Back to itinerary" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
           <div className="min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
