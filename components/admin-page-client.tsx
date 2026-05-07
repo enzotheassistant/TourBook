@@ -2942,7 +2942,7 @@ function TeamDirectoryCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-medium text-zinc-100">{title}</p>
@@ -2954,7 +2954,7 @@ function TeamDirectoryCard({
           <p className="mt-1 text-sm text-zinc-300">{subtitle}</p>
           {detail ? <p className="mt-1 text-xs text-zinc-500">{detail}</p> : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        {action ? <div className="w-full sm:w-auto sm:shrink-0">{action}</div> : null}
       </div>
     </div>
   );
@@ -3454,6 +3454,7 @@ function TeamMembersSection({
   const toursById = useMemo(() => new Map(tours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [tours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
+
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
   const acceptedEntries = useMemo(() => buildAcceptedTeamDirectory(members, invites), [members, invites]);

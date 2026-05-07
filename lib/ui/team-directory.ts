@@ -92,6 +92,15 @@ export type AcceptedTeamDirectoryEntry = {
   inviteId: string | null;
 };
 
+const ACCEPTED_INVITE_FALLBACK_MAX_AGE_MS = 15 * 60 * 1000;
+
+function isAcceptedInviteFallbackFresh(updatedAt: string | null | undefined, now = Date.now()) {
+  if (!updatedAt) return false;
+  const parsed = Date.parse(updatedAt);
+  if (!Number.isFinite(parsed)) return false;
+  return now - parsed <= ACCEPTED_INVITE_FALLBACK_MAX_AGE_MS;
+}
+
 export function buildAcceptedTeamDirectory(
   members: WorkspaceMemberDirectoryEntry[],
   invites: WorkspaceInviteSummary[],
@@ -108,6 +117,7 @@ export function buildAcceptedTeamDirectory(
 
   const acceptedInviteFallbacks = invites
     .filter((invite) => invite.status === 'accepted')
+    .filter((invite) => isAcceptedInviteFallbackFresh(invite.updatedAt))
     .filter((invite) => {
       const acceptedByUserId = String(invite.acceptedByUserId ?? '').trim();
       const inviteEmail = String(invite.email ?? '').trim().toLowerCase();
