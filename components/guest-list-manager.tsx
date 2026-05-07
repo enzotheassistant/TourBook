@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCachedGuestList, updateGuestListEntry } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
+import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import { GuestListEntry } from '@/lib/types';
 
 function parseBulkInput(value: string) {
@@ -17,7 +18,7 @@ function DotsIcon() {
 }
 
 export function GuestListManager({ showId, note, showNote }: { showId: string; note: string; showNote: boolean }) {
-  const { activeWorkspaceId, isLoading } = useAppContext();
+  const { activeWorkspaceId, isLoading, memberships } = useAppContext();
   const [value, setValue] = useState('');
   const [entries, setEntries] = useState<GuestListEntry[]>([]);
   const [saving, setSaving] = useState(false);
@@ -66,10 +67,16 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }, []);
 
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
+  const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  const canManageGuestList = canCreateDates(workspaceRole);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const lines = parseBulkInput(value);
+    if (!canManageGuestList) {
+      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+      return;
+    }
     if (!lines.length || saving) return;
     setSaving(true);
     setError('');
@@ -85,6 +92,10 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleDelete(entryId: string) {
+    if (!canManageGuestList) {
+      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+      return;
+    }
     setError('');
     try {
       await deleteGuestListEntry(entryId, { workspaceId: activeWorkspaceId, showId });
@@ -96,6 +107,10 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleSaveEdit(entryId: string) {
+    if (!canManageGuestList) {
+      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+      return;
+    }
     const trimmed = editingValue.trim();
     if (!trimmed) return;
     setError('');
@@ -114,21 +129,27 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     <div className="space-y-5">
       {showNote && note ? <p className="text-sm text-zinc-400">{note}</p> : null}
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <textarea
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="John Doe +1"
-          rows={3}
-          className="min-h-[104px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
-        />
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-zinc-500">Paste multiple names on separate lines to add them all at once.</p>
-          <button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-5 text-sm font-medium text-zinc-950 disabled:opacity-60">
-            {saving ? 'Adding...' : 'Add'}
-          </button>
+      {canManageGuestList ? (
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <textarea
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="John Doe +1"
+            rows={3}
+            className="min-h-[104px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-zinc-500">Paste multiple names on separate lines to add them all at once.</p>
+            <button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-5 text-sm font-medium text-zinc-950 disabled:opacity-60">
+              {saving ? 'Adding...' : 'Add'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
+          You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.
         </div>
-      </form>
+      )}
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
@@ -160,21 +181,23 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
                 ) : (
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-zinc-100">{entry.name}</span>
-                    <div data-guest-menu-root="true" className="relative">
-                      <button type="button" onClick={() => setOpenMenuId(menuOpen ? null : entry.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]">
-                        <DotsIcon />
-                      </button>
-                      {menuOpen ? (
-                        <div className="absolute right-0 top-full z-10 mt-2 min-w-[170px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-                          <button type="button" onClick={() => { setEditingId(entry.id); setEditingValue(entry.name); setOpenMenuId(null); }} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">
-                            Edit
-                          </button>
-                          <button type="button" onClick={() => handleDelete(entry.id)} className="block w-full px-4 py-3 text-left text-sm text-red-200">
-                            Remove
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                    {canManageGuestList ? (
+                      <div data-guest-menu-root="true" className="relative">
+                        <button type="button" onClick={() => setOpenMenuId(menuOpen ? null : entry.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]">
+                          <DotsIcon />
+                        </button>
+                        {menuOpen ? (
+                          <div className="absolute right-0 top-full z-10 mt-2 min-w-[170px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                            <button type="button" onClick={() => { setEditingId(entry.id); setEditingValue(entry.name); setOpenMenuId(null); }} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handleDelete(entry.id)} className="block w-full px-4 py-3 text-left text-sm text-red-200">
+                              Remove
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
