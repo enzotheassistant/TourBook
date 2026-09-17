@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerSupabaseClient } from '@/lib/supabase/server';
 import { clearSessionCookies, finalizeAuthResponse } from '@/lib/auth';
-import { EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE } from '@/lib/supabase/constants';
+import { EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE, RT_COOKIE, RT_COOKIE_MAX_AGE_S } from '@/lib/supabase/constants';
 
 type Body = {
   accessToken?: string;
@@ -39,6 +39,19 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ error: 'Unable to sync session.' }, { status: 401 });
     }
+
+    // Server-set (real Set-Cookie header) backup of the refresh token, so
+    // silent session recovery survives Safari's Intelligent Tracking
+    // Prevention -- which caps any cookie set via client-side document.cookie
+    // to a real 7-day lifetime regardless of its stated expiry. This is set
+    // on every successful sync, not just when rememberEmail is on: it's
+    // about surviving storage eviction, not a user preference.
+    response.cookies.set(RT_COOKIE, refreshToken, {
+      maxAge: RT_COOKIE_MAX_AGE_S,
+      path: '/',
+      sameSite: 'lax',
+      secure: true,
+    });
 
     response.cookies.set(REMEMBER_EMAIL_PREF_COOKIE, rememberEmail ? '1' : '0', {
       maxAge: EMAIL_COOKIE_MAX_AGE_S,

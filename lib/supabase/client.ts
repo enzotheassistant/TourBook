@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { RT_COOKIE, EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE } from "@/lib/supabase/constants";
+import { RT_COOKIE, RT_COOKIE_MAX_AGE_S, EMAIL_COOKIE, REMEMBER_EMAIL_PREF_COOKIE } from "@/lib/supabase/constants";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -18,9 +18,17 @@ let browserClient: SupabaseClient | null = null;
 // The refresh token itself has a long TTL (Supabase default: 60 days) and is
 // single-use — Supabase rotates it on every refresh, so we always keep the
 // backup current.
+//
+// IMPORTANT: the write here (via `document.cookie`) is only half of it.
+// Safari's Intelligent Tracking Prevention caps any cookie set by
+// client-side script to a real 7-day lifetime, no matter what `expires`
+// says — silently defeating the whole point of this backup on exactly the
+// platform it targets. `/api/auth/session` (POST) sets the same cookie
+// again via a real Set-Cookie response header right after this, which is
+// NOT subject to that cap. The write here still matters as the immediate,
+// synchronous fallback in case that network call never completes.
 // ---------------------------------------------------------------------------
 
-const RT_COOKIE_MAX_AGE_S = 60 * 24 * 60 * 60; // 60 days
 const EMAIL_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year (survives Safari force-close)
 const REMEMBER_EMAIL_PREF_MAX_AGE_S = 365 * 24 * 60 * 60; // 1 year
 
