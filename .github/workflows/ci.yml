@@ -15,7 +15,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # package.json declares "engines": { "node": "20.x" }, but
+          # test:unit relies on --experimental-strip-types, which Node 20
+          # does not support at all (confirmed by a real CI failure: "node:
+          # bad option: --experimental-strip-types" on Node 20.20.2). This
+          # repo's actual dev/test environment runs Node 22. Using 22 here
+          # matches what every check in this workflow has actually been
+          # validated against. The engines field mismatch is worth fixing
+          # separately -- left alone here since it may also affect Vercel's
+          # runtime Node version selection, which isn't this workflow's call
+          # to make.
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
