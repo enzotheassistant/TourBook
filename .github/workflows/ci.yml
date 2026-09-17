@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/upbeat-wright-6nkyfq]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,17 +15,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # package.json declares "engines": { "node": "20.x" }, but
-          # test:unit relies on --experimental-strip-types, which Node 20
-          # does not support at all (confirmed by a real CI failure: "node:
-          # bad option: --experimental-strip-types" on Node 20.20.2). This
-          # repo's actual dev/test environment runs Node 22. Using 22 here
-          # matches what every check in this workflow has actually been
-          # validated against. The engines field mismatch is worth fixing
-          # separately -- left alone here since it may also affect Vercel's
-          # runtime Node version selection, which isn't this workflow's call
-          # to make.
-          node-version: '22'
+          # Matches package.json's engines.node and the Node.js Version
+          # already configured on this project's live Vercel deployment
+          # (confirmed via the Vercel API: nodeVersion "24.x", latest
+          # deployment READY on it). Node 20 -- this repo's engines field
+          # until this change, and this workflow's node-version before it --
+          # doesn't support --experimental-strip-types at all, which
+          # test:unit relies on; that was caught by a real CI failure
+          # ("node: bad option: --experimental-strip-types" on Node
+          # 20.20.2) the first time this workflow actually ran.
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
