@@ -92,7 +92,7 @@ export function AddressAutocompleteField({
           signal: controller.signal,
           cache: 'no-store',
         });
-        const payload = (await response.json()) as AddressSuggestion[];
+        const payload = response.ok ? ((await response.json()) as AddressSuggestion[]) : [];
         setSuggestions(payload);
         setOpen(payload.length > 0);
       } catch {

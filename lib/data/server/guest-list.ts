@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
 import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { getDateScoped } from '@/lib/data/server/dates';
+import { toCsvCell } from '@/lib/data/server/csv-utils';
 import type { ScopedGuestListEntry } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
@@ -234,8 +235,7 @@ export async function exportGuestListCsvScoped(supabaseInput: SupabaseClient, us
   const entries = await listGuestListEntriesScoped(supabaseInput, userId, workspaceId, dateId);
   const lines = ['Name'];
   for (const entry of entries) {
-    const escaped = entry.name.replaceAll('"', '""');
-    lines.push(`"${escaped}"`);
+    lines.push(toCsvCell(entry.name));
   }
   return lines.join('\n');
 }

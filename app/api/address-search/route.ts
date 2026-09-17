@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { AddressSuggestion } from '@/lib/types';
 
 function tokenize(value: string) {
@@ -49,13 +50,20 @@ async function fetchSuggestions({ query, token, country, limit }: { query: strin
 }
 
 export async function GET(request: NextRequest) {
+  // This proxies a paid, rate-limited third-party API (Mapbox) using a
+  // project-wide token. Requiring auth keeps it restricted to signed-in
+  // members of this app instead of being an open relay for anyone on the
+  // internet to hammer.
+  const authState = await requireApiAuth(request);
+  if (authState instanceof NextResponse) return authState;
+
   const query = request.nextUrl.searchParams.get('q')?.trim() ?? '';
   const cityQuery = request.nextUrl.searchParams.get('city')?.trim() ?? '';
   const preferredCountry = request.nextUrl.searchParams.get('preferredCountry')?.trim() || 'CA,US';
   const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
   if (!query || query.length < 3 || !token) {
-    return NextResponse.json([] satisfies AddressSuggestion[]);
+    return finalizeAuthResponse(NextResponse.json([] satisfies AddressSuggestion[]), authState);
   }
 
   const boostedQuery = cityQuery ? `${query} ${cityQuery}` : query;
@@ -70,5 +78,5 @@ export async function GET(request: NextRequest) {
   });
 
   const suggestions = Array.from(merged.values()).sort((a, b) => scoreSuggestion(b, cityQuery, preferredCountry) - scoreSuggestion(a, cityQuery, preferredCountry));
-  return NextResponse.json(suggestions.slice(0, 5));
+  return finalizeAuthResponse(NextResponse.json(suggestions.slice(0, 5)), authState);
 }
