@@ -79,6 +79,11 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const routedRef = useRef(false);
+  const modeRef = useRef<AuthMode>(mode);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   const submitLabel = useMemo(() => {
     if (loading && mode === "signin") return "Signing in…";
@@ -139,6 +144,15 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
     void (async () => {
       const { data } = await supabase.auth.getSession();
       if (!active || !data.session || syncing || routedRef.current) return;
+      if (modeRef.current !== "signin") {
+        // Don't silently resume a stale-but-still-valid session out from
+        // under someone using "Forgot password" (or "Sign up") — a user who
+        // reaches for password reset expects to be walked through it, not
+        // quietly dropped back into whatever account is still cached on
+        // this device.
+        authLog("login: existing session found, but user is on a non-signin tab — not auto-routing", { mode: modeRef.current });
+        return;
+      }
       syncing = true;
       try {
         await syncSessionAndRouteToApp(data.session.access_token, data.session.refresh_token);
@@ -151,6 +165,10 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!active || !session || syncing || routedRef.current) return;
+      if (modeRef.current !== "signin") {
+        authLog("login: auth-state change while user is on a non-signin tab — not auto-routing", { mode: modeRef.current });
+        return;
+      }
       syncing = true;
       try {
         await syncSessionAndRouteToApp(session.access_token, session.refresh_token);
