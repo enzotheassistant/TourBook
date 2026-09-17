@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, claude/upbeat-wright-6nkyfq]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
