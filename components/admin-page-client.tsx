@@ -465,6 +465,28 @@ async function buildImportTextFromFiles(files: File[]) {
   return textChunks.filter(Boolean).join('\n\n');
 }
 
+// Shared by handleCreateInvite and handleSaveMemberEdit, which previously
+// repeated this same scope-selection validation near-verbatim with slightly
+// different wording -- a future rule change risked being applied to only
+// one of the two.
+function validateScopeSelection(input: {
+  role: WorkspaceInviteRole | EditableWorkspaceMemberRole;
+  scopeType: 'workspace' | 'projects' | 'tours';
+  projectIds: string[];
+  tourIds: string[];
+}): string | null {
+  if (input.role === 'admin' && input.scopeType !== 'workspace') {
+    return 'Admins must have full workspace access.';
+  }
+  if (input.scopeType === 'projects' && input.projectIds.length === 0) {
+    return 'Select at least one artist for project-scoped access.';
+  }
+  if (input.scopeType === 'tours' && input.tourIds.length === 0) {
+    return 'Select at least one tour for tour-scoped access.';
+  }
+  return null;
+}
+
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' | 'team' | 'projects' }) {
   const {
     activeWorkspaceId,
@@ -545,6 +567,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
   const contextInvitePrefillRef = useRef<string | null>(null);
   const deletedShowIdsRef = useRef<Set<string>>(new Set());
+  const showsRequestIdRef = useRef(0);
+  const invitesRequestIdRef = useRef(0);
+  const membersRequestIdRef = useRef(0);
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
   const workspaceProjects = useMemo(
@@ -574,16 +599,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   const firstAdminWorkspaceId = useMemo(() => getFirstAdminWorkspaceId(memberships), [memberships]);
 
+  // Every mutation both awaits this directly and dispatches
+  // 'tourbook:shows-updated' (which other components -- dashboard-client,
+  // show-page-client -- also listen for, so the dispatch itself must stay).
+  // That means this fires twice per action in this component. The request-id
+  // guard below makes the redundant fetch harmless instead of a race: if a
+  // second call starts before the first resolves, only the response for the
+  // most recently started call is ever applied to state.
   const loadShows = useCallback(async () => {
     if (!activeWorkspaceId || !activeProjectId) {
+      showsRequestIdRef.current += 1;
       setShows([]);
       setShowsLoading(false);
       return;
     }
 
+    const requestId = ++showsRequestIdRef.current;
     setShowsLoading(true);
     try {
       const result = await listShows(true, { workspaceId: activeWorkspaceId, projectId: activeProjectId, tourId: activeTourId });
+      if (showsRequestIdRef.current !== requestId) return;
       const deletedShowIds = deletedShowIdsRef.current;
       const nextShows = deletedShowIds.size > 0
         ? result.shows.filter((show) => !deletedShowIds.has(show.id))
@@ -591,41 +626,57 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setShows(nextShows);
       setShowsHasLoadedOnce(true);
     } finally {
-      setShowsLoading(false);
+      if (showsRequestIdRef.current === requestId) {
+        setShowsLoading(false);
+      }
     }
   }, [activeProjectId, activeTourId, activeWorkspaceId]);
 
   const loadInvites = useCallback(async () => {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) {
+      invitesRequestIdRef.current += 1;
       setInvites([]);
       return;
     }
 
+    const requestId = ++invitesRequestIdRef.current;
     setInvitesLoading(true);
     try {
       const nextInvites = await listWorkspaceInvites(activeWorkspaceId);
+      if (invitesRequestIdRef.current !== requestId) return;
       setInvites(nextInvites);
     } catch (error) {
-      setInviteMessage(error instanceof Error ? error.message : 'Unable to load invites.');
+      if (invitesRequestIdRef.current === requestId) {
+        setInviteMessage(error instanceof Error ? error.message : 'Unable to load invites.');
+      }
     } finally {
-      setInvitesLoading(false);
+      if (invitesRequestIdRef.current === requestId) {
+        setInvitesLoading(false);
+      }
     }
   }, [activeWorkspaceId, canManageInvitesInWorkspace]);
 
   const loadMembers = useCallback(async () => {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) {
+      membersRequestIdRef.current += 1;
       setMembers([]);
       return;
     }
 
+    const requestId = ++membersRequestIdRef.current;
     setMembersLoading(true);
     try {
       const nextMembers = await listWorkspaceMembers(activeWorkspaceId);
+      if (membersRequestIdRef.current !== requestId) return;
       setMembers(nextMembers);
     } catch (error) {
-      setInviteMessage(error instanceof Error ? error.message : 'Unable to load team members.');
+      if (membersRequestIdRef.current === requestId) {
+        setInviteMessage(error instanceof Error ? error.message : 'Unable to load team members.');
+      }
     } finally {
-      setMembersLoading(false);
+      if (membersRequestIdRef.current === requestId) {
+        setMembersLoading(false);
+      }
     }
   }, [activeWorkspaceId, canManageInvitesInWorkspace]);
 
@@ -989,18 +1040,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    if (inviteRole === 'admin' && inviteScopeType !== 'workspace') {
-      setInviteMessage('Admins must have full workspace access.');
-      return;
-    }
-
-    if (inviteScopeType === 'projects' && inviteProjectIds.length === 0) {
-      setInviteMessage('Select at least one artist for project-limited access.');
-      return;
-    }
-
-    if (inviteScopeType === 'tours' && inviteTourIds.length === 0) {
-      setInviteMessage('Select at least one tour for tour-limited access.');
+    const scopeError = validateScopeSelection({ role: inviteRole, scopeType: inviteScopeType, projectIds: inviteProjectIds, tourIds: inviteTourIds });
+    if (scopeError) {
+      setInviteMessage(scopeError);
       return;
     }
 
@@ -1088,16 +1130,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
   async function handleSaveMemberEdit() {
     if (!activeWorkspaceId || !editingMember || !canManageInvitesInWorkspace) return;
-    if (editingMemberRole === 'admin' && editingMemberScopeType !== 'workspace') {
-      setInviteMessage('Admins must have full workspace access.');
-      return;
-    }
-    if (editingMemberScopeType === 'projects' && editingMemberProjectIds.length === 0) {
-      setInviteMessage('Select at least one artist for project-scoped access.');
-      return;
-    }
-    if (editingMemberScopeType === 'tours' && editingMemberTourIds.length === 0) {
-      setInviteMessage('Select at least one tour for tour-scoped access.');
+    const scopeError = validateScopeSelection({ role: editingMemberRole, scopeType: editingMemberScopeType, projectIds: editingMemberProjectIds, tourIds: editingMemberTourIds });
+    if (scopeError) {
+      setInviteMessage(scopeError);
       return;
     }
 
@@ -1108,7 +1143,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         memberId: editingMember.id,
         role: editingMemberRole,
         scopeType: editingMemberScopeType,
-        projectIds: editingMemberScopeType === 'projects' ? editingMemberProjectIds : editingMemberScopeType === 'tours' ? editingMemberProjectIds : [],
+        projectIds: editingMemberScopeType === 'projects' || editingMemberScopeType === 'tours' ? editingMemberProjectIds : [],
         tourIds: editingMemberScopeType === 'tours' ? editingMemberTourIds : [],
       });
       setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
@@ -1481,15 +1516,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   async function exportGuestList(showId: string) {
-    if (!activeWorkspaceId) throw new Error('No active workspace selected.');
-    const csv = await exportGuestListCsv(showId, { workspaceId: activeWorkspaceId });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${showId}-guest-list.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      if (!activeWorkspaceId) throw new Error('No active workspace selected.');
+      const csv = await exportGuestListCsv(showId, { workspaceId: activeWorkspaceId });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${showId}-guest-list.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to export guest list.');
+    }
   }
 
   function openImportModal() {
@@ -2379,7 +2418,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     </>
                   )}
                 </div>
-                <InlineTourInput value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[72px]" />
+                <InlineTourInput key={form.id || 'new'} value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[72px]" />
               </div>
             </CollapsibleSection>
 
@@ -4239,60 +4278,6 @@ function InlineTourInput({ value, onChange, options, labelWidthClassName }: { va
             value={value}
             onChange={(event) => onChange(event.target.value)}
             className={`${fieldClassName()} min-w-0 flex-1`}
-            placeholder="Type a new tour name"
-          />
-        </label>
-      ) : null}
-    </div>
-  );
-}
-
-function TourInput({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
-  const [forceCreatingNew, setForceCreatingNew] = useState(false);
-  const inferredCreatingNew = !options.includes(value) && value.trim().length > 0;
-  const creatingNew = forceCreatingNew || inferredCreatingNew;
-  const selectedValue = creatingNew ? '__new__' : value;
-
-  return (
-    <div className="space-y-2 text-sm text-zinc-300">
-      <label className="block">
-        <span className="mb-1 block">Tour</span>
-        <div className="relative">
-          <select
-            value={selectedValue}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              if (nextValue === '__new__') {
-                setForceCreatingNew(true);
-                onChange('');
-                return;
-              }
-              setForceCreatingNew(false);
-              onChange(nextValue);
-            }}
-            className={`${fieldClassName()} min-w-0 flex-1 appearance-none pr-11`}
-          >
-            <option value="">No tour assigned</option>
-            {options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-            <option value="__new__">Create new tour…</option>
-          </select>
-          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
-            <ChevronDownIcon />
-          </span>
-        </div>
-      </label>
-
-      {creatingNew ? (
-        <label className="block">
-          <span className="mb-1 block">New tour name</span>
-          <input
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            className={fieldClassName()}
             placeholder="Type a new tour name"
           />
         </label>
