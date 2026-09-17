@@ -3,6 +3,7 @@
 import type { GuestListEntry, Show } from '@/lib/types';
 
 const CACHE_PREFIX = 'tourbook.offline';
+const CACHE_KEY_PREFIX = `${CACHE_PREFIX}:`;
 const CACHE_VERSION = 'v2';
 
 type CachedPayload<T> = {
@@ -87,4 +88,30 @@ export function readCachedGuestList(scope: { workspaceId: string; showId: string
 
 export function writeCachedGuestList(scope: { workspaceId: string; showId: string }, entries: GuestListEntry[]) {
   writeCachedPayload(guestListKey(scope), entries);
+}
+
+export function selectOfflineCacheKeysToRemove(allKeys: string[]): string[] {
+  return allKeys.filter((key) => key.startsWith(CACHE_KEY_PREFIX));
+}
+
+/**
+ * Removes every cached itinerary/show/guest-list entry from localStorage.
+ * Call this on explicit logout -- on a shared/borrowed device, cached show
+ * details (venue addresses, DOS phone numbers) and guest list names would
+ * otherwise remain readable to the next person who opens the app, since
+ * this cache has no expiry and survives independently of the auth session.
+ */
+export function clearOfflineCache() {
+  if (!isBrowser()) return;
+
+  try {
+    const allKeys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key) allKeys.push(key);
+    }
+    selectOfflineCacheKeysToRemove(allKeys).forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Ignore quota/privacy mode failures.
+  }
 }

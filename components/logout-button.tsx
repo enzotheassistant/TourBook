@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/hooks/use-app-context';
 import { clearBackupRefreshToken, clearServerSession, getBrowserSupabaseClient } from '@/lib/supabase/client';
+import { clearOfflineCache } from '@/lib/offline-cache';
 
 export function LogoutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
@@ -35,6 +36,12 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
         } finally {
           resetContext();
           clearBackupRefreshToken();
+          // Shared/borrowed devices: don't leave cached show/guest-list data
+          // (venue addresses, DOS phone numbers, guest names) readable to
+          // whoever logs in next. Scoped to explicit logout only -- a
+          // session hiccup while genuinely offline shouldn't wipe the cache
+          // this app depends on for offline use.
+          clearOfflineCache();
           router.refresh();
         }
       })();
