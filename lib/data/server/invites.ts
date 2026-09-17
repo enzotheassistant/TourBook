@@ -3,6 +3,7 @@ import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireScope
 import { buildInviteExpiry, generateInviteToken, hashInviteToken, normalizeInviteEmail, validateInviteRole, type WorkspaceInviteRole } from '@/lib/invites/security';
 import type { WorkspaceScopeType } from '@/lib/types/tenant';
 import { hasExactTourInviteSet, normalizeScopeTypeValue, resolveScopePrecedence } from '@/lib/data/server/invite-scope-utils';
+import { grantsMembershipOnAccept, resolveInviteAcceptOutcome } from '@/lib/data/server/invite-accept-utils';
 
 export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 
@@ -22,6 +23,8 @@ export type WorkspaceInviteSummary = {
   createdAt: string;
   updatedAt: string;
 };
+
+const INVITE_COLUMNS = 'id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at';
 
 export function normalizeScopeType(value: unknown): WorkspaceScopeType {
   const normalized = normalizeScopeTypeValue(value);
@@ -166,7 +169,7 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
 
   const { data, error } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select(INVITE_COLUMNS)
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
@@ -290,7 +293,7 @@ export async function createWorkspaceInviteScoped(
       invited_by_user_id: userId,
       expires_at: expiresAt,
     })
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select(INVITE_COLUMNS)
     .single();
 
   if (error) {
@@ -376,16 +379,41 @@ export async function revokeWorkspaceInviteScoped(
     throw new ApiError(409, 'Accepted invites cannot be revoked.');
   }
 
+  // Guard the write itself, not just the read above: only flip status if it
+  // is still 'pending' at the moment of the update. Without this guard, an
+  // accept that wins the pending -> accepted race between our read and our
+  // write would get silently overwritten back to 'revoked' here, even though
+  // that user already has real membership access.
   const { data, error } = await supabase
     .from('workspace_invites')
     .update({ status: 'revoked' })
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
-    .single();
+    .eq('status', 'pending')
+    .select(INVITE_COLUMNS)
+    .maybeSingle();
 
   if (error) {
     throw new ApiError(500, error.message);
+  }
+
+  if (!data) {
+    const { data: currentRow, error: currentError } = await supabase
+      .from('workspace_invites')
+      .select(INVITE_COLUMNS)
+      .eq('id', inviteId)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (currentError) {
+      throw new ApiError(500, currentError.message);
+    }
+
+    if (currentRow && String(currentRow.status) === 'accepted') {
+      throw new ApiError(409, 'Accepted invites cannot be revoked.');
+    }
+
+    throw new ApiError(409, 'Invite is no longer pending.');
   }
 
   const byInvite = await getInviteProjectIds(supabase, [inviteId]);
@@ -440,7 +468,7 @@ export async function resendWorkspaceInviteScoped(
     .update({ token_hash: tokenHash, expires_at: expiresAt, updated_at: new Date().toISOString() })
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select(INVITE_COLUMNS)
     .single();
 
   if (error) {
@@ -619,7 +647,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
 
   const { data: inviteRow, error: inviteError } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
+    .select(INVITE_COLUMNS)
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -648,6 +676,11 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   const invite = mapInviteRow(inviteRow, inviteProjectIds, inviteTourIds);
+
+  // Fast-path rejection from the snapshot we just read. This is purely an
+  // early exit for the common (non-racing) case — it is NOT what makes this
+  // function safe under concurrency. The guarded UPDATE below is the only
+  // check that decides whether membership actually gets granted.
   if (invite.status === 'revoked') {
     throw new ApiError(409, 'Invite has been revoked.');
   }
@@ -660,43 +693,71 @@ export async function acceptWorkspaceInvitePrivileged(input: {
     throw new ApiError(403, 'Invite email does not match your authenticated account.');
   }
 
+  // Atomically claim the pending -> accepted transition BEFORE granting any
+  // membership or scope access. `UPDATE ... WHERE status = 'pending'` is a
+  // single statement, so Postgres row-locking guarantees only one writer
+  // (this accept, a concurrent duplicate accept, or a concurrent revoke) can
+  // win it. If a revoke wins the race, this matches zero rows and we never
+  // reach reconcileAcceptedWorkspaceInvite — no membership is ever created
+  // for an invite that ends up revoked.
+  const { data: claimedRow, error: claimError } = await supabase
+    .from('workspace_invites')
+    .update({ status: 'accepted', accepted_by_user_id: userId })
+    .eq('id', invite.id)
+    .eq('status', 'pending')
+    .select(INVITE_COLUMNS)
+    .maybeSingle();
+
+  if (claimError) {
+    throw new ApiError(500, claimError.message);
+  }
+
+  let currentInvite: WorkspaceInviteSummary;
+
+  if (claimedRow) {
+    currentInvite = mapInviteRow(claimedRow, inviteProjectIds, inviteTourIds);
+  } else {
+    // We lost the race for the pending -> accepted transition. Re-read the
+    // current row (never trust the stale snapshot from above) to find out why.
+    const { data: currentRow, error: currentError } = await supabase
+      .from('workspace_invites')
+      .select(INVITE_COLUMNS)
+      .eq('id', invite.id)
+      .maybeSingle();
+
+    if (currentError) {
+      throw new ApiError(500, currentError.message);
+    }
+
+    currentInvite = currentRow ? mapInviteRow(currentRow, inviteProjectIds, inviteTourIds) : invite;
+  }
+
+  // Single source of truth for "is granting membership safe right now?" —
+  // see lib/data/server/invite-accept-utils.ts and its tests for the full
+  // decision table, including the revoked-wins-the-race case this exists to
+  // prevent.
+  const decision = resolveInviteAcceptOutcome({
+    claimed: Boolean(claimedRow),
+    currentStatus: currentInvite.status,
+    currentAcceptedByUserId: currentInvite.acceptedByUserId,
+    userId,
+  });
+
+  if (!grantsMembershipOnAccept(decision)) {
+    if (decision.kind === 'revoked') throw new ApiError(409, 'Invite has been revoked.');
+    if (decision.kind === 'expired') throw new ApiError(410, 'Invite has expired.');
+    if (decision.kind === 'accepted-by-other') throw new ApiError(409, 'Invite has already been accepted by a different account.');
+    throw new ApiError(409, 'Invite is no longer pending.');
+  }
+
   const { membershipCreated } = await reconcileAcceptedWorkspaceInvite({
     supabase,
-    invite,
+    invite: currentInvite,
     scopeType,
     inviteProjectIds,
     inviteTourIds,
     userId,
   });
 
-  if (invite.status === 'accepted') {
-    return {
-      invite,
-      membershipCreated,
-    };
-  }
-
-  const { data: acceptedRow, error: acceptedError } = await supabase
-    .from('workspace_invites')
-    .update({
-      status: 'accepted',
-      accepted_by_user_id: userId,
-    })
-    .eq('id', invite.id)
-    .eq('status', 'pending')
-    .select('id, workspace_id, invitee_name, email, role, scope_type, status, invited_by_user_id, accepted_by_user_id, expires_at, created_at, updated_at')
-    .maybeSingle();
-
-  if (acceptedError) {
-    throw new ApiError(500, acceptedError.message);
-  }
-
-  if (!acceptedRow) {
-    throw new ApiError(409, 'Invite is no longer pending.');
-  }
-
-  return {
-    invite: mapInviteRow(acceptedRow, inviteProjectIds, inviteTourIds),
-    membershipCreated,
-  };
+  return { invite: currentInvite, membershipCreated };
 }
