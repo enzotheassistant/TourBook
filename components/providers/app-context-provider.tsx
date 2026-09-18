@@ -213,9 +213,21 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       let session = await getOrRecoverBrowserSession(supabase);
 
       if (!session) {
+        resetBootstrapState(setBootstrap);
+
+        if (typeof window !== 'undefined' && window.location.pathname === '/reset-password') {
+          // The recovery link lands here with the session encoded only in the
+          // URL's hash fragment. ResetPasswordPage exchanges that for a real
+          // session itself via setSession(), which is an async round trip --
+          // slower than this synchronous localStorage check, so redirecting
+          // to /login here would always win the race and abandon the reset
+          // flow before it can start. Let that page manage its own bootstrap.
+          authLog('refreshContext: no session on /reset-password — deferring to the page\'s own recovery flow');
+          return;
+        }
+
         authLog('refreshContext: unable to establish browser session — redirecting to /login');
         logLoginRedirect('session_recovery_failed');
-        resetBootstrapState(setBootstrap);
         routeToLogin(router, isRedirectingRef);
         return;
       }
