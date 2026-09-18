@@ -310,30 +310,32 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
           <p className="mt-2 text-xs text-sky-300">Invite token detected. Complete auth and invite acceptance will continue.</p>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/20 p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signin");
-              setError("");
-              setSuccess("");
-            }}
-            className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signin" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signup");
-              setError("");
-              setSuccess("");
-            }}
-            className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signup" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
-          >
-            Create account
-          </button>
-        </div>
+        {mode !== "forgot" ? (
+          <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/10 bg-black/20 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError("");
+                setSuccess("");
+              }}
+              className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signin" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setError("");
+                setSuccess("");
+              }}
+              className={`rounded-lg px-3 py-2 text-xs font-medium transition ${mode === "signup" ? "bg-white text-black" : "text-zinc-300 hover:bg-white/5"}`}
+            >
+              Create account
+            </button>
+          </div>
+        ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
