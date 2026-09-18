@@ -82,6 +82,15 @@ function resetBootstrapState(setBootstrap: Dispatch<SetStateAction<BootstrapCont
   setBootstrap(EMPTY_CONTEXT);
 }
 
+// Routes that exchange a token from the URL (a hash fragment the server
+// never sees) for a session themselves, on mount. Redirecting to /login from
+// here before that exchange finishes would always win the race against it --
+// this synchronous localStorage check is faster than their async setSession()
+// call -- so those routes manage their own auth bootstrap instead.
+function isSelfBootstrappingAuthRoute(pathname: string) {
+  return pathname === '/reset-password' || pathname.startsWith('/invite/');
+}
+
 function routeToLogin(router: ReturnType<typeof useRouter>, isRedirectingRef: { current: boolean }) {
   const nextHref = typeof window === 'undefined' ? '/login' : buildLoginRedirectHref(window.location.search);
   const inviteToken = typeof window === 'undefined' ? '' : readInviteTokenFromSearch(window.location.search);
@@ -215,14 +224,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (!session) {
         resetBootstrapState(setBootstrap);
 
-        if (typeof window !== 'undefined' && window.location.pathname === '/reset-password') {
-          // The recovery link lands here with the session encoded only in the
-          // URL's hash fragment. ResetPasswordPage exchanges that for a real
-          // session itself via setSession(), which is an async round trip --
-          // slower than this synchronous localStorage check, so redirecting
-          // to /login here would always win the race and abandon the reset
-          // flow before it can start. Let that page manage its own bootstrap.
-          authLog('refreshContext: no session on /reset-password — deferring to the page\'s own recovery flow');
+        if (typeof window !== 'undefined' && isSelfBootstrappingAuthRoute(window.location.pathname)) {
+          authLog(`refreshContext: no session on ${window.location.pathname} — deferring to the page's own recovery flow`);
           return;
         }
 
