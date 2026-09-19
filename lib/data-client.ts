@@ -3,6 +3,7 @@
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import type { DateAttachment } from '@/lib/types/date-record';
 import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
 import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
@@ -249,6 +250,58 @@ export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
   }
 
   return response.text();
+}
+
+export async function listAttachments(dateId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  return request<DateAttachment[]>(`/api/dates/${dateId}/attachments?${params.toString()}`);
+}
+
+export async function uploadAttachment(dateId: string, file: File, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+
+  const supabase = getBrowserSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const formData = new FormData();
+  formData.set('file', file);
+
+  const response = await fetch(`/api/dates/${dateId}/attachments?${params.toString()}`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: 'Unable to upload the attachment.' }));
+    throw new Error(payload.error ?? 'Unable to upload the attachment.');
+  }
+
+  return response.json() as Promise<DateAttachment>;
+}
+
+export async function deleteAttachment(attachmentId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  await request<{ ok: boolean }>(`/api/dates/attachments/${attachmentId}?${params.toString()}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getAttachmentDownloadHref(attachmentId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  return `/api/dates/attachments/${attachmentId}/download?${params.toString()}`;
 }
 
 export async function createWorkspace(input: { name: string; slug?: string | null }) {

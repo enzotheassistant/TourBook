@@ -69,6 +69,18 @@ export type ScopedGuestListEntry = {
   created_at: string;
 };
 
+export type DateAttachment = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  date_id: string;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
 export type WorkspaceAccess = {
   workspaceId: string;
   userId: string;

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { AttachmentsManager } from '@/components/attachments-manager';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { OfflineStatus } from '@/components/offline-status';
@@ -138,7 +139,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
+  const requestedViewParam = searchParams.get('view');
+  const requestedView = requestedViewParam === 'guest-list' ? 'guest-list' : requestedViewParam === 'attachments' ? 'attachments' : 'day-sheet';
   const returnTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
@@ -223,7 +225,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     setConfirmState((current) => ({ ...current, open: false }));
   }
 
-  function setView(nextView: 'day-sheet' | 'guest-list') {
+  function setView(nextView: 'day-sheet' | 'guest-list' | 'attachments') {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set('view', nextView);
     router.replace(`?${nextParams.toString()}`, { scroll: false });
@@ -330,13 +332,16 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         {statusSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={statusSource} emptyOfflineMessage={null} />}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
-          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
             {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
+            <button type="button" onClick={() => setView('attachments')} className={viewButtonClassName(requestedView === 'attachments')}>Attachments</button>
           </div>
         </div>
 
-        {requestedView === 'day-sheet' || !canShowGuestList ? (
+        {requestedView === 'attachments' ? (
+          <SectionCard title="Attachments"><AttachmentsManager dateId={show.id} /></SectionCard>
+        ) : requestedView === 'day-sheet' || !canShowGuestList ? (
           show.day_type === 'show' ? (
             <>
               {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
