@@ -7,8 +7,8 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import type { DateAttachment } from '@/lib/types/date-record';
 
-const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
-const ACCEPTED_FILE_TYPES = [
+export const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
+export const ACCEPTED_FILE_TYPES = [
   'application/pdf',
   'image/*',
   '.doc',
@@ -49,7 +49,7 @@ export function fileExtensionLabel(attachment: DateAttachment) {
   return parts[parts.length - 1].slice(0, 4).toUpperCase();
 }
 
-function UploadIcon() {
+export function UploadIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-6 w-6">
       <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
@@ -67,7 +67,7 @@ export function FileIcon() {
   );
 }
 
-function TrashIcon() {
+export function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-4 w-4">
       <path d="M4 7H20M9 7V5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7M18 7L17.3 19.0501C17.2508 19.8992 16.5477 20.5626 15.6971 20.5626H8.30294C7.45227 20.5626 6.74918 19.8992 6.7 19.0501L6 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

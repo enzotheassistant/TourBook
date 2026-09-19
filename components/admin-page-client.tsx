@@ -7,9 +7,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { AttachmentsManager } from '@/components/attachments-manager';
+import { PendingAttachmentsPicker } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
@@ -516,6 +517,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
   const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
   const [attachmentCount, setAttachmentCount] = useState(0);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
@@ -1255,6 +1257,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
     setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
+    setPendingAttachments([]);
     handledLoadRef.current = null;
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/admin');
@@ -1344,6 +1347,23 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       });
 
       const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+
+      let attachmentSuffix = '';
+      if (pendingAttachments.length) {
+        const failures: string[] = [];
+        for (const file of pendingAttachments) {
+          try {
+            await uploadAttachment(show.id, file, { workspaceId: activeWorkspaceId });
+          } catch {
+            failures.push(file.name);
+          }
+        }
+        setPendingAttachments([]);
+        if (failures.length) {
+          attachmentSuffix = ` (failed to attach: ${failures.join(', ')})`;
+        }
+      }
+
       await loadShows();
       setDirty(false);
       setForm(ensureEditorScheduleRows(show));
@@ -1355,9 +1375,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       if (requestedStatus === 'draft') {
         if (isEditing) {
           const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-          router.push(buildReturnTarget(returnToUrl, nextTab, 'Draft saved.'));
+          router.push(buildReturnTarget(returnToUrl, nextTab, `Draft saved.${attachmentSuffix}`));
         } else {
-          resetForm('Draft saved. Form cleared for the next tour day.');
+          resetForm(`Draft saved. Form cleared for the next tour day.${attachmentSuffix}`);
         }
         return;
       }
@@ -1366,15 +1386,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         if (form.status === 'draft') {
           const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
           const nextMessage = returnToUrl === '/admin/drafts' ? 'Draft published.' : 'Show updated.';
-          router.push(buildReturnTarget(returnToUrl, nextTab, nextMessage));
+          router.push(buildReturnTarget(returnToUrl, nextTab, `${nextMessage}${attachmentSuffix}`));
           return;
         }
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-        router.push(buildReturnTarget(returnToUrl, nextTab, 'Show updated.'));
+        router.push(buildReturnTarget(returnToUrl, nextTab, `Show updated.${attachmentSuffix}`));
         return;
       }
 
-      resetForm('Tour day created. Form cleared for the next one.');
+      resetForm(`Tour day created. Form cleared for the next one.${attachmentSuffix}`);
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.new_date',
@@ -1444,6 +1464,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
     setForm(normalizedShow);
     setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
+    setPendingAttachments([]);
     setMessage('Loaded into editor');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1472,6 +1493,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);
     setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
+    setPendingAttachments([]);
     setMessage('Date duplicated');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2572,12 +2594,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               title="Attachments"
               expanded={attachmentsExpanded}
               onExpandedChange={setAttachmentsExpanded}
-              hasContent={attachmentCount > 0}
+              hasContent={isEditing && form.id ? attachmentCount > 0 : pendingAttachments.length > 0}
             >
               {isEditing && form.id ? (
                 <AttachmentsManager dateId={form.id} onCountChange={setAttachmentCount} />
               ) : (
-                <p className="text-sm text-zinc-400">Save this tour day first, then reopen it to attach files (PDFs, images, docs).</p>
+                <PendingAttachmentsPicker files={pendingAttachments} onFilesChange={setPendingAttachments} />
               )}
             </CollapsibleSection>
 
