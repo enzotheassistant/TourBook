@@ -1371,7 +1371,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               // Best-effort cleanup — the error below still matters even if this fails.
             }
           }
-          setMessage(`Couldn't attach ${failures.join(', ')}. Remove the file or try again, then save.`);
+          setMessage(`Error: ${failures.join(', ')} failed to upload`);
           return;
         }
 
