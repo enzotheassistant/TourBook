@@ -21,7 +21,7 @@ const ACCEPTED_FILE_TYPES = [
   '.csv',
 ].join(',');
 
-function formatFileSize(bytes: number) {
+export function formatFileSize(bytes: number) {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`;
   const units = ['KB', 'MB', 'GB'];
   let value = bytes / 1024;
@@ -33,17 +33,17 @@ function formatFileSize(bytes: number) {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
-function formatUploadedAt(iso: string) {
+export function formatUploadedAt(iso: string) {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return '';
   return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
-function isImageAttachment(attachment: DateAttachment) {
+export function isImageAttachment(attachment: DateAttachment) {
   return attachment.content_type.startsWith('image/');
 }
 
-function fileExtensionLabel(attachment: DateAttachment) {
+export function fileExtensionLabel(attachment: DateAttachment) {
   const parts = attachment.file_name.split('.');
   if (parts.length < 2) return 'FILE';
   return parts[parts.length - 1].slice(0, 4).toUpperCase();
@@ -58,7 +58,7 @@ function UploadIcon() {
   );
 }
 
-function FileIcon() {
+export function FileIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-6 w-6 text-zinc-400">
       <path d="M6 3H13L18 8V19C18 20.1046 17.1046 21 16 21H6C4.89543 21 4 20.1046 4 19V5C4 3.89543 4.89543 3 6 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />

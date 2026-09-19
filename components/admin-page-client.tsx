@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
+import { AttachmentsManager } from '@/components/attachments-manager';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
@@ -513,6 +514,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsHasLoadedOnce, setShowsHasLoadedOnce] = useState(false);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
+  const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
+  const [attachmentCount, setAttachmentCount] = useState(0);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
@@ -2564,6 +2567,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
             </CollapsibleSection>
             ) : null}
+
+            <CollapsibleSection
+              title="Attachments"
+              expanded={attachmentsExpanded}
+              onExpandedChange={setAttachmentsExpanded}
+              hasContent={attachmentCount > 0}
+            >
+              {isEditing && form.id ? (
+                <AttachmentsManager dateId={form.id} onCountChange={setAttachmentCount} />
+              ) : (
+                <p className="text-sm text-zinc-400">Save this tour day first, then reopen it to attach files (PDFs, images, docs).</p>
+              )}
+            </CollapsibleSection>
 
           </form>
         </section>

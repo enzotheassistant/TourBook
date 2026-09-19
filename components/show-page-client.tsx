@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AttachmentsManager } from '@/components/attachments-manager';
+import { AttachmentsSection } from '@/components/attachments-section';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { GuestListManager } from '@/components/guest-list-manager';
 import { OfflineStatus } from '@/components/offline-status';
@@ -82,22 +82,6 @@ function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-function PaperclipIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M8 12L14.5 5.5C16.1569 3.84315 18.8431 3.84315 20.5 5.5C22.1569 7.15685 22.1569 9.84315 20.5 11.5L12 20C9.79086 22.2091 6.20914 22.2091 4 20C1.79086 17.7909 1.79086 14.2091 4 12L11 5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function MultilineText({ children }: { children: string }) {
   return <p className="text-sm text-zinc-200 whitespace-pre-wrap break-words">{children}</p>;
 }
@@ -158,8 +142,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
   const returnTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [menuOpen, setMenuOpen] = useState(false);
-  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
-  const [attachmentCount, setAttachmentCount] = useState(0);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -310,24 +292,6 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         onConfirm={() => closeConfirmation(true)}
         onCancel={() => closeConfirmation(false)}
       />
-      <div className={attachmentsOpen ? 'fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6' : 'hidden'}>
-        <div className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-[32px] border border-white/10 bg-[#171117] shadow-[0_20px_80px_rgba(0,0,0,0.45)] sm:max-w-lg sm:rounded-[32px]">
-          <div className="flex items-center justify-between border-b border-white/5 px-6 py-5">
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Attachments</h2>
-            <button
-              type="button"
-              onClick={() => setAttachmentsOpen(false)}
-              aria-label="Close attachments"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
-            >
-              <CloseIcon />
-            </button>
-          </div>
-          <div className="overflow-y-auto px-6 py-5">
-            <AttachmentsManager dateId={show.id} onCountChange={setAttachmentCount} />
-          </div>
-        </div>
-      </div>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)] pt-[max(calc(env(safe-area-inset-top)+0.75rem),1rem)] sm:px-6 sm:pt-6">
         <div className="grid min-w-0 grid-cols-[44px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
           <Link href={backHref} aria-label="Back to itinerary" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
@@ -338,36 +302,21 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                 {headerMetaLine ? <p className="mt-1 truncate text-sm text-zinc-200 sm:text-[15px]">{headerMetaLine}</p> : null}
                 {headerSupportMeta ? <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{headerSupportMeta}</p> : null}
               </div>
-              <div className="relative flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAttachmentsOpen(true)}
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
-                  aria-label={attachmentCount > 0 ? `Attachments (${attachmentCount})` : 'Attachments'}
-                >
-                  <PaperclipIcon />
-                  {attachmentCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-500 px-1 text-[10px] font-semibold leading-none text-zinc-950">
-                      {attachmentCount}
-                    </span>
+              {adminMode ? (
+                <div className="relative flex shrink-0 items-center gap-2">
+                  <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+                    <PencilIcon />
+                  </Link>
+                  <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
+                  {menuOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
+                      <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
+                      <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
+                      <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
+                    </div>
                   ) : null}
-                </button>
-                {adminMode ? (
-                  <>
-                    <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                      <PencilIcon />
-                    </Link>
-                    <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
-                    {menuOpen ? (
-                      <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
-                        <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
-                        <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
-                        <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
-                      </div>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -397,6 +346,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
               {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}</div></SectionCard> : null}
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
+              <AttachmentsSection dateId={show.id} />
             </>
           ) : (
             <>
@@ -469,6 +419,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                   </div>
                 </SectionCard>
               ) : null}
+              <AttachmentsSection dateId={show.id} />
             </>
           )
         ) : (
