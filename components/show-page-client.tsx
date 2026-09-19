@@ -82,6 +82,22 @@ function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
+function PaperclipIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M8 12L14.5 5.5C16.1569 3.84315 18.8431 3.84315 20.5 5.5C22.1569 7.15685 22.1569 9.84315 20.5 11.5L12 20C9.79086 22.2091 6.20914 22.2091 4 20C1.79086 17.7909 1.79086 14.2091 4 12L11 5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function MultilineText({ children }: { children: string }) {
   return <p className="text-sm text-zinc-200 whitespace-pre-wrap break-words">{children}</p>;
 }
@@ -139,10 +155,11 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedViewParam = searchParams.get('view');
-  const requestedView = requestedViewParam === 'guest-list' ? 'guest-list' : requestedViewParam === 'attachments' ? 'attachments' : 'day-sheet';
+  const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
   const returnTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [menuOpen, setMenuOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [attachmentCount, setAttachmentCount] = useState(0);
   const [show, setShow] = useState<Show | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -225,7 +242,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     setConfirmState((current) => ({ ...current, open: false }));
   }
 
-  function setView(nextView: 'day-sheet' | 'guest-list' | 'attachments') {
+  function setView(nextView: 'day-sheet' | 'guest-list') {
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set('view', nextView);
     router.replace(`?${nextParams.toString()}`, { scroll: false });
@@ -293,6 +310,24 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         onConfirm={() => closeConfirmation(true)}
         onCancel={() => closeConfirmation(false)}
       />
+      <div className={attachmentsOpen ? 'fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6' : 'hidden'}>
+        <div className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-[32px] border border-white/10 bg-[#171117] shadow-[0_20px_80px_rgba(0,0,0,0.45)] sm:max-w-lg sm:rounded-[32px]">
+          <div className="flex items-center justify-between border-b border-white/5 px-6 py-5">
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Attachments</h2>
+            <button
+              type="button"
+              onClick={() => setAttachmentsOpen(false)}
+              aria-label="Close attachments"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <div className="overflow-y-auto px-6 py-5">
+            <AttachmentsManager dateId={show.id} onCountChange={setAttachmentCount} />
+          </div>
+        </div>
+      </div>
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)] pt-[max(calc(env(safe-area-inset-top)+0.75rem),1rem)] sm:px-6 sm:pt-6">
         <div className="grid min-w-0 grid-cols-[44px,minmax(0,1fr)] items-start gap-x-3 gap-y-3">
           <Link href={backHref} aria-label="Back to itinerary" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]">←</Link>
@@ -303,21 +338,36 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                 {headerMetaLine ? <p className="mt-1 truncate text-sm text-zinc-200 sm:text-[15px]">{headerMetaLine}</p> : null}
                 {headerSupportMeta ? <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{headerSupportMeta}</p> : null}
               </div>
-              {adminMode ? (
-                <div className="relative flex shrink-0 items-center gap-2">
-                  <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
-                    <PencilIcon />
-                  </Link>
-                  <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
-                  {menuOpen ? (
-                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
-                      <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
-                      <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
-                      <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
-                    </div>
+              <div className="relative flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAttachmentsOpen(true)}
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                  aria-label={attachmentCount > 0 ? `Attachments (${attachmentCount})` : 'Attachments'}
+                >
+                  <PaperclipIcon />
+                  {attachmentCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-500 px-1 text-[10px] font-semibold leading-none text-zinc-950">
+                      {attachmentCount}
+                    </span>
                   ) : null}
-                </div>
-              ) : null}
+                </button>
+                {adminMode ? (
+                  <>
+                    <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
+                      <PencilIcon />
+                    </Link>
+                    <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
+                    {menuOpen ? (
+                      <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
+                        <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
+                        <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
+                        <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -332,16 +382,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         {statusSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={statusSource} emptyOfflineMessage={null} />}
 
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
-          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
             {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
-            <button type="button" onClick={() => setView('attachments')} className={viewButtonClassName(requestedView === 'attachments')}>Attachments</button>
           </div>
         </div>
 
-        {requestedView === 'attachments' ? (
-          <SectionCard title="Attachments"><AttachmentsManager dateId={show.id} /></SectionCard>
-        ) : requestedView === 'day-sheet' || !canShowGuestList ? (
+        {requestedView === 'day-sheet' || !canShowGuestList ? (
           show.day_type === 'show' ? (
             <>
               {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}

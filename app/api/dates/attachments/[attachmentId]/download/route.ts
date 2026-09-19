@@ -9,10 +9,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (authState instanceof NextResponse) return authState;
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
+  const variant = request.nextUrl.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'original';
   const { attachmentId } = await params;
 
   try {
-    const { url } = await getAttachmentDownloadUrlScoped(authState.supabase, authState.user.id, workspaceId, attachmentId);
+    const { url } = await getAttachmentDownloadUrlScoped(authState.supabase, authState.user.id, workspaceId, attachmentId, variant);
     return finalizeAuthResponse(NextResponse.redirect(url), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;

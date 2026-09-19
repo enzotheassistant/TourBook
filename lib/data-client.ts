@@ -297,10 +297,11 @@ export async function deleteAttachment(attachmentId: string, scope?: ScopeInput)
   });
 }
 
-export function getAttachmentDownloadHref(attachmentId: string, scope?: ScopeInput) {
+export function getAttachmentDownloadHref(attachmentId: string, scope?: ScopeInput, variant: 'original' | 'thumbnail' = 'original') {
   const resolved = resolveScope(scope);
   const params = new URLSearchParams();
   if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  if (variant === 'thumbnail') params.set('variant', 'thumbnail');
   return `/api/dates/attachments/${attachmentId}/download?${params.toString()}`;
 }
 

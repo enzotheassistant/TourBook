@@ -75,7 +75,7 @@ function TrashIcon() {
   );
 }
 
-export function AttachmentsManager({ dateId }: { dateId: string }) {
+export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; onCountChange?: (count: number) => void }) {
   const { activeWorkspaceId, isLoading, memberships } = useAppContext();
   const [attachments, setAttachments] = useState<DateAttachment[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -87,6 +87,10 @@ export function AttachmentsManager({ dateId }: { dateId: string }) {
 
   const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
   const canManage = canCreateDates(workspaceRole);
+
+  useEffect(() => {
+    onCountChange?.(attachments.length);
+  }, [attachments, onCountChange]);
 
   useEffect(() => {
     let active = true;
@@ -231,8 +235,9 @@ export function AttachmentsManager({ dateId }: { dateId: string }) {
                 {isImageAttachment(attachment) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId })}
+                    src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId }, 'thumbnail')}
                     alt={attachment.file_name}
+                    loading="lazy"
                     className="h-full w-full object-cover"
                   />
                 ) : (

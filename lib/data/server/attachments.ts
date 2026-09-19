@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import sharp from 'sharp';
 import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
 import { getDateScoped } from '@/lib/data/server/dates';
@@ -7,6 +8,10 @@ import type { DateAttachment } from '@/lib/types/date-record';
 
 export const ATTACHMENTS_BUCKET = 'date-attachments';
 export const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB, matches the bucket's file_size_limit
+
+const THUMBNAIL_MAX_DIMENSION = 480; // px, longest side
+const THUMBNAIL_CONTENT_TYPE = 'image/webp';
+const THUMBNAIL_QUALITY = 72;
 
 const ALLOWED_CONTENT_TYPES = new Set([
   'application/pdf',
@@ -32,12 +37,15 @@ type AttachmentRow = {
   project_id: string;
   date_id: string;
   storage_path: string;
+  thumbnail_path: string | null;
   file_name: string;
   content_type: string;
   file_size: number;
   uploaded_by: string | null;
   created_at: string;
 };
+
+const ATTACHMENT_ROW_COLUMNS = 'id, workspace_id, project_id, date_id, storage_path, thumbnail_path, file_name, content_type, file_size, uploaded_by, created_at';
 
 function normalizeAttachment(row: AttachmentRow): DateAttachment {
   return {
@@ -63,6 +71,25 @@ async function requireAttachmentWriteAccess(supabase: SupabaseClient, userId: st
   await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
 }
 
+/**
+ * Best-effort thumbnail generation. Returns null (never throws) so an image
+ * sharp can't decode — e.g. some HEIC variants on a libvips build without
+ * HEIF support — just falls back to serving the original file instead of
+ * failing the whole upload.
+ */
+async function tryGenerateThumbnail(buffer: Buffer, contentType: string): Promise<Buffer | null> {
+  if (!contentType.startsWith('image/')) return null;
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize({ width: THUMBNAIL_MAX_DIMENSION, height: THUMBNAIL_MAX_DIMENSION, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: THUMBNAIL_QUALITY })
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 export async function listAttachmentsScoped(
   supabaseInput: SupabaseClient,
   userId: string,
@@ -74,7 +101,7 @@ export async function listAttachmentsScoped(
 
   const { data, error } = await supabase
     .from('date_attachments')
-    .select('id, workspace_id, project_id, date_id, storage_path, file_name, content_type, file_size, uploaded_by, created_at')
+    .select(ATTACHMENT_ROW_COLUMNS)
     .eq('workspace_id', workspaceId)
     .eq('date_id', dateId)
     .order('created_at', { ascending: true });
@@ -110,7 +137,8 @@ export async function uploadAttachmentScoped(
   }
 
   const fileName = sanitizeFileName(file.name || 'file');
-  const storagePath = `${workspaceId}/${dateId}/${randomUUID()}-${fileName}`;
+  const id = randomUUID();
+  const storagePath = `${workspaceId}/${dateId}/${id}-${fileName}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadError } = await supabase.storage
@@ -121,6 +149,18 @@ export async function uploadAttachmentScoped(
     throw new ApiError(500, uploadError.message || 'Unable to upload the file.');
   }
 
+  const thumbnailBuffer = await tryGenerateThumbnail(buffer, contentType);
+  let thumbnailPath: string | null = null;
+  if (thumbnailBuffer) {
+    thumbnailPath = `${workspaceId}/${dateId}/thumbnails/${id}.webp`;
+    const { error: thumbnailUploadError } = await supabase.storage
+      .from(ATTACHMENTS_BUCKET)
+      .upload(thumbnailPath, thumbnailBuffer, { contentType: THUMBNAIL_CONTENT_TYPE, upsert: false });
+    if (thumbnailUploadError) {
+      thumbnailPath = null; // Non-fatal — the grid falls back to the original file.
+    }
+  }
+
   const { data, error } = await supabase
     .from('date_attachments')
     .insert({
@@ -128,17 +168,19 @@ export async function uploadAttachmentScoped(
       project_id: dateRecord.project_id,
       date_id: dateId,
       storage_path: storagePath,
+      thumbnail_path: thumbnailPath,
       file_name: fileName,
       content_type: contentType,
       file_size: file.size,
       uploaded_by: userId,
     })
-    .select('id, workspace_id, project_id, date_id, storage_path, file_name, content_type, file_size, uploaded_by, created_at')
+    .select(ATTACHMENT_ROW_COLUMNS)
     .single();
 
   if (error || !data) {
-    // Clean up the orphaned storage object if the row insert failed.
-    await supabase.storage.from(ATTACHMENTS_BUCKET).remove([storagePath]);
+    // Clean up the orphaned storage objects if the row insert failed.
+    const orphaned = [storagePath, ...(thumbnailPath ? [thumbnailPath] : [])];
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove(orphaned);
     if (isMissingRelationError(error)) {
       throw new ApiError(409, 'Attachments schema is not ready yet.');
     }
@@ -156,7 +198,7 @@ async function getAttachmentRowScoped(
 ): Promise<AttachmentRow> {
   const { data, error } = await supabase
     .from('date_attachments')
-    .select('id, workspace_id, project_id, date_id, storage_path, file_name, content_type, file_size, uploaded_by, created_at')
+    .select(ATTACHMENT_ROW_COLUMNS)
     .eq('id', attachmentId)
     .eq('workspace_id', workspaceId)
     .maybeSingle();
@@ -194,7 +236,8 @@ export async function deleteAttachmentScoped(
     throw new ApiError(500, error.message);
   }
 
-  await supabase.storage.from(ATTACHMENTS_BUCKET).remove([row.storage_path]);
+  const toRemove = [row.storage_path, ...(row.thumbnail_path ? [row.thumbnail_path] : [])];
+  await supabase.storage.from(ATTACHMENTS_BUCKET).remove(toRemove);
 }
 
 export async function getAttachmentDownloadUrlScoped(
@@ -202,13 +245,17 @@ export async function getAttachmentDownloadUrlScoped(
   userId: string,
   workspaceId: string,
   attachmentId: string,
+  variant: 'original' | 'thumbnail' = 'original',
 ): Promise<{ url: string; fileName: string }> {
   const supabase = requireScopedDataClient(supabaseInput);
   const row = await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
 
+  const useThumbnail = variant === 'thumbnail' && Boolean(row.thumbnail_path);
+  const path = useThumbnail ? (row.thumbnail_path as string) : row.storage_path;
+
   const { data, error } = await supabase.storage
     .from(ATTACHMENTS_BUCKET)
-    .createSignedUrl(row.storage_path, 300, { download: row.file_name });
+    .createSignedUrl(path, 300, useThumbnail ? undefined : { download: row.file_name });
 
   if (error || !data?.signedUrl) {
     throw new ApiError(500, error?.message ?? 'Unable to generate a download link.');
