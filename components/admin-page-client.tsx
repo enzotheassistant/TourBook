@@ -1348,7 +1348,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
 
-      let attachmentSuffix = '';
       if (pendingAttachments.length) {
         const failures: string[] = [];
         for (const file of pendingAttachments) {
@@ -1358,10 +1357,25 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             failures.push(file.name);
           }
         }
-        setPendingAttachments([]);
+
         if (failures.length) {
-          attachmentSuffix = ` (failed to attach: ${failures.join(', ')})`;
+          // Don't leave a half-published date sitting around with some (or none) of its
+          // attachments actually saved. Roll back the just-created date, leave the form
+          // exactly as the user had it — including every pending file, not just the
+          // failed ones, since the retry will need to re-upload all of them — and block
+          // here with a clear error instead of reporting success.
+          if (!isEditing) {
+            try {
+              await deleteShow(show.id, { workspaceId: activeWorkspaceId });
+            } catch {
+              // Best-effort cleanup — the error below still matters even if this fails.
+            }
+          }
+          setMessage(`Couldn't attach ${failures.join(', ')}. Remove the file or try again, then save.`);
+          return;
         }
+
+        setPendingAttachments([]);
       }
 
       await loadShows();
@@ -1375,9 +1389,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       if (requestedStatus === 'draft') {
         if (isEditing) {
           const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-          router.push(buildReturnTarget(returnToUrl, nextTab, `Draft saved.${attachmentSuffix}`));
+          router.push(buildReturnTarget(returnToUrl, nextTab, 'Draft saved.'));
         } else {
-          resetForm(`Draft saved. Form cleared for the next tour day.${attachmentSuffix}`);
+          resetForm('Draft saved. Form cleared for the next tour day.');
         }
         return;
       }
@@ -1386,15 +1400,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         if (form.status === 'draft') {
           const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
           const nextMessage = returnToUrl === '/admin/drafts' ? 'Draft published.' : 'Show updated.';
-          router.push(buildReturnTarget(returnToUrl, nextTab, `${nextMessage}${attachmentSuffix}`));
+          router.push(buildReturnTarget(returnToUrl, nextTab, nextMessage));
           return;
         }
         const nextTab = isPastShow(show.date) ? 'past' : 'upcoming';
-        router.push(buildReturnTarget(returnToUrl, nextTab, `Show updated.${attachmentSuffix}`));
+        router.push(buildReturnTarget(returnToUrl, nextTab, 'Show updated.'));
         return;
       }
 
-      resetForm(`Tour day created. Form cleared for the next one.${attachmentSuffix}`);
+      resetForm('Tour day created. Form cleared for the next one.');
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.new_date',
