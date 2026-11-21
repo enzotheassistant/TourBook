@@ -137,17 +137,17 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
             onChange={(event) => setValue(event.target.value)}
             placeholder="John Doe +1"
             rows={3}
-            className="min-h-[104px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
+            className="min-h-[104px] w-full rounded-[10px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-zinc-500">Paste multiple names on separate lines to add them all at once.</p>
-            <button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-medium text-zinc-950 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="inline-flex h-11 items-center justify-center rounded-[10px] bg-accent px-5 text-sm font-medium text-zinc-950 disabled:opacity-60">
               {saving ? 'Adding...' : 'Add'}
             </button>
           </div>
         </form>
       ) : (
-        <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
+        <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-300">
           You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.
         </div>
       )}
@@ -162,19 +162,19 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
             const editing = editingId === entry.id;
             const menuOpen = openMenuId === entry.id;
             return (
-              <div key={entry.id} className="rounded-[24px] bg-black/20 px-4 py-3 text-sm">
+              <div key={entry.id} className="rounded-xl bg-black/20 px-4 py-3 text-sm">
                 {editing ? (
                   <div className="space-y-2">
                     <input
                       value={editingValue}
                       onChange={(event) => setEditingValue(event.target.value)}
-                      className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none focus:border-accent/40"
+                      className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm outline-none focus:border-accent/40"
                     />
                     <div className="flex justify-end gap-2">
-                      <button type="button" onClick={() => { setEditingId(null); setEditingValue(''); }} className="inline-flex h-10 items-center rounded-full border border-white/10 px-4 text-sm text-zinc-300">
+                      <button type="button" onClick={() => { setEditingId(null); setEditingValue(''); }} className="inline-flex h-10 items-center rounded-[10px] border border-white/10 px-4 text-sm text-zinc-300">
                         Cancel
                       </button>
-                      <button type="button" onClick={() => handleSaveEdit(entry.id)} className="inline-flex h-10 items-center rounded-full bg-accent px-4 text-sm font-medium text-zinc-950">
+                      <button type="button" onClick={() => handleSaveEdit(entry.id)} className="inline-flex h-10 items-center rounded-[10px] bg-accent px-4 text-sm font-medium text-zinc-950">
                         Save
                       </button>
                     </div>
@@ -188,7 +188,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
                           <DotsIcon />
                         </button>
                         {menuOpen ? (
-                          <div className="absolute right-0 top-full z-10 mt-2 min-w-[170px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+                          <div className="absolute right-0 top-full z-10 mt-2 min-w-[170px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl">
                             <button type="button" onClick={() => { setEditingId(entry.id); setEditingValue(entry.name); setOpenMenuId(null); }} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">
                               Edit
                             </button>

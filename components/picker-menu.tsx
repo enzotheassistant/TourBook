@@ -115,7 +115,7 @@ function PickerMenu({
             role="radio"
             aria-checked={active}
             onClick={() => onSelect(option.value)}
-            className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition focus:outline-none focus-visible:bg-white/[0.08] ${active ? 'text-zinc-50' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100'}`}
+            className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-sm transition focus:outline-none focus-visible:bg-white/[0.08] ${active ? 'text-zinc-50' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100'}`}
           >
             <span className="min-w-0 truncate">{option.label}</span>
             {active ? <span className="text-accent-light"><CheckIcon /></span> : null}
@@ -131,7 +131,7 @@ function PickerMenu({
       <div
         role="dialog"
         aria-label={title}
-        className="absolute w-[300px] max-h-[60vh] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60"
+        className="absolute w-[300px] max-h-[60vh] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-950 p-1.5 shadow-2xl shadow-black/60"
         style={anchorRect ? { top: anchorRect.top, left: anchorRect.left } : { visibility: 'hidden' }}
       >
         {list}
@@ -140,7 +140,7 @@ function PickerMenu({
   ) : (
     <div className="fixed inset-0 z-50" id={menuId} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label={`Close ${title.toLowerCase()}`} />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[82svh] flex-col rounded-t-3xl border border-white/10 bg-zinc-950 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 shadow-2xl">
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[82svh] flex-col rounded-t-2xl border border-white/10 bg-zinc-950 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 shadow-2xl">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-white/20" aria-hidden="true" />
         <p className="mb-2 px-3 text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">{title}</p>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{list}</div>

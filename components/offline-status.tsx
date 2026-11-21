@@ -33,7 +33,7 @@ export function OfflineStatus({
 
   if (!isOnline && emptyOfflineMessage) {
     return (
-      <div className="rounded-[24px] border border-amber-400/20 bg-linear-to-br from-amber-500/14 to-amber-500/7 px-4 py-4 text-sm text-amber-50 shadow-[0_18px_44px_rgba(245,158,11,0.08)]">
+      <div className="rounded-xl border border-amber-400/20 bg-linear-to-br from-amber-500/14 to-amber-500/7 px-4 py-4 text-sm text-amber-50 shadow-[0_18px_44px_rgba(245,158,11,0.08)]">
         <div className="flex items-start gap-3">
           <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" aria-hidden="true" />
           <div className="space-y-1">
@@ -51,7 +51,7 @@ export function OfflineStatus({
   const headline = !isOnline ? 'Offline' : 'Saved copy';
 
   return (
-    <div className={`rounded-[24px] border px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.16)] ${tone.wrap}`}>
+    <div className={`rounded-xl border px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.16)] ${tone.wrap}`}>
       <div className="flex items-center gap-2">
         <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${tone.pill}`}>
           <span className={`h-2 w-2 rounded-full ${tone.dot}`} aria-hidden="true" />

@@ -12,7 +12,7 @@ import { MoreIcon } from '@/components/icons';
 import { AppShellSkeleton } from '@/components/skeleton';
 
 function ghostButtonClassName() {
-  return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
+  return 'inline-flex h-10 items-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
 /** Admin header: which project you're working in. A picker when there's more than one. */
@@ -99,7 +99,7 @@ function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
         <MoreIcon />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl">
           {showAdminLink ? (
             <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
               Admin
@@ -137,7 +137,7 @@ function HeaderActionMenu({ actionHref, actionLabel, extraItems = [] }: { action
         <MoreIcon />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+        <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl">
           {extraItems.map((item) => (
             <Link
               key={item.href}

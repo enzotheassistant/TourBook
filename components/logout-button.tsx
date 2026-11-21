@@ -78,7 +78,7 @@ export function LogoutButton({ compact = false, variant }: { compact?: boolean; 
         type="button"
         onClick={handleLogout}
         disabled={isPending}
-        className={compact ? 'inline-flex h-10 w-full items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-60' : 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-60'}
+        className={compact ? 'inline-flex h-10 w-full items-center justify-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-60' : 'inline-flex h-10 items-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-60'}
       >
         {isPending ? 'Logging out…' : 'Logout'}
       </button>

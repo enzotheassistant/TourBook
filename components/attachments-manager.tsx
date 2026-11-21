@@ -163,7 +163,7 @@ function ManagedAttachmentTile({
   }
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20">
       <button
         type="button"
         onClick={onOpen}
@@ -191,15 +191,15 @@ function ManagedAttachmentTile({
               if (event.key === 'Escape') setEditing(false);
             }}
             placeholder={stripFileExtension(attachment.file_name)}
-            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
+            className="h-10 w-full rounded-[10px] border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
           />
           <p className="text-[11px] text-zinc-500">Leave empty to use the file name.</p>
           {renameError ? <p className="text-[11px] text-red-300">{renameError}</p> : null}
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-accent px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-[10px] bg-accent px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
               {saving ? 'Saving…' : 'Save'}
             </button>
-            <button type="button" onClick={() => setEditing(false)} className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-white/10 px-3 text-xs font-medium text-zinc-200">
+            <button type="button" onClick={() => setEditing(false)} className="inline-flex h-9 flex-1 items-center justify-center rounded-[10px] border border-white/10 px-3 text-xs font-medium text-zinc-200">
               Cancel
             </button>
           </div>
@@ -386,8 +386,8 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
 
       {!loaded ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="status" aria-label="Loading attachments">
-          <SkeletonBlock className="aspect-square rounded-[20px]" />
-          <SkeletonBlock className="aspect-square rounded-[20px]" />
+          <SkeletonBlock className="aspect-square rounded-xl" />
+          <SkeletonBlock className="aspect-square rounded-xl" />
         </div>
       ) : sortedAttachments.length === 0 ? (
         <p className="text-sm text-zinc-400">No attachments yet.</p>

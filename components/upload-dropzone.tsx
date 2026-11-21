@@ -16,7 +16,7 @@ function UploadIcon() {
  * outlined button. Each caller keeps its own file input and drag handlers.
  */
 export function uploadDropzoneClassName(dragActive: boolean) {
-  return `flex flex-col items-center justify-center gap-2 rounded-[24px] border border-dashed px-4 py-8 text-center transition ${dragActive ? 'border-accent/60 bg-accent/[0.06]' : 'border-white/15 bg-black/20'}`;
+  return `flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition ${dragActive ? 'border-accent/60 bg-accent/[0.06]' : 'border-white/15 bg-black/20'}`;
 }
 
 export function UploadDropzoneContent({
@@ -41,7 +41,7 @@ export function UploadDropzoneContent({
         type="button"
         onClick={onChoose}
         disabled={busy}
-        className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/25 hover:bg-white/[0.05] disabled:opacity-60"
+        className="inline-flex h-10 items-center justify-center rounded-[10px] border border-white/15 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/25 hover:bg-white/[0.05] disabled:opacity-60"
       >
         {busy ? busyLabel : buttonLabel}
       </button>

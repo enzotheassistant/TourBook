@@ -57,7 +57,7 @@ export function InviteTokenBootstrapClient({ token }: InviteTokenBootstrapClient
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-5 text-center shadow-2xl">
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white/5 p-5 text-center shadow-2xl">
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Joining your workspace…</h1>
         <p className="mt-3 text-sm text-zinc-400">One moment while we confirm your account.</p>

@@ -62,7 +62,7 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
     <Link
       href={href}
       onMouseEnter={handleMouseEnter}
-      className={`group relative block overflow-hidden rounded-[30px] border transition duration-200 active:scale-[0.99] ${
+      className={`group relative block overflow-hidden rounded-xl border transition duration-200 active:scale-[0.99] ${
         today
           ? 'border-accent/25 bg-accent/[0.065] shadow-[0_10px_36px_color-mix(in_oklab,var(--color-accent)_8%,transparent)]'
           : 'border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.055]'
@@ -75,7 +75,7 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
 
         {/* Date Rail — compact vertical pill, same on all screen sizes */}
         <div
-          className={`relative flex w-[68px] shrink-0 flex-col items-center justify-center overflow-hidden rounded-[18px] border px-2 py-3 sm:w-[72px] sm:py-3.5 ${
+          className={`relative flex w-[68px] shrink-0 flex-col items-center justify-center overflow-hidden rounded-xl border px-2 py-3 sm:w-[72px] sm:py-3.5 ${
             today ? 'border-accent-light/25 bg-accent/[0.075]' : 'border-white/10 bg-black/20'
           }`}
         >

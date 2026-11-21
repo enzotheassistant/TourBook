@@ -85,7 +85,7 @@ function MultilineText({ children }: { children: string }) {
 }
 
 function viewButtonClassName(active: boolean) {
-  return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-accent/45 bg-accent-soft text-accent-light' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
+  return `inline-flex h-11 items-center justify-center rounded-[10px] px-4 text-sm font-medium transition ${active ? 'border border-accent/45 bg-accent-soft text-accent-light' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
 function formatHeaderDate(date: string) {
@@ -267,7 +267,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     if (!showLoadingUI) return null;
     return <DaySheetSkeleton />;
   }
-  if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
+  if (!show) return <div className="rounded-xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 
   const headerMetaLine = getHeaderMetaLine(show);
   const headerSupportMeta = getHeaderSupportMeta(show);
@@ -303,7 +303,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                   </Link>
                   <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions"><MoreIcon /></button>
                   {menuOpen ? (
-                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
+                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
                       <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
                       <button type="button" onClick={handleExport} className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200">Export guest list</button>
                       <button type="button" onClick={handleDelete} className="block w-full px-4 py-3 text-left text-sm text-red-200">Delete</button>
@@ -324,8 +324,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
         {statusSource === 'live' ? null : <OfflineStatus savedAt={lastSavedAt ?? show.updated_at} source={statusSource} emptyOfflineMessage={null} />}
 
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-2">
-          <div className={`grid gap-2 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div className="rounded-xl border border-white/10 bg-white/[0.045] p-1">
+          <div className={`grid gap-1 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
             {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
           </div>
