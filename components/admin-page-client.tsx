@@ -2697,8 +2697,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             ))}
           </div>
         ) : (
-        <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-          {message ? <div className="mb-3 text-xs text-accent-light/90">{message}</div> : null}
+        <div>
+          {message ? <div className="mb-3 px-1 text-xs text-accent-light/90">{message}</div> : null}
           {isDraftsMode ? (
             <ShowListSection
               title="Drafts"
@@ -2719,18 +2719,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             />
           ) : (
             <>
-              <div className="flex flex-wrap items-start justify-end gap-3">
-                <div className="flex gap-2">
-                  <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
-                    Upcoming
-                  </Link>
-                  <Link href="/admin/dates?tab=past" className={adminTabClassName(datesTab === 'past')}>
-                    Past
-                  </Link>
-                </div>
-              </div>
-
-              <div className="mt-3">
+              <div>
                 {datesTab === 'past' ? (
                   <ShowListSection
                     title="Past dates"
@@ -2743,6 +2732,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     totalCount={pastShows.length}
                     groupedShows={pastShowsByYear}
                     stickyYears
+                    headerAction={<UpcomingPastSwitch active={datesTab} />}
                     onEdit={loadShow}
                     onExport={exportGuestList}
                     onDelete={handleDelete}
@@ -2753,6 +2743,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 ) : (
                   <ShowListSection
                     title="Upcoming dates"
+                    headerAction={<UpcomingPastSwitch active={datesTab} />}
                     search={upcomingSearch}
                     onSearchChange={setUpcomingSearch}
                     selectedTour={upcomingTour}
@@ -2771,7 +2762,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               </div>
             </>
           )}
-        </section>
+        </div>
         )
       ) : null}
     </div>
@@ -2941,18 +2932,18 @@ function ProjectManagementSection({
           </button>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
+        <div>
+          <p className="mb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
           {projects.length === 0 ? (
             <p className="text-sm text-zinc-400">No projects yet. Create your first project above.</p>
           ) : (
-            <div ref={menuRootRef} className="space-y-2">
+            <div ref={menuRootRef} className="divide-y divide-white/[0.08]">
               {projects.map((project) => {
                 const isActive = project.id === activeProjectId;
                 return (
-                  <div key={project.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <div key={project.id} className="py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-h-10 min-w-0 flex-1 text-left">
                         <p className="truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</p>
                         {isActive ? <p className="text-xs text-zinc-400">Currently selected</p> : null}
                       </button>
@@ -2960,7 +2951,7 @@ function ProjectManagementSection({
                         <button
                           type="button"
                           onClick={() => setMenuProjectId((current) => (current === project.id ? null : project.id))}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]"
+                          className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100"
                           aria-label={`Project options for ${project.name || project.slug || project.id}`}
                         >
                           <MoreIcon />
@@ -3095,7 +3086,7 @@ function TeamDirectoryCard({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+    <div className="border-t border-white/[0.08] py-3 first:border-t-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -3270,7 +3261,7 @@ function InviteManagementSection({
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="border-t border-white/10 pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
@@ -3294,8 +3285,8 @@ function InviteManagementSection({
             <p className="mt-3 text-sm text-zinc-400">No invites match this view yet.</p>
           ) : (
             <div className="mt-3 space-y-4">
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
+              <div>
+                <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
                 {visiblePendingInvites.length === 0 ? (
                   <p className="text-sm text-zinc-400">No pending invites.</p>
                 ) : (
@@ -3320,8 +3311,8 @@ function InviteManagementSection({
                 )}
               </div>
               {visibleHistoryInvites.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
+                <div>
+                  <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
                   {visibleHistoryInvites.map((invite) => {
                     return (
                       <TeamDirectoryCard
@@ -3687,7 +3678,7 @@ function TeamMembersSection({
         ) : visibleMembers.length === 0 ? (
           <p className="text-sm text-zinc-400">No accepted members match this view yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div>
             {visibleMembers.map((member) => {
               return (
                 <TeamDirectoryCard
@@ -3797,6 +3788,22 @@ function CollapsibleSection({
 }
 
 
+/** Small two-part switch for Existing Dates: Upcoming | Past. */
+function UpcomingPastSwitch({ active }: { active: 'upcoming' | 'past' }) {
+  const segment = (selected: boolean) =>
+    `inline-flex min-h-9 items-center rounded-[8px] px-3 text-sm transition ${selected ? 'bg-accent-soft font-medium text-accent-light' : 'text-zinc-400 hover:text-zinc-100'}`;
+  return (
+    <nav aria-label="Show dates" className="inline-flex shrink-0 rounded-[10px] bg-white/[0.05] p-0.5">
+      <Link href="/admin/dates?tab=upcoming" aria-current={active === 'upcoming' ? 'page' : undefined} className={segment(active === 'upcoming')}>
+        Upcoming
+      </Link>
+      <Link href="/admin/dates?tab=past" aria-current={active === 'past' ? 'page' : undefined} className={segment(active === 'past')}>
+        Past
+      </Link>
+    </nav>
+  );
+}
+
 function ShowListSection({
   title,
   search,
@@ -3815,8 +3822,11 @@ function ShowListSection({
   mode = 'dates',
   onPublish,
   loading = false,
+  headerAction,
 }: {
   title: string;
+  /** Shown at the right of the card's title row (e.g. the Upcoming / Past switch). */
+  headerAction?: ReactNode;
   search: string;
   onSearchChange: (value: string) => void;
   selectedTour: string;
@@ -3916,9 +3926,9 @@ function ShowListSection({
         : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
 
     return (
-      <div key={show.id} className="relative rounded-xl border border-white/8 bg-black/20 p-3">
+      <div key={show.id} className="relative py-3">
         <div className="flex items-start justify-between gap-3">
-          <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
+          <Link href={href} className="min-w-0 flex-1 rounded-md outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/50">
             <p className="text-xs uppercase tracking-wide tabular-nums text-zinc-400">{formatShowDate(show.date)}</p>
             <div className="mt-1 flex items-center gap-2">
               <p className="text-sm font-medium">{getAdminListPrimaryLabel(show)}</p>
@@ -3927,12 +3937,12 @@ function ShowListSection({
             {getAdminListSubLabel(show) ? <p className="text-sm text-zinc-300">{getAdminListSubLabel(show)}</p> : null}
           </Link>
 
-          <div className="flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="-mr-2 flex shrink-0 items-center gap-0.5 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
             <button
               type="button"
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => { event.stopPropagation(); onEdit(show); }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100"
               aria-label="Edit date"
             >
               <PencilIcon />
@@ -3949,7 +3959,7 @@ function ShowListSection({
                 }
                 openMenuForShow(show, event.currentTarget);
               }}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-zinc-200 transition ${menuOpen ? "border-accent-light bg-accent-soft" : "border-white/10 bg-transparent hover:border-white/20 hover:bg-white/[0.05]"}` }
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition ${menuOpen ? 'bg-accent-soft text-accent-light' : 'hover:bg-white/[0.06] hover:text-zinc-100'}`}
               aria-label="More actions"
             >
               <MoreIcon />
@@ -3963,7 +3973,10 @@ function ShowListSection({
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <div className="flex min-h-10 items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">{title}</h2>
+          {headerAction}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
             <SearchInput value={search} onChange={onSearchChange} />
@@ -3986,22 +3999,22 @@ function ShowListSection({
         </div>
       </div>
 
-      <div className="mt-3 space-y-3">
+      <div className="mt-2">
         {shows.length === 0 && loading ? (
-          <ListSkeleton rowClassName="h-20 rounded-xl" label="Loading dates" />
+          <div className="pt-2"><ListSkeleton rowClassName="h-16 rounded-xl" label="Loading dates" /></div>
         ) : shows.length === 0 ? (
-          <div className="rounded-xl bg-black/20 p-3 text-sm text-zinc-400">
+          <div className="py-4 text-sm text-zinc-400">
             {totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
           </div>
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (
-            <section key={year} className="space-y-3">
-              <div className={`border-b border-white/10 px-4 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur ${stickyYears ? 'sticky top-[96px] z-10 bg-zinc-950/95' : ''}`}>{year}</div>
-              <div className="space-y-3">{items.map((show) => renderShowListItem(show))}</div>
+            <section key={year}>
+              <div className={`border-b border-white/[0.08] pb-2 pt-4 text-sm font-medium tabular-nums text-zinc-400 ${stickyYears ? 'sticky top-[var(--app-header-h,96px)] z-10 bg-zinc-950/95 backdrop-blur' : ''}`}>{year}</div>
+              <div className="divide-y divide-white/[0.08]">{items.map((show) => renderShowListItem(show))}</div>
             </section>
           ))
         ) : (
-          shows.map((show) => renderShowListItem(show))
+          <div className="divide-y divide-white/[0.08]">{shows.map((show) => renderShowListItem(show))}</div>
         )}
       </div>
 
