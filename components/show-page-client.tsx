@@ -69,10 +69,6 @@ function getLocationTitle(show: Show) {
   return show.venue_name || 'Venue TBA';
 }
 
-function countVisibleScheduleItems(show: Show) {
-  return filterVisibleScheduleItems(show.schedule_items).length;
-}
-
 function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
@@ -124,14 +120,10 @@ function getHeaderMetaLine(show: Show) {
   ]);
 }
 
+// Just the day type under the venue. Hotel, tour name and schedule details
+// already appear in their own sections below, so repeating them here was noise.
 function getHeaderSupportMeta(show: Show) {
-  const scheduleCount = countVisibleScheduleItems(show);
-  return joinNonEmpty([
-    show.day_type === 'travel' ? 'Travel Day' : show.day_type === 'off' ? 'Off Day' : 'Show Day',
-    show.tour_name || null,
-    show.hotel_name ? `Stay: ${show.hotel_name}` : null,
-    scheduleCount > 0 ? `${scheduleCount} timeline item${scheduleCount === 1 ? '' : 's'}` : null,
-  ]);
+  return show.day_type === 'travel' ? 'Travel Day' : show.day_type === 'off' ? 'Off Day' : 'Show Day';
 }
 
 
