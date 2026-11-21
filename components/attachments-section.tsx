@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AttachmentViewer } from '@/components/attachment-viewer';
 import { FileIcon, fileExtensionLabel, formatFileSize, formatUploadedAt, hasPreviewThumbnail } from '@/components/attachments-manager';
 import { SectionCard } from '@/components/section-card';
 import { getAttachmentDownloadHref, listAttachments } from '@/lib/data-client';
+import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import { useAppContext } from '@/hooks/use-app-context';
 import type { DateAttachment } from '@/lib/types/date-record';
 
@@ -14,9 +16,12 @@ import type { DateAttachment } from '@/lib/types/date-record';
  * Renders nothing when the date has no attachments.
  */
 export function AttachmentsSection({ dateId }: { dateId: string }) {
-  const { activeWorkspaceId, isLoading } = useAppContext();
+  const { activeWorkspaceId, isLoading, memberships } = useAppContext();
   const [attachments, setAttachments] = useState<DateAttachment[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [openAttachment, setOpenAttachment] = useState<DateAttachment | null>(null);
+  // Only admins/editors get a Download button inside the viewer.
+  const canDownload = useMemo(() => canCreateDates(getWorkspaceRole(memberships, activeWorkspaceId)), [memberships, activeWorkspaceId]);
 
   useEffect(() => {
     let active = true;
@@ -49,12 +54,11 @@ export function AttachmentsSection({ dateId }: { dateId: string }) {
     <SectionCard title="Attachments">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {sortedAttachments.map((attachment) => (
-          <a
+          <button
+            type="button"
             key={attachment.id}
-            href={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId })}
-            target="_blank"
-            rel="noreferrer"
-            className="flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20"
+            onClick={() => setOpenAttachment(attachment)}
+            className="flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20 text-left"
           >
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]">
               {hasPreviewThumbnail(attachment) ? (
@@ -76,9 +80,18 @@ export function AttachmentsSection({ dateId }: { dateId: string }) {
               <p className="truncate text-xs font-medium text-zinc-100" title={attachment.file_name}>{attachment.file_name}</p>
               <p className="mt-0.5 text-[11px] text-zinc-500">{formatFileSize(attachment.file_size)} · {formatUploadedAt(attachment.created_at)}</p>
             </div>
-          </a>
+          </button>
         ))}
       </div>
+      {openAttachment ? (
+        <AttachmentViewer
+          key={openAttachment.id}
+          attachment={openAttachment}
+          workspaceId={activeWorkspaceId}
+          canDownload={canDownload}
+          onClose={() => setOpenAttachment(null)}
+        />
+      ) : null}
     </SectionCard>
   );
 }

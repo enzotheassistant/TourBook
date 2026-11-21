@@ -335,6 +335,15 @@ export async function deleteAttachment(attachmentId: string, scope?: ScopeInput)
   });
 }
 
+/** Short-lived link for showing a file inside the app (no download prompt). */
+export async function getAttachmentViewUrl(attachmentId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  params.set('mode', 'view');
+  return request<{ url: string; fileName: string; contentType: string }>(`/api/dates/attachments/${attachmentId}/download?${params.toString()}`);
+}
+
 export function getAttachmentDownloadHref(attachmentId: string, scope?: ScopeInput, variant: 'original' | 'thumbnail' = 'original') {
   const resolved = resolveScope(scope);
   const params = new URLSearchParams();

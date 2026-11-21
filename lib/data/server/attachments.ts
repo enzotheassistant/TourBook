@@ -307,7 +307,8 @@ export async function getAttachmentDownloadUrlScoped(
   workspaceId: string,
   attachmentId: string,
   variant: 'original' | 'thumbnail' = 'original',
-): Promise<{ url: string; fileName: string }> {
+  disposition: 'download' | 'inline' = 'download',
+): Promise<{ url: string; fileName: string; contentType: string }> {
   const supabase = requireScopedDataClient(supabaseInput);
   const row = await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
 
@@ -316,11 +317,13 @@ export async function getAttachmentDownloadUrlScoped(
 
   const { data, error } = await supabase.storage
     .from(ATTACHMENTS_BUCKET)
-    .createSignedUrl(path, 300, useThumbnail ? undefined : { download: row.file_name });
+    // 'inline' leaves off the download label so phones show the file instead
+    // of asking "view or download?" — used by the in-app viewer.
+    .createSignedUrl(path, 300, useThumbnail || disposition === 'inline' ? undefined : { download: row.file_name });
 
   if (error || !data?.signedUrl) {
     throw new ApiError(500, error?.message ?? 'Unable to generate a download link.');
   }
 
-  return { url: data.signedUrl, fileName: row.file_name };
+  return { url: data.signedUrl, fileName: row.file_name, contentType: row.content_type };
 }
