@@ -6,9 +6,11 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
+import { AttachmentsManager } from '@/components/attachments-manager';
+import { PendingAttachmentsPicker } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
@@ -513,6 +515,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsHasLoadedOnce, setShowsHasLoadedOnce] = useState(false);
   const [expandedSections, setExpandedSections] = useState<ExpandedSections>(defaultExpandedSections);
+  const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
+  const [attachmentCount, setAttachmentCount] = useState(0);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
@@ -1252,6 +1257,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
     setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
+    setPendingAttachments([]);
     handledLoadRef.current = null;
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/admin');
@@ -1341,6 +1347,37 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       });
 
       const show = await upsertShow(cleanedForm, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
+
+      if (pendingAttachments.length) {
+        const failures: string[] = [];
+        for (const file of pendingAttachments) {
+          try {
+            await uploadAttachment(show.id, file, { workspaceId: activeWorkspaceId });
+          } catch {
+            failures.push(file.name);
+          }
+        }
+
+        if (failures.length) {
+          // Don't leave a half-published date sitting around with some (or none) of its
+          // attachments actually saved. Roll back the just-created date, leave the form
+          // exactly as the user had it — including every pending file, not just the
+          // failed ones, since the retry will need to re-upload all of them — and block
+          // here with a clear error instead of reporting success.
+          if (!isEditing) {
+            try {
+              await deleteShow(show.id, { workspaceId: activeWorkspaceId });
+            } catch {
+              // Best-effort cleanup — the error below still matters even if this fails.
+            }
+          }
+          setMessage(`Error: ${failures.join(', ')} failed to upload`);
+          return;
+        }
+
+        setPendingAttachments([]);
+      }
+
       await loadShows();
       setDirty(false);
       setForm(ensureEditorScheduleRows(show));
@@ -1441,6 +1478,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(normalizedShow));
     setForm(normalizedShow);
     setExpandedSections(getExpandedSectionsForPopulatedForm(normalizedShow));
+    setPendingAttachments([]);
     setMessage('Loaded into editor');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1469,6 +1507,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(visibilityModesForLoadedForm(duplicated));
     setForm(duplicated);
     setExpandedSections(getExpandedSectionsForPopulatedForm(duplicated));
+    setPendingAttachments([]);
     setMessage('Date duplicated');
     setDirty(false);
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2564,6 +2603,19 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <Textarea value={form.guest_list_notes} onChange={(value) => updateField('guest_list_notes', value)} ariaLabel="Guest list notes" />
             </CollapsibleSection>
             ) : null}
+
+            <CollapsibleSection
+              title="Attachments"
+              expanded={attachmentsExpanded}
+              onExpandedChange={setAttachmentsExpanded}
+              hasContent={isEditing && form.id ? attachmentCount > 0 : pendingAttachments.length > 0}
+            >
+              {isEditing && form.id ? (
+                <AttachmentsManager dateId={form.id} onCountChange={setAttachmentCount} />
+              ) : (
+                <PendingAttachmentsPicker files={pendingAttachments} onFilesChange={setPendingAttachments} />
+              )}
+            </CollapsibleSection>
 
           </form>
         </section>

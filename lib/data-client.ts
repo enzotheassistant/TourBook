@@ -1,8 +1,10 @@
 'use client';
 
 import { mapDateRecordToShow, mapScopedGuestListEntryToLegacy, mapShowFormToDateForm } from '@/lib/adapters/date-show';
+import { prepareAttachmentUpload, THUMBNAIL_CONTENT_TYPE } from '@/lib/attachments/prepare-upload';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
+import type { DateAttachment } from '@/lib/types/date-record';
 import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
 import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
@@ -249,6 +251,96 @@ export async function exportGuestListCsv(showId: string, scope?: ScopeInput) {
   }
 
   return response.text();
+}
+
+export async function listAttachments(dateId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  return request<DateAttachment[]>(`/api/dates/${dateId}/attachments?${params.toString()}`);
+}
+
+type AttachmentUploadTicket = {
+  bucket: string;
+  attachmentId: string;
+  path: string;
+  token: string;
+  thumbnailPath: string | null;
+  thumbnailToken: string | null;
+};
+
+/**
+ * Uploads go straight from the browser to Supabase Storage rather than through
+ * our own API route, because Vercel caps request bodies at ~4.5 MB — far below
+ * the 25 MB attachment limit. Three steps:
+ *   1. ask our API for a one-time signed upload slot (it checks permissions,
+ *      file type and size, and picks the storage path),
+ *   2. upload the file (and its thumbnail) directly to that slot,
+ *   3. tell our API the upload finished; it confirms the file really landed
+ *      in Storage before recording it.
+ */
+export async function uploadAttachment(dateId: string, file: File, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+
+  const prepared = await prepareAttachmentUpload(file);
+  const fileSize = prepared.file.size;
+
+  const ticket = await request<AttachmentUploadTicket>(`/api/dates/${dateId}/attachments/upload-url?${params.toString()}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      fileName: prepared.fileName,
+      contentType: prepared.contentType,
+      fileSize,
+      withThumbnail: Boolean(prepared.thumbnail),
+    }),
+  });
+
+  const bucket = getBrowserSupabaseClient().storage.from(ticket.bucket);
+  const { error: uploadError } = await bucket.uploadToSignedUrl(ticket.path, ticket.token, prepared.file, {
+    contentType: prepared.contentType,
+  });
+  if (uploadError) {
+    throw new Error(`Unable to upload "${file.name}". Check your connection and try again.`);
+  }
+
+  let thumbnailUploaded = false;
+  if (prepared.thumbnail && ticket.thumbnailPath && ticket.thumbnailToken) {
+    const { error: thumbnailError } = await bucket.uploadToSignedUrl(ticket.thumbnailPath, ticket.thumbnailToken, prepared.thumbnail, {
+      contentType: THUMBNAIL_CONTENT_TYPE,
+    });
+    // Non-fatal: without a thumbnail the file just shows as a generic file tile.
+    thumbnailUploaded = !thumbnailError;
+  }
+
+  return request<DateAttachment>(`/api/dates/${dateId}/attachments?${params.toString()}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      attachmentId: ticket.attachmentId,
+      fileName: prepared.fileName,
+      contentType: prepared.contentType,
+      fileSize,
+      thumbnailUploaded,
+    }),
+  });
+}
+
+export async function deleteAttachment(attachmentId: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  await request<{ ok: boolean }>(`/api/dates/attachments/${attachmentId}?${params.toString()}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getAttachmentDownloadHref(attachmentId: string, scope?: ScopeInput, variant: 'original' | 'thumbnail' = 'original') {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  if (variant === 'thumbnail') params.set('variant', 'thumbnail');
+  return `/api/dates/attachments/${attachmentId}/download?${params.toString()}`;
 }
 
 export async function createWorkspace(input: { name: string; slug?: string | null }) {
