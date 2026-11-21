@@ -682,7 +682,7 @@ export function DashboardClient() {
                 Crew itinerary
               </p>
               <div className="mt-1 flex min-w-0 items-center gap-2">
-                <h2 className="flex min-w-0 items-center gap-2">
+                <h2 className="flex min-w-0 flex-1 items-center gap-2">
                   <PickerHeading
                     title="Show dates"
                     className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl"

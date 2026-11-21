@@ -27,7 +27,7 @@ function AdminProjectSelector() {
   }
 
   return (
-    <div className="flex min-w-0">
+    <div className="flex min-w-0 flex-1">
       <PickerHeading
         title="Switch project"
         className="text-sm text-zinc-300"
@@ -61,7 +61,7 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
   }
 
   return (
-    <h1 className="flex min-w-0">
+    <h1 className="flex min-w-0 flex-1">
       <PickerHeading
         title="Switch project"
         className={titleClassName}

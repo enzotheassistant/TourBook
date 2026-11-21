@@ -191,9 +191,12 @@ export function PickerHeading({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className={`group -mx-1.5 inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-xl px-1.5 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 ${className}`}
+        className="group -mx-1.5 inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-xl px-1.5 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
       >
-        <span className="min-w-0 truncate">{children}</span>
+        {/* Text styling goes on the span, not the button: globals.css sets
+            `button { font: inherit }` outside Tailwind's layers, which would
+            override text-size/weight classes placed on the button itself. */}
+        <span className={`min-w-0 truncate ${className}`}>{children}</span>
         <DropdownCaret open={open} />
       </button>
       {trailing}
