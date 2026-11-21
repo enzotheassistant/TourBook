@@ -58,7 +58,13 @@ body {
   min-width: 0;
 }
 
-button,
+/*
+ * Fields keep inheriting the page text size (16px) on purpose: iPhones zoom in
+ * when you tap a field with smaller text. This rule sits outside Tailwind's
+ * layers, so it wins over text-size classes on fields.
+ * Buttons are NOT listed here (Tailwind's own base styles already reset
+ * them), so their text-size and weight classes now work as written.
+ */
 input,
 select,
 textarea {
