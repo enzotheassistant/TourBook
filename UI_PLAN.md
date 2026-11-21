@@ -1,6 +1,6 @@
 # UI Plan — Progress
 
-Work branch: `ui-plan` (each item is its own commit). Draft pull request: #5. Preview: https://tour-book-git-ui-plan-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
+Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 branch: `ui-plan-2`, draft pull request #6, preview: https://tour-book-git-ui-plan-2-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
 
 - [x] 1.1 Day sheet section order
 - [x] 1.2 Tappable phone numbers
@@ -8,11 +8,11 @@ Work branch: `ui-plan` (each item is its own commit). Draft pull request: #5. Pr
 - [x] 1.4 Header title becomes the project switcher
 - [x] 1.5 Upcoming / Past switcher
 - [x] 1.6 Crew "…" menu Logout styling
-- [ ] 2.1 Admin mobile navigation
-- [ ] 2.2 Pinned Save Draft / Create buttons
-- [ ] 2.3 Section visibility toggle switches
-- [ ] 2.4 Team page rows
-- [ ] 2.5 "project" instead of "artist"
+- [x] 2.1 Admin mobile navigation
+- [x] 2.2 Pinned Save Draft / Create buttons
+- [x] 2.3 Section visibility toggle switches
+- [x] 2.4 Team page rows
+- [x] 2.5 "project" instead of "artist"
 - [ ] 2.6 Compact schedule editor
 - [ ] 3.1 Address fields match other inputs
 - [ ] 3.2 Matching upload boxes
@@ -35,6 +35,14 @@ Work branch: `ui-plan` (each item is its own commit). Draft pull request: #5. Pr
 - 1.5 The "←" back arrow on Past dates was removed (agreed with Phil; the picker replaces it).
 - 1.6 The admin "…" menu on phones uses the same Logout row, so it changed too.
 - Checks: GitHub CI (lint, typecheck, unit tests, build) passed on every Phase 1 commit. The app couldn't be run in Claude's workspace, so the screen-by-screen check is Phil's test on the preview link.
+- Phase 1 merged and live on 2026-11-21.
+
+**Phase 2 (in progress on `ui-plan-2`)**
+- 2.1 Phil chose to also switch the admin header's project dropdown to the Phase 1 picker (plain text when there's only one project).
+- 2.2 Pinned bar also covers editing: Update (published date) and Delete / Save / Publish (draft), per Phil.
+- 2.3 The switch shows even when a section is folded shut; the "Visible / Hidden" words were removed (Phil OK'd). Hidden sections dim to 70%.
+- 2.4 Email kept as small grey text under the name (Phil's choice). Invites keep email + expiry as a plain date. "Pending" badges kept.
+- 2.5 UI text and error messages only. Database, code names and analytics labels still say "artist". 4 unit tests updated to the new wording; all 108 pass.
 
 ---
 
