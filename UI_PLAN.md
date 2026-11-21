@@ -64,6 +64,12 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - Extra (from the plan's Phase 4 note): `button` removed from globals.css's unlayered `font: inherit` rule so button text sizes work; fields keep it (16px, no iPhone zoom).
 - 4.3 Existing Dates/Drafts: one card, divider rows, Upcoming/Past as a two-part switch in the card header. Projects: one card, divider rows. Team: member/invite rows are divider rows; invite list separated by a line.
 
+**Tweaks after Phase 4 (live 2026-11-21, from Phil's phone/desktop feedback)**
+- Pull request #11: New Date / Edit date title area is one row: "New show day" / "Edit travel day" … with Import on the right. Dropped the "NEW DATE" label and the description line. Expand / Collapse all sit in the title row on desktop and just below it on phones. Phil asked to keep the boxes, the space under the header and the section sizes as they were.
+- Pull request #12: removed the 16px spacer under the admin header (gap between the project name and the tabs ~52px → ~36px; Phil asked to "split the difference").
+
+**Next up (Phil, 2026-11-21):** choosing a new signature accent colour from options (muted, sleek, classy; nothing neon, flashy or cheap). To apply one: change `--color-accent` in app/globals.css, plus the glow colour in app/icon.tsx and app/apple-icon.tsx.
+
 ---
 
 # The plan (saved word for word)
