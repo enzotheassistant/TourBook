@@ -8,6 +8,7 @@ import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
+import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 import { useAppContext } from '@/hooks/use-app-context';
 import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -2064,7 +2065,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 <div>
                   <span className="mb-2 block text-sm text-zinc-300">Files / images</span>
                   <div
-                    className={`rounded-[24px] border border-dashed p-6 transition ${isDraggingImportFiles ? 'border-sky-400/50 bg-sky-500/10' : 'border-white/10 bg-black/10 hover:border-white/20'}`}
+                    className={importFiles.length ? `rounded-[24px] border border-dashed p-4 transition ${isDraggingImportFiles ? 'border-sky-400/60 bg-sky-500/[0.06]' : 'border-white/15 bg-black/20'}` : uploadDropzoneClassName(isDraggingImportFiles)}
                     onDragOver={handleImportDragOver}
                     onDragLeave={handleImportDragLeave}
                     onDrop={handleImportDrop}
@@ -2094,16 +2095,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                         ))}
                       </div>
                     ) : (
-                      <div className="flex min-h-[144px] flex-col items-center justify-center gap-4 text-center">
-                        <p className="text-sm text-zinc-500">Drag and drop files here</p>
-                        <button
-                          type="button"
-                          onClick={() => importFileInputRef.current?.click()}
-                          className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3.5 text-[13px] font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.09]"
-                        >
-                          Choose file
-                        </button>
-                      </div>
+                      <UploadDropzoneContent onChoose={() => importFileInputRef.current?.click()} buttonLabel="Choose files" />
                     )}
                   </div>
                 </div>

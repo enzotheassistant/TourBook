@@ -1,8 +1,9 @@
 'use client';
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ACCEPTED_FILE_TYPES, FileTypeTile, MAX_ATTACHMENT_SIZE_BYTES, TrashIcon, UploadIcon, formatFileSize } from '@/components/attachments-manager';
+import { ACCEPTED_FILE_TYPES, FileTypeTile, MAX_ATTACHMENT_SIZE_BYTES, TrashIcon, formatFileSize } from '@/components/attachments-manager';
 import { stripFileExtension } from '@/lib/attachments/display-name';
+import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 
 /**
  * Optional custom names typed for files that haven't been uploaded yet, keyed
@@ -98,18 +99,12 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`flex flex-col items-center justify-center gap-2 rounded-[24px] border border-dashed px-4 py-8 text-center transition ${dragActive ? 'border-sky-400/60 bg-sky-500/[0.06]' : 'border-white/15 bg-black/20'}`}
+        className={uploadDropzoneClassName(dragActive)}
       >
-        <div className="text-zinc-400"><UploadIcon /></div>
-        <p className="text-sm text-zinc-200">Drag files here, or</p>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex h-10 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950"
-        >
-          Choose files
-        </button>
-        <p className="text-xs text-zinc-500">PDFs, images, and docs up to 25 MB. Uploaded when you save this tour day.</p>
+        <UploadDropzoneContent
+          onChoose={() => fileInputRef.current?.click()}
+          helperText="PDFs, images, and docs up to 25 MB. Uploaded when you save this tour day."
+        />
         <input
           ref={fileInputRef}
           type="file"
