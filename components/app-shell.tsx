@@ -23,7 +23,7 @@ function AdminProjectSelector() {
   const currentName = currentProject.name || currentProject.slug || currentProject.id;
 
   if (scopedProjects.length < 2) {
-    return <p className="break-words text-sm text-zinc-400">{currentName}</p>;
+    return <p className="truncate text-sm text-zinc-400">{currentName}</p>;
   }
 
   return (
@@ -57,7 +57,7 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
   const titleClassName = 'text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl';
 
   if (!currentProject || !canSwitchProject(projects, activeWorkspaceId)) {
-    return <h1 className={`min-w-0 break-words [overflow-wrap:anywhere] ${titleClassName}`}>{title}</h1>;
+    return <h1 className={`min-w-0 flex-1 truncate ${titleClassName}`}>{title}</h1>;
   }
 
   return (
@@ -65,6 +65,7 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
       <PickerHeading
         title="Switch project"
         className={titleClassName}
+        caretClassName="h-5 w-5 sm:h-6 sm:w-6"
         options={scopedProjects.map((project) => ({ value: project.id, label: project.name || project.slug || project.id }))}
         selected={currentProject.id}
         onSelect={(projectId) => {

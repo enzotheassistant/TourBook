@@ -686,6 +686,7 @@ export function DashboardClient() {
                   <PickerHeading
                     title="Show dates"
                     className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl"
+                    caretClassName="h-5 w-5"
                     options={[{ value: 'upcoming', label: 'Upcoming dates' }, { value: 'past', label: 'Past dates' }]}
                     selected={tab}
                     onSelect={(next) => {

@@ -162,6 +162,7 @@ export function PickerHeading({
   selected,
   onSelect,
   className = '',
+  caretClassName = 'h-4 w-4',
   trailing,
 }: {
   children: ReactNode;
@@ -171,6 +172,8 @@ export function PickerHeading({
   selected: string | null;
   onSelect: (value: string) => void;
   className?: string;
+  /** Size of the arrow, so it can match the heading text (e.g. 'h-5 w-5'). */
+  caretClassName?: string;
   /** Extra content after the caret, e.g. a count badge. Not part of the button. */
   trailing?: ReactNode;
 }) {
@@ -191,19 +194,16 @@ export function PickerHeading({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="group -my-1.5 block max-w-full rounded-md py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+        className="group inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
       >
         {/* Looks like plain heading text (no box): the name, then a small arrow.
-            Long names wrap onto another line instead of being cut off.
+            One line only: the name uses all the room it has and is cut short
+            with "…" only when it truly runs out of space.
             Text styling goes on the span, not the button: globals.css sets
             `button { font: inherit }` outside Tailwind's layers, which would
             override text-size/weight classes placed on the button itself. */}
-        <span className={`break-words [overflow-wrap:anywhere] ${className}`}>
-          {children}
-          <span className="ml-1.5 inline-flex align-middle">
-            <DropdownCaret open={open} className="h-[0.8em] w-[0.8em]" />
-          </span>
-        </span>
+        <span className={`min-w-0 truncate ${className}`}>{children}</span>
+        <DropdownCaret open={open} className={caretClassName} />
       </button>
       {trailing}
       <PickerMenu
