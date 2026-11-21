@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AttachmentViewer } from '@/components/attachment-viewer';
-import { FileIcon, fileExtensionLabel, formatFileSize, formatUploadedAt, hasPreviewThumbnail } from '@/components/attachments-manager';
+import { FileIcon, fileExtensionLabel, hasPreviewThumbnail } from '@/components/attachments-manager';
 import { SectionCard } from '@/components/section-card';
 import { getAttachmentDownloadHref, listAttachments } from '@/lib/data-client';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
@@ -15,13 +15,17 @@ import type { DateAttachment } from '@/lib/types/date-record';
  * component only ever fetches and displays, for both crew and admin viewers.
  * Renders nothing when the date has no attachments.
  */
-export function AttachmentsSection({ dateId }: { dateId: string }) {
+export function AttachmentsSection({ dateId, adminMode = false }: { dateId: string; adminMode?: boolean }) {
   const { activeWorkspaceId, isLoading, memberships } = useAppContext();
   const [attachments, setAttachments] = useState<DateAttachment[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [openAttachment, setOpenAttachment] = useState<DateAttachment | null>(null);
-  // Only admins/editors get a Download button inside the viewer.
-  const canDownload = useMemo(() => canCreateDates(getWorkspaceRole(memberships, activeWorkspaceId)), [memberships, activeWorkspaceId]);
+  // Download is an admin tool: only shown on the admin day sheet, and only to
+  // admins/editors. Crew View never shows it, even to an admin previewing it.
+  const canDownload = useMemo(
+    () => adminMode && canCreateDates(getWorkspaceRole(memberships, activeWorkspaceId)),
+    [adminMode, memberships, activeWorkspaceId],
+  );
 
   useEffect(() => {
     let active = true;
@@ -78,7 +82,6 @@ export function AttachmentsSection({ dateId }: { dateId: string }) {
             </div>
             <div className="px-3 py-2">
               <p className="truncate text-xs font-medium text-zinc-100" title={attachment.file_name}>{attachment.file_name}</p>
-              <p className="mt-0.5 text-[11px] text-zinc-500">{formatFileSize(attachment.file_size)} · {formatUploadedAt(attachment.created_at)}</p>
             </div>
           </button>
         ))}
