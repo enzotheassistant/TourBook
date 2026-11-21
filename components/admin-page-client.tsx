@@ -3730,20 +3730,17 @@ function CollapsibleSection({
   onVisibilityToggle?: (value: boolean) => void;
   children: ReactNode;
 }) {
+  // Sections crew can't see are dimmed (the switch itself stays at full strength).
+  const hiddenFromCrew = visibilityState === false;
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <button type="button" onClick={() => onExpandedChange(!expanded)} className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>
           <h2 className="truncate text-base font-semibold">{title}</h2>
-          {!expanded && hasContent ? (
-            <>
-              <span className="h-2.5 w-2.5 rounded-full bg-sky-300" />
-              {typeof visibilityState === 'boolean' ? <span className="text-xs font-medium text-zinc-400">{visibilityState ? 'Visible' : 'Hidden'}</span> : null}
-            </>
-          ) : null}
+          {!expanded && hasContent ? <span className="h-2.5 w-2.5 rounded-full bg-sky-300" /> : null}
         </button>
-        <div className="flex items-center gap-2">
-          {expanded && typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} /> : null}
+        <div className="flex items-center gap-1">
+          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`Show ${title} to crew`} /> : null}
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
@@ -3754,7 +3751,7 @@ function CollapsibleSection({
           </button>
         </div>
       </div>
-      {expanded ? <div className="mt-3">{children}</div> : null}
+      {expanded ? <div className={`mt-3 transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>{children}</div> : null}
     </section>
   );
 }
@@ -4022,15 +4019,26 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
   );
 }
 
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boolean) => void }) {
+/**
+ * Sliding on/off switch for "can crew see this section?". The visible switch is
+ * small, but the button around it is 44×44px so it's easy to hit with a thumb.
+ */
+function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: (value: boolean) => void; label: string }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
       onClick={() => onToggle(!enabled)}
-      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium ${enabled ? 'border-sky-400/40 bg-sky-500/10 text-sky-200' : 'border-white/10 text-zinc-300'}`}
+      className="group -my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus:outline-none"
     >
-      <span className={`h-2.5 w-2.5 rounded-full ${enabled ? 'bg-sky-300' : 'bg-zinc-500'}`} />
-      {enabled ? 'Show' : 'Hide'}
+      <span
+        aria-hidden="true"
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 group-focus-visible:ring-2 group-focus-visible:ring-sky-400/60 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950 ${enabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
+      >
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </span>
     </button>
   );
 }
