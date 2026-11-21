@@ -31,15 +31,15 @@ export function describeTeamScope(
   if (entry.scopeType === 'workspace') {
     return {
       label: 'Full workspace access',
-      detail: 'All artists and tours in this workspace.',
+      detail: 'All projects and tours in this workspace.',
     };
   }
 
   if (entry.scopeType === 'projects') {
     const names = joinNames(entry.projectIds, projectNameById);
     return {
-      label: `${pluralize(names.length || entry.projectIds.length, 'artist')}`,
-      detail: names.length ? names.join(', ') : 'Selected artists only.',
+      label: `${pluralize(names.length || entry.projectIds.length, 'project')}`,
+      detail: names.length ? names.join(', ') : 'Selected projects only.',
     };
   }
 
@@ -53,7 +53,7 @@ export function describeTeamScope(
   if (tourNames.length) detailParts.push(tourNames.join(', '));
 
   return {
-    label: `${pluralize(tourNames.length || entry.tourIds.length, 'tour')}${artistNames.length ? ` · ${pluralize(artistNames.length, 'artist')}` : ''}`,
+    label: `${pluralize(tourNames.length || entry.tourIds.length, 'tour')}${artistNames.length ? ` · ${pluralize(artistNames.length, 'project')}` : ''}`,
     detail: detailParts.length ? detailParts.join(' • ') : 'Selected tours only.',
   };
 }

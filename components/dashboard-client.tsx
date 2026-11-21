@@ -226,7 +226,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
   const [artistName, setArtistName] = useState('');
   const [skipTour, setSkipTour] = useState(true);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
-  const [message, setMessage] = useState('Create your workspace and first artist to get started.');
+  const [message, setMessage] = useState('Create your workspace and first project to get started.');
   const [isExpanded, setIsExpanded] = useState(false);
 
   async function handleSubmit() {
@@ -241,7 +241,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
 
     if (!cleanArtist) {
       setStatus('error');
-      setMessage('First artist name is required.');
+      setMessage('First project name is required.');
       return;
     }
 
@@ -290,7 +290,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
               />
             </label>
             <label className="block text-sm text-zinc-300">
-              <span className="mb-1 block">First artist</span>
+              <span className="mb-1 block">First project</span>
               <input
                 value={artistName}
                 onChange={(event) => setArtistName(event.target.value)}
@@ -314,7 +314,7 @@ function SelfServeOnboardingPanel({ onCompleted }: { onCompleted: () => Promise<
                 disabled={status === 'loading'}
                 className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950 transition hover:bg-sky-400 disabled:opacity-60"
               >
-                {status === 'loading' ? 'Setting up…' : 'Create workspace and artist'}
+                {status === 'loading' ? 'Setting up…' : 'Create workspace and project'}
               </button>
             </div>
           </>

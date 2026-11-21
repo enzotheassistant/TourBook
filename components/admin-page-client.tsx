@@ -481,7 +481,7 @@ function validateScopeSelection(input: {
     return 'Admins must have full workspace access.';
   }
   if (input.scopeType === 'projects' && input.projectIds.length === 0) {
-    return 'Select at least one artist for project-scoped access.';
+    return 'Select at least one project for project-scoped access.';
   }
   if (input.scopeType === 'tours' && input.tourIds.length === 0) {
     return 'Select at least one tour for tour-scoped access.';
@@ -949,7 +949,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   async function handleCreateArtist() {
     if (!activeWorkspaceId || !canManageProjectActions) return;
     if (!newArtistName.trim()) {
-      setMessage('Enter an artist name to continue.');
+      setMessage('Enter a project name to continue.');
       return;
     }
 
@@ -968,7 +968,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       await refreshContext();
       setActiveProjectId(created.id);
       setNewArtistName('');
-      setMessage('Artist created. You can now create your first tour day.');
+      setMessage('Project created. You can now create your first tour day.');
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.no_artists',
@@ -978,7 +978,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         role: activeWorkspaceRole,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Unable to create artist.';
+      const reason = error instanceof Error ? error.message : 'Unable to create project.';
       setMessage(reason);
       void trackActivationEvent({
         event: 'activation.create_failure',
@@ -997,7 +997,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!activeWorkspaceId || !projectId || !canManageProjectActions) return;
     const nextName = nextNameRaw.trim();
     if (!nextName) {
-      setMessage('Enter a new artist name.');
+      setMessage('Enter a new project name.');
       return;
     }
 
@@ -1006,9 +1006,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const renamed = await renameArtist({ workspaceId: activeWorkspaceId, projectId, name: nextName });
       await refreshContext();
       setActiveProjectId(renamed.id);
-      setMessage('Artist renamed.');
+      setMessage('Project renamed.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to rename artist.');
+      setMessage(error instanceof Error ? error.message : 'Unable to rename project.');
     } finally {
       setRenamingArtist(false);
     }
@@ -1018,7 +1018,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!activeWorkspaceId || !isWorkspaceOwner) return;
     const projectName = project.name || project.slug || project.id;
     const confirmed = await requestConfirmation({
-      title: 'Delete artist?',
+      title: 'Delete project?',
       description: `Are you sure you want to delete ${projectName}? This cannot be undone.`,
       confirmLabel: 'Delete',
       tone: 'danger',
@@ -1032,9 +1032,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         const remaining = workspaceProjects.filter((item) => item.id !== project.id);
         setActiveProjectId(remaining[0]?.id ?? null);
       }
-      setMessage('Artist deleted.');
+      setMessage('Project deleted.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to delete artist.');
+      setMessage(error instanceof Error ? error.message : 'Unable to delete project.');
     }
   }
 
@@ -1337,7 +1337,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setSaving(true);
 
     try {
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
       const cleanedForm = sanitizeShowFormForDayType({
         ...form,
         id: form.id,
@@ -1544,7 +1544,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setMessage('Draft needs a valid date before it can be published.');
         return;
       }
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
       await upsertShow({ ...show, status: 'published', region: show.region.trim().toUpperCase(), tour_name: show.tour_name.trim() }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setMessage('Draft published.');
@@ -1637,7 +1637,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const textFromFiles = await buildImportTextFromFiles(importFiles);
       const combinedText = [importSourceText.trim(), textFromFiles].filter(Boolean).join('\n\n');
       if (!activeWorkspaceId || !activeProjectId) {
-        throw new Error('No active workspace or artist selected.');
+        throw new Error('No active workspace or project selected.');
       }
 
       body.append('text', combinedText);
@@ -1728,7 +1728,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     });
 
     try {
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
 
       const supabase = getBrowserSupabaseClient();
       const {
@@ -1867,9 +1867,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     return (
       <div className="space-y-3">
         <ActivationEmptyState
-          title={projectsForActiveWorkspace.length ? 'No artist selected.' : 'No artists found in this workspace.'}
+          title={projectsForActiveWorkspace.length ? 'No project selected.' : 'No projects found in this workspace.'}
           body={projectsForActiveWorkspace.length
-            ? 'Pick an artist below to activate the admin workflow for this workspace.'
+            ? 'Pick a project below to activate the admin workflow for this workspace.'
             : noArtistGuardrail.emptyBody}
           actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
           telemetry={{
@@ -1894,13 +1894,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </label>
 
           <label className="grid gap-2 text-sm text-zinc-300">
-            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artist</span>
+            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project</span>
             <select
               value=""
               onChange={(event) => handleArtistSelection(event.target.value || null)}
               className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
             >
-              <option value="">Select artist…</option>
+              <option value="">Select project…</option>
               {projectsForActiveWorkspace.map((project) => (
                 <option key={project.id} value={project.id}>{project.name || project.slug || project.id}</option>
               ))}
@@ -1958,16 +1958,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         {!projectsForActiveWorkspace.length ? (
           canManageProjectActions ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first artist</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first project</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={newArtistName}
                   onChange={(event) => setNewArtistName(event.target.value)}
-                  placeholder="Artist name"
+                  placeholder="Project name"
                   className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
                 />
                 <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
-                  {creatingArtist ? 'Creating…' : 'Create Artist'}
+                  {creatingArtist ? 'Creating…' : 'Create project'}
                 </button>
               </div>
             </div>
@@ -2870,27 +2870,22 @@ function ProjectManagementSection({
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project management</p>
-          <h2 className="mt-1 text-base font-semibold text-zinc-100">Manage artists</h2>
-        </div>
-
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             value={newArtistName}
             onChange={(event) => onNewArtistNameChange(event.target.value)}
-            placeholder="New artist name"
+            placeholder="New project name"
             className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
           />
           <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
-            {creatingArtist ? 'Creating…' : 'Create artist'}
+            {creatingArtist ? 'Creating…' : 'Create'}
           </button>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Artists in workspace</p>
+          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
           {projects.length === 0 ? (
-            <p className="text-sm text-zinc-400">No artists yet. Create your first artist above.</p>
+            <p className="text-sm text-zinc-400">No projects yet. Create your first project above.</p>
           ) : (
             <div ref={menuRootRef} className="space-y-2">
               {projects.map((project) => {
@@ -2960,7 +2955,7 @@ function ProjectManagementSection({
                 className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 px-4"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Rename artist"
+                aria-label="Rename project"
                 onClick={() => {
                   setRenameTargetId(null);
                   setRenameValue('');
@@ -2968,13 +2963,13 @@ function ProjectManagementSection({
               >
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
                   <div className="mb-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename artist</p>
-                    <h3 className="mt-1 text-base font-semibold text-zinc-100">Update artist name</h3>
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename project</p>
+                    <h3 className="mt-1 text-base font-semibold text-zinc-100">Update project name</h3>
                   </div>
                   <input
                     value={renameValue}
                     onChange={(event) => setRenameValue(event.target.value)}
-                    placeholder="Artist name"
+                    placeholder="Project name"
                     className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
                     autoFocus
                   />
@@ -3225,9 +3220,9 @@ function InviteManagementSection({
           </div>
           {contextProjectName ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-              <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} invites.</p>
+              <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} invites.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
                 <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
               </div>
             </div>
@@ -3338,7 +3333,7 @@ function TeamScopeEditor({
             }}
             className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
           />
-          <span className="block font-medium">Selected artists</span>
+          <span className="block font-medium">Selected projects</span>
         </label>
         <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
           <input
@@ -3362,9 +3357,9 @@ function TeamScopeEditor({
       {disableScopedAccess && disabledReason ? <p className="mt-3 text-sm text-zinc-500">{disabledReason}</p> : null}
 
       <div className="mt-3 space-y-2">
-        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
         {availableProjects.length === 0 ? (
-          <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
+          <p className="text-sm text-zinc-400">No projects available in this workspace.</p>
         ) : (
           availableProjects.map((project) => {
             const checked = scopeProjectIds.includes(project.id);
@@ -3395,7 +3390,7 @@ function TeamScopeEditor({
         <div className="mt-3 space-y-2">
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
           {availableTours.length === 0 ? (
-            <p className="text-sm text-zinc-400">No tours available for the selected artist scope yet.</p>
+            <p className="text-sm text-zinc-400">No tours available for the selected project scope yet.</p>
           ) : (
             availableTours.map((tour) => {
               const checked = scopeTourIds.includes(tour.id);
@@ -3618,9 +3613,9 @@ function TeamMembersSection({
 
         {contextProjectName ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-            <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} members.</p>
+            <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} members.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
               <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
             </div>
           </div>

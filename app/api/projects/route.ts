@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     return finalizeAuthResponse(NextResponse.json(created, { status: 201 }), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
-    const message = error instanceof Error ? error.message : 'Unable to create artist.';
+    const message = error instanceof Error ? error.message : 'Unable to create project.';
     return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
 }

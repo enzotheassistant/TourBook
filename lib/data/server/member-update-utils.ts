@@ -44,7 +44,7 @@ export function validateWorkspaceMemberUpdatePayload(input: {
   }
 
   if (scopeType === 'projects' && projectIds.length === 0) {
-    throw new MemberUpdateValidationError(400, 'Select at least one artist for project-scoped access.');
+    throw new MemberUpdateValidationError(400, 'Select at least one project for project-scoped access.');
   }
 
   if (scopeType === 'tours' && tourIds.length === 0) {

@@ -72,7 +72,7 @@ function requireWorkspaceId(scope?: ScopeInput) {
 function requireWorkspaceProjectScope(scope?: ScopeInput) {
   const resolved = resolveScope(scope);
   if (!resolved.workspaceId || !resolved.projectId) {
-    throw new Error('No active workspace or artist selected.');
+    throw new Error('No active workspace or project selected.');
   }
   return resolved as { workspaceId: string; projectId: string; tourId: string | null };
 }

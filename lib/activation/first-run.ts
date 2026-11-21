@@ -18,31 +18,31 @@ export function getCrewNoArtistsState(role: WorkspaceRole | null | undefined, ha
   if (hasAnyProject) {
     return canCreate
       ? {
-          title: 'No artist is active for this workspace.',
-          body: 'This workspace has artists, but none is selected in your current session. Open Admin, confirm workspace + artist, then return here.',
+          title: 'No project is active for this workspace.',
+          body: 'This workspace has projects, but none is selected in your current session. Open Admin, confirm workspace + project, then return here.',
           actions: [
             { label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
             { label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
           ],
         }
       : {
-          title: 'No artist is active for this workspace.',
-          body: 'This workspace has artists, but none are available in your current crew context yet. Ask an owner/admin/editor to check your access or publish dates.',
+          title: 'No project is active for this workspace.',
+          body: 'This workspace has projects, but none are available in your current crew context yet. Ask an owner/admin/editor to check your access or publish dates.',
           actions: [{ label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }],
         };
   }
 
   if (canCreate) {
     return {
-      title: 'No artists found in this workspace.',
-      body: 'To activate Crew dates, create the first artist in Admin. This unlocks date creation and publishing.',
+      title: 'No projects found in this workspace.',
+      body: 'To activate Crew dates, create the first project in Admin. This unlocks date creation and publishing.',
       actions: [{ label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }],
     };
   }
 
   return {
-    title: 'No artists found in this workspace.',
-    body: 'No artists are available in this workspace yet. Ask an owner/admin/editor to create the first artist in Admin, then refresh this page.',
+    title: 'No projects found in this workspace.',
+    body: 'No projects are available in this workspace yet. Ask an owner/admin/editor to create the first project in Admin, then refresh this page.',
     actions: [{ label: 'View Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }],
   };
 }
@@ -62,7 +62,7 @@ export function getCrewNoUpcomingDatesState(role: WorkspaceRole | null | undefin
   }
 
   return {
-    body: 'No upcoming dates are published for this artist yet. Ask an owner/admin/editor to create and publish the first date.',
+    body: 'No upcoming dates are published for this project yet. Ask an owner/admin/editor to create and publish the first date.',
     actions: [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }],
   };
 }
@@ -70,15 +70,15 @@ export function getCrewNoUpcomingDatesState(role: WorkspaceRole | null | undefin
 export function getAdminNoArtistsGuardrail(role: WorkspaceRole | null | undefined) {
   if (canCreateArtists(role)) {
     return {
-      emptyBody: 'Create your first artist below, then continue to create the first date.',
+      emptyBody: 'Create your first project below, then continue to create the first date.',
       helperText: null,
       showCreateArtist: true,
     };
   }
 
   return {
-    emptyBody: 'No artists exist in this workspace yet. Ask an owner/admin/editor to create the first artist.',
-    helperText: 'You have viewer access in this workspace. Artist creation is restricted to owner/admin/editor roles.',
+    emptyBody: 'No projects exist in this workspace yet. Ask an owner/admin/editor to create the first project.',
+    helperText: 'You have viewer access in this workspace. Project creation is restricted to owner/admin/editor roles.',
     showCreateArtist: false,
   };
 }
