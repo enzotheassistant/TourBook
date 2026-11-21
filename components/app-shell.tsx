@@ -76,7 +76,7 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
   );
 }
 
-function CrewMenu({ activeTab, showAdminLink }: { activeTab: 'upcoming' | 'past'; showAdminLink: boolean }) {
+function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -95,16 +95,10 @@ function CrewMenu({ activeTab, showAdminLink }: { activeTab: 'upcoming' | 'past'
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-          <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-            {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
-          </Link>
           {showAdminLink ? (
-            <>
-              <div className="border-b border-white/10" />
-              <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-                Admin
-              </Link>
-            </>
+            <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+              Admin
+            </Link>
           ) : null}
           <div className="px-2 py-2">
             <LogoutButton compact />
@@ -153,13 +147,13 @@ function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; act
 
 export function AppShell({
   children,
-  activeTab = 'upcoming',
   mode = 'crew',
   title = 'TourBook',
   subtitle = 'Touring crew dashboard',
   showSubtitle = true,
 }: {
   children: ReactNode;
+  /** No longer used by the header (Upcoming/Past is chosen from the dates heading); still accepted so callers don't change. */
   activeTab?: 'upcoming' | 'past';
   mode?: 'crew' | 'admin';
   title?: string;
@@ -220,7 +214,7 @@ export function AppShell({
               </div>
               {isCrewList ? (
                 <div className="flex shrink-0 items-center gap-2">
-                  <CrewMenu activeTab={activeTab} showAdminLink={showAdminLink} />
+                  <CrewMenu showAdminLink={showAdminLink} />
                 </div>
               ) : (
                 <>
