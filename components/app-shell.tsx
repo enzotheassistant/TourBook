@@ -96,13 +96,11 @@ function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
           {showAdminLink ? (
-            <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+            <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
               Admin
             </Link>
           ) : null}
-          <div className="px-2 py-2">
-            <LogoutButton compact />
-          </div>
+          <LogoutButton variant="menu" />
         </div>
       ) : null}
     </div>
@@ -133,12 +131,10 @@ function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; act
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-          <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+          <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
             {actionLabel}
           </Link>
-          <div className="px-2 py-2">
-            <LogoutButton compact />
-          </div>
+          <LogoutButton variant="menu" />
         </div>
       ) : null}
     </div>

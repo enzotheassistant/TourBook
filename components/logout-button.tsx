@@ -6,7 +6,12 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { clearBackupRefreshToken, clearServerSession, getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { clearOfflineCache } from '@/lib/offline-cache';
 
-export function LogoutButton({ compact = false }: { compact?: boolean }) {
+/**
+ * - default: outlined pill (desktop header)
+ * - compact: full-width outlined pill
+ * - variant="menu": a plain row that matches the other items in a … menu
+ */
+export function LogoutButton({ compact = false, variant }: { compact?: boolean; variant?: 'menu' }) {
   const router = useRouter();
   const { resetContext } = useAppContext();
   const [isPending, setIsPending] = useState(false);
@@ -49,6 +54,22 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
       setError(err instanceof Error ? err.message : 'Unable to log out right now.');
       setIsPending(false);
     }
+  }
+
+  if (variant === 'menu') {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={isPending}
+          className="block w-full px-4 py-3 text-left text-sm text-zinc-100 transition hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isPending ? 'Logging out…' : 'Logout'}
+        </button>
+        {error ? <p className="px-4 pb-3 text-xs text-rose-300">{error}</p> : null}
+      </>
+    );
   }
 
   return (
