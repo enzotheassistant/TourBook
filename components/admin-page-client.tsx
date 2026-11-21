@@ -2376,37 +2376,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <h1 className="mt-1 text-lg font-medium tracking-tight text-zinc-300">{isEditing ? `Edit ${getDayTypeBadge(form.day_type)}` : getDayTypeBadge(form.day_type)}</h1>
               <p className="mt-1 text-sm text-zinc-500">{form.day_type === 'show' ? 'Full show-day details with guest-list support.' : form.day_type === 'travel' ? 'Routing-focused itinerary entry for transit days.' : 'Simple itinerary entry for days off and reset days.'}</p>
             </div>
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <div className={`w-full flex-wrap items-center justify-end gap-2 ${isEditing ? 'hidden' : 'flex'}`}>
               <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:flex-wrap sm:overflow-visible sm:pb-0">
-                {isEditingDraft ? (
-                  <>
-                    <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
-                      Delete
-                    </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
-                      {saving ? 'Publishing...' : 'Publish'}
-                    </button>
-                  </>
-                ) : isEditing ? (
-                  <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-                    {primaryActionLabel}
+                {/* Save / Create / Update / Publish live in the pinned bar at the bottom of the form. */}
+                {!isEditing ? (
+                  <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
+                    Import
                   </button>
-                ) : (
-                  <>
-                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      Import
-                    </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Save Draft'}
-                    </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Create'}
-                    </button>
-                  </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -2620,6 +2597,38 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
           </form>
         </section>
+
+        {/* Pinned action bar: stays at the bottom of the screen while the form is on screen. */}
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/10 bg-zinc-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur sm:mx-0 sm:rounded-t-2xl sm:border-x sm:px-4">
+          <div className="flex items-center justify-end gap-2">
+            {isEditingDraft ? (
+              <>
+                <button type="button" onClick={() => handleDelete(form.id)} className={`${dangerButtonClassName()} mr-auto`}>
+                  Delete
+                </button>
+                <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} flex-1 sm:flex-none`}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                  {saving ? 'Publishing...' : 'Publish'}
+                </button>
+              </>
+            ) : isEditing ? (
+              <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                {primaryActionLabel}
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} flex-1 sm:flex-none`}>
+                  {saving ? 'Saving...' : 'Save Draft'}
+                </button>
+                <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                  {saving ? 'Saving...' : 'Create'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
         </div>
       ) : mode === 'dates' || mode === 'drafts' ? (
         showsLoading && !showsHasLoadedOnce ? (
