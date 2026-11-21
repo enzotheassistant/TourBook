@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
-import { AttachmentsManager } from '@/components/attachments-manager';
+import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -518,6 +518,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
   const [attachmentCount, setAttachmentCount] = useState(0);
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  // Last deleted schedule line, kept for a few seconds so it can be undone.
+  const [deletedLine, setDeletedLine] = useState<{ item: ShowFormValues['schedule_items'][number]; index: number } | null>(null);
+  const deletedLineTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+  }, []);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
@@ -1256,6 +1262,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     const nextModes = defaultVisibilityModes();
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
+    setDeletedLine(null);
     setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
     setPendingAttachments([]);
     handledLoadRef.current = null;
@@ -1281,10 +1288,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   function removeScheduleRow(id: string) {
+    const index = form.schedule_items.findIndex((item) => item.id === id);
+    if (index === -1) return;
+    const removed = form.schedule_items[index];
     updateForm((current) => ({
       ...current,
       schedule_items: current.schedule_items.filter((item) => item.id !== id),
     }));
+    // No "are you sure?" pop-up: offer a short Undo instead.
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+    setDeletedLine({ item: removed, index });
+    deletedLineTimerRef.current = window.setTimeout(() => setDeletedLine(null), 5000);
+  }
+
+  function undoRemoveScheduleRow() {
+    if (!deletedLine) return;
+    const { item, index } = deletedLine;
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+    setDeletedLine(null);
+    updateForm((current) => {
+      if (current.schedule_items.some((existing) => existing.id === item.id)) return current;
+      const next = [...current.schedule_items];
+      next.splice(Math.min(index, next.length), 0, item);
+      return { ...current, schedule_items: next };
+    });
   }
 
   function setSectionExpanded(section: SectionKey, expanded: boolean) {
@@ -2487,26 +2514,45 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               visibilityState={form.visibility.show_schedule}
               onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
             >
-              <div className="space-y-3">
-                {form.schedule_items.map((item, index) => (
-                  <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                      <button type="button" onClick={() => removeScheduleRow(item.id)} className={dangerButtonClassName()}>
-                        Delete
-                      </button>
-                    </div>
-                    <div className="grid gap-3 md:hidden">
-                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px]" />
-                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px]" />
-                    </div>
-                    <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-                      <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                      <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
-                    </div>
-                  </div>
-                ))}
-                <button type="button" onClick={addScheduleRow} className={secondaryButtonClassName()}>
+              <div>
+                {/* Compact rows: "LINE n" + trash on one row, Item and Time side by side
+                    underneath (stacked on very narrow phones), thin dividers between lines. */}
+                <ul className="divide-y divide-white/10">
+                  {form.schedule_items.map((item, index) => (
+                    <li key={item.id} className="py-3 first:pt-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeScheduleRow(item.id)}
+                          aria-label={`Delete line ${index + 1}`}
+                          className="-my-2.5 -mr-2.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1fr)_10rem] sm:grid-cols-[minmax(0,1fr)_13rem]">
+                        <input
+                          type="text"
+                          value={item.label}
+                          placeholder="Item"
+                          aria-label="Item"
+                          onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
+                          className={`${fieldClassName()} min-w-0`}
+                        />
+                        <input
+                          type="text"
+                          value={item.time}
+                          placeholder="Time"
+                          aria-label="Time"
+                          onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
+                          className={`${fieldClassName()} min-w-0 px-3 tabular-nums`}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3`}>
                   Add line
                 </button>
               </div>
@@ -2629,6 +2675,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             )}
           </div>
         </div>
+
+        {deletedLine ? (
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] z-30 flex justify-center px-4">
+            <div role="status" aria-live="polite" className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900 py-1 pl-4 pr-1 text-sm text-zinc-200 shadow-2xl shadow-black/60">
+              <span>Line deleted</span>
+              <span className="text-zinc-600" aria-hidden="true">·</span>
+              <button type="button" onClick={undoRemoveScheduleRow} className="inline-flex h-9 items-center rounded-full px-3 font-medium text-sky-300 transition hover:bg-white/[0.06]">
+                Undo
+              </button>
+            </div>
+          </div>
+        ) : null}
         </div>
       ) : mode === 'dates' || mode === 'drafts' ? (
         showsLoading && !showsHasLoadedOnce ? (
