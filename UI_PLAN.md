@@ -68,7 +68,7 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - Pull request #11: New Date / Edit date title area is one row: "New show day" / "Edit travel day" … with Import on the right. Dropped the "NEW DATE" label and the description line. Expand / Collapse all sit in the title row on desktop and just below it on phones. Phil asked to keep the boxes, the space under the header and the section sizes as they were.
 - Pull request #12: removed the 16px spacer under the admin header (gap between the project name and the tabs ~52px → ~36px; Phil asked to "split the difference").
 
-**Next up (Phil, 2026-11-21):** choosing a new signature accent colour from options (muted, sleek, classy; nothing neon, flashy or cheap). To apply one: change `--color-accent` in app/globals.css, plus the glow colour in app/icon.tsx and app/apple-icon.tsx.
+**New accent colour (live 2026-11-21):** Phil compared options (Steel, an in-between blue, Brass, Sage, Heather, Bone, Oxblood, deep Olive) and chose **Steel**, `oklch(72% 0.065 245)`: today's blue toned way down, so it no longer looks like Apple's iOS blue. Applied in app/globals.css (`--color-accent`) and the glow in app/icon.tsx and app/apple-icon.tsx. Oxblood was ruled out because it's too close to the Delete/error red. To change it again later, edit those same three places.
 
 ---
 

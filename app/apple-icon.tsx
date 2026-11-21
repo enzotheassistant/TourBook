@@ -18,9 +18,9 @@ export default function AppleIcon() {
           alignItems: 'center',
           justifyContent: 'center',
           background:
-            // Glow uses the accent colour (sky-500). Image generation can't read the
+            // Glow uses the accent colour (Steel, oklch(72% 0.065 245)). Image generation can't read the
             // CSS --color-accent variable, so update this too if the accent changes.
-            'radial-gradient(circle at top, rgba(0,166,244,0.26), transparent 40%), linear-gradient(180deg, #111827 0%, #05070b 100%)',
+            'radial-gradient(circle at top, rgba(131,169,203,0.26), transparent 40%), linear-gradient(180deg, #111827 0%, #05070b 100%)',
           color: '#f8fafc',
           fontSize: 88,
           fontWeight: 800,
