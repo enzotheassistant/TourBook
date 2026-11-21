@@ -278,7 +278,8 @@ export function AppShell({
             </div>
           )}
           {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
-          {mode === 'admin' ? <div className="py-2" /> : null}
+          {/* Admin: small gap under the header before the tabs (was a 16px spacer; halved per Phil). */}
+          {mode === 'admin' ? <div className="py-1" /> : null}
         </div>
       </header>
 
