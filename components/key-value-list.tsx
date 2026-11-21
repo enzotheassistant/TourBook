@@ -33,7 +33,7 @@ export function KeyValueList({
       {visibleItems.map((item, index) => (
         <div key={`${item.label}-${item.value}-${index}`} className="flex items-start justify-between gap-4 border-b border-white/5 pb-3 last:border-b-0 last:pb-0">
           <dt className="text-zinc-400">{item.label || '—'}</dt>
-          <dd className="text-right text-zinc-100">
+          <dd className="text-right tabular-nums text-zinc-100">
             {item.value && item.href ? (
               <a href={item.href} className="-my-2 inline-block break-words py-2 text-accent-light underline underline-offset-4">{item.value}</a>
             ) : (

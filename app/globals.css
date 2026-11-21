@@ -10,6 +10,11 @@
  *   bg-accent-hover                main button hover
  * Red is kept for Delete / Remove / Revoke and error messages only.
  */
+@theme {
+  /* Geist (loaded in app/layout.tsx) for all text, with system fonts as backup. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 @theme static {
   --color-accent: oklch(68.5% 0.169 237.323); /* current blue (Tailwind sky-500) */
   --color-accent-hover: color-mix(in oklab, var(--color-accent) 82%, white);

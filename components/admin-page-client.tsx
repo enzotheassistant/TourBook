@@ -3919,7 +3919,7 @@ function ShowListSection({
       <div key={show.id} className="relative rounded-2xl border border-white/8 bg-black/20 p-3">
         <div className="flex items-start justify-between gap-3">
           <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
-            <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
+            <p className="text-xs uppercase tracking-wide tabular-nums text-zinc-400">{formatShowDate(show.date)}</p>
             <div className="mt-1 flex items-center gap-2">
               <p className="text-sm font-medium">{getAdminListPrimaryLabel(show)}</p>
               {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}

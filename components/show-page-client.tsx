@@ -292,7 +292,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
           <div className="min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">{formatHeaderDate(show.date)}</h1>
+                <h1 className="truncate text-xl font-semibold tabular-nums tracking-tight text-zinc-50 sm:text-2xl">{formatHeaderDate(show.date)}</h1>
                 {headerMetaLine ? <p className="mt-1 truncate text-sm text-zinc-200 sm:text-[15px]">{headerMetaLine}</p> : null}
                 {headerSupportMeta ? <p className="mt-1 truncate text-[11px] uppercase tracking-[0.16em] text-zinc-500">{headerSupportMeta}</p> : null}
               </div>

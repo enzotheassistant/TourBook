@@ -94,7 +94,7 @@ export function ShowCard({ show, tab = 'upcoming' }: { show: Show; tab?: 'upcomi
             {dateBlock.month}
           </span>
 
-          <span className="mt-0.5 text-[1.9rem] font-semibold leading-none tracking-[-0.05em] text-zinc-50">
+          <span className="mt-0.5 text-[1.9rem] font-semibold tabular-nums leading-none tracking-[-0.05em] text-zinc-50">
             {dateBlock.day}
           </span>
 
