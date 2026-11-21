@@ -18,9 +18,9 @@ export default function Icon() {
           alignItems: 'center',
           justifyContent: 'center',
           background:
-            // Glow uses the accent colour (Steel, oklch(72% 0.065 245)). Image generation can't read the
+            // Glow uses the accent colour (in-between blue, oklch(70% 0.11 243)). Image generation can't read the
             // CSS --color-accent variable, so update this too if the accent changes.
-            'radial-gradient(circle at top, rgba(131,169,203,0.3), transparent 42%), linear-gradient(180deg, #111827 0%, #05070b 100%)',
+            'radial-gradient(circle at top, rgba(92,166,221,0.3), transparent 42%), linear-gradient(180deg, #111827 0%, #05070b 100%)',
           color: '#f8fafc',
           fontSize: 240,
           fontWeight: 800,
