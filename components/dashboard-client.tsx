@@ -722,7 +722,7 @@ export function DashboardClient() {
           <div className="space-y-6">
             {pastByYear.map(([year, items]) => (
               <section key={year} className="space-y-3">
-                <div className="sticky top-[100px] z-10 flex items-center gap-3 bg-zinc-950/92 py-1.5 backdrop-blur">
+                <div className="sticky top-[var(--app-header-h,100px)] z-10 flex items-center gap-3 bg-zinc-950/92 py-1.5 backdrop-blur">
                   <div className="h-px flex-1 bg-white/10" aria-hidden="true" />
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">{year}</span>
                   <div className="h-px flex-1 bg-white/10" aria-hidden="true" />
