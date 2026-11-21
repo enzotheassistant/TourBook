@@ -6,8 +6,10 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteAttachment, getAttachmentDownloadHref, listAttachments, renameAttachment, uploadAttachment } from '@/lib/data-client';
 import { attachmentDisplayName, compareAttachmentsByName, stripFileExtension } from '@/lib/attachments/display-name';
 import { useAppContext } from '@/hooks/use-app-context';
+import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import type { DateAttachment } from '@/lib/types/date-record';
+import { SkeletonBlock } from '@/components/skeleton';
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 export const ACCEPTED_FILE_TYPES = [
@@ -54,15 +56,6 @@ export function fileExtensionLabel(attachment: DateAttachment) {
   const parts = attachment.file_name.split('.');
   if (parts.length < 2) return 'FILE';
   return parts[parts.length - 1].slice(0, 4).toUpperCase();
-}
-
-export function UploadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-6 w-6">
-      <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 16V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 export function FileIcon({ className = 'h-6 w-6' }: { className?: string }) {
@@ -198,12 +191,12 @@ function ManagedAttachmentTile({
               if (event.key === 'Escape') setEditing(false);
             }}
             placeholder={stripFileExtension(attachment.file_name)}
-            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/50"
+            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
           />
           <p className="text-[11px] text-zinc-500">Leave empty to use the file name.</p>
-          {renameError ? <p className="text-[11px] text-rose-300">{renameError}</p> : null}
+          {renameError ? <p className="text-[11px] text-red-300">{renameError}</p> : null}
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-sky-500 px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-accent px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button type="button" onClick={() => setEditing(false)} className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-white/10 px-3 text-xs font-medium text-zinc-200">
@@ -361,19 +354,13 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          className={`flex flex-col items-center justify-center gap-2 rounded-[24px] border border-dashed px-4 py-8 text-center transition ${dragActive ? 'border-sky-400/60 bg-sky-500/[0.06]' : 'border-white/15 bg-black/20'}`}
+          className={uploadDropzoneClassName(dragActive)}
         >
-          <div className="text-zinc-400"><UploadIcon /></div>
-          <p className="text-sm text-zinc-200">Drag files here, or</p>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="inline-flex h-10 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950 disabled:opacity-60"
-          >
-            {uploading ? 'Uploading…' : 'Choose files'}
-          </button>
-          <p className="text-xs text-zinc-500">PDFs, images, and docs up to 25 MB.</p>
+          <UploadDropzoneContent
+            onChoose={() => fileInputRef.current?.click()}
+            busy={uploading}
+            helperText="PDFs, images, and docs up to 25 MB."
+          />
           <input
             ref={fileInputRef}
             type="file"
@@ -385,7 +372,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
         </div>
       ) : null}
 
-      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
       {openAttachment ? (
         <AttachmentViewer
@@ -398,7 +385,10 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
       ) : null}
 
       {!loaded ? (
-        <p className="text-sm text-zinc-400">Loading attachments…</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="status" aria-label="Loading attachments">
+          <SkeletonBlock className="aspect-square rounded-[20px]" />
+          <SkeletonBlock className="aspect-square rounded-[20px]" />
+        </div>
       ) : sortedAttachments.length === 0 ? (
         <p className="text-sm text-zinc-400">No attachments yet.</p>
       ) : (

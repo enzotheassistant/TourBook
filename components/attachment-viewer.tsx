@@ -73,7 +73,7 @@ function OpenFileButton({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex h-11 items-center justify-center rounded-full bg-sky-500 px-5 text-sm font-medium text-zinc-950"
+      className="inline-flex h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-medium text-zinc-950"
     >
       Open file
     </a>

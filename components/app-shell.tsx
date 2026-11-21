@@ -8,6 +8,8 @@ import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
 import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
+import { MoreIcon } from '@/components/icons';
+import { AppShellSkeleton } from '@/components/skeleton';
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
@@ -94,7 +96,7 @@ function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((v) => !v)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-xl text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Open menu">
-        …
+        <MoreIcon />
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
@@ -132,7 +134,7 @@ function HeaderActionMenu({ actionHref, actionLabel, extraItems = [] }: { action
         className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-xl text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]"
         aria-label="Open account menu"
       >
-        …
+        <MoreIcon />
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
@@ -141,11 +143,11 @@ function HeaderActionMenu({ actionHref, actionLabel, extraItems = [] }: { action
               key={item.href}
               href={item.href}
               aria-current={item.active ? 'page' : undefined}
-              className={`flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-sm transition hover:bg-white/[0.04] ${item.active ? 'text-sky-200' : 'text-zinc-100'}`}
+              className={`flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-sm transition hover:bg-white/[0.04] ${item.active ? 'text-accent-light' : 'text-zinc-100'}`}
               onClick={() => setOpen(false)}
             >
               {item.label}
-              {item.active ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" aria-hidden="true" /> : null}
+              {item.active ? <span className="h-1.5 w-1.5 rounded-full bg-accent-light" aria-hidden="true" /> : null}
             </Link>
           ))}
           {extraItems.length ? <div className="border-b border-white/10" aria-hidden="true" /> : null}
@@ -213,8 +215,10 @@ export function AppShell({
   if (!user && !isLoading) {
     return null;
   }
+  // While sign-in is being checked, show placeholder boxes instead of a blank screen.
+  // (No account data is shown, so nothing protected can flash.)
   if (isLoading) {
-    return null;
+    return <AppShellSkeleton mode={mode} />;
   }
 
   return (

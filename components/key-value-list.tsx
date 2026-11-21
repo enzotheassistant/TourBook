@@ -35,7 +35,7 @@ export function KeyValueList({
           <dt className="text-zinc-400">{item.label || '—'}</dt>
           <dd className="text-right text-zinc-100">
             {item.value && item.href ? (
-              <a href={item.href} className="-my-2 inline-block break-words py-2 text-sky-300 underline underline-offset-4">{item.value}</a>
+              <a href={item.href} className="-my-2 inline-block break-words py-2 text-accent-light underline underline-offset-4">{item.value}</a>
             ) : (
               item.value || '—'
             )}

@@ -1,8 +1,9 @@
 'use client';
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ACCEPTED_FILE_TYPES, FileTypeTile, MAX_ATTACHMENT_SIZE_BYTES, TrashIcon, UploadIcon, formatFileSize } from '@/components/attachments-manager';
+import { ACCEPTED_FILE_TYPES, FileTypeTile, MAX_ATTACHMENT_SIZE_BYTES, TrashIcon, formatFileSize } from '@/components/attachments-manager';
 import { stripFileExtension } from '@/lib/attachments/display-name';
+import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 
 /**
  * Optional custom names typed for files that haven't been uploaded yet, keyed
@@ -98,18 +99,12 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`flex flex-col items-center justify-center gap-2 rounded-[24px] border border-dashed px-4 py-8 text-center transition ${dragActive ? 'border-sky-400/60 bg-sky-500/[0.06]' : 'border-white/15 bg-black/20'}`}
+        className={uploadDropzoneClassName(dragActive)}
       >
-        <div className="text-zinc-400"><UploadIcon /></div>
-        <p className="text-sm text-zinc-200">Drag files here, or</p>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex h-10 items-center justify-center rounded-full bg-sky-500 px-4 text-sm font-medium text-zinc-950"
-        >
-          Choose files
-        </button>
-        <p className="text-xs text-zinc-500">PDFs, images, and docs up to 25 MB. Uploaded when you save this tour day.</p>
+        <UploadDropzoneContent
+          onChoose={() => fileInputRef.current?.click()}
+          helperText="PDFs, images, and docs up to 25 MB. Uploaded when you save this tour day."
+        />
         <input
           ref={fileInputRef}
           type="file"
@@ -120,7 +115,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
         />
       </div>
 
-      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
       {files.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -142,7 +137,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
                     maxLength={120}
                     onChange={(event) => setDisplayName(file, event.target.value)}
                     placeholder={stripFileExtension(file.name)}
-                    className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/50"
+                    className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
                   />
                   <p className="mt-1 truncate text-[11px] text-zinc-500" title={file.name}>{formatFileSize(file.size)} · name optional</p>
                 </div>

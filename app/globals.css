@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/*
+ * THE ACCENT COLOUR — defined once. To re-colour the whole app, change the
+ * value on the --color-accent line (any CSS colour). Everything else is
+ * worked out from it:
+ *   bg-accent / border-accent ...  full colour: main buttons, switches when on
+ *   bg-accent-soft                 soft, dimmed: background of the selected tab
+ *   text-accent-light              lighter: links (addresses), text on soft backgrounds
+ *   bg-accent-hover                main button hover
+ * Red is kept for Delete / Remove / Revoke and error messages only.
+ */
+@theme static {
+  --color-accent: oklch(68.5% 0.169 237.323); /* current blue (Tailwind sky-500) */
+  --color-accent-hover: color-mix(in oklab, var(--color-accent) 82%, white);
+  --color-accent-soft: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  --color-accent-light: color-mix(in oklab, var(--color-accent) 55%, white);
+}
+
 :root {
   color-scheme: dark;
   -webkit-tap-highlight-color: transparent;
@@ -23,7 +40,6 @@ body {
   min-height: 100vh;
   width: 100%;
   background:
-    radial-gradient(circle at top, rgba(16, 185, 129, 0.12), transparent 24%),
     linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 18%),
     #07090d;
   color: #fafafa;
@@ -54,6 +70,6 @@ a {
 }
 
 ::selection {
-  background: rgba(16, 185, 129, 0.35);
+  background: color-mix(in oklab, var(--color-accent) 35%, transparent);
   color: #f8fafc;
 }
