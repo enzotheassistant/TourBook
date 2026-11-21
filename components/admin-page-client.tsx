@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
-import { AttachmentsManager } from '@/components/attachments-manager';
+import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -23,7 +23,7 @@ import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
-import { buildAcceptedTeamDirectory, describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
+import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 
 function slugify(value: string) {
@@ -481,7 +481,7 @@ function validateScopeSelection(input: {
     return 'Admins must have full workspace access.';
   }
   if (input.scopeType === 'projects' && input.projectIds.length === 0) {
-    return 'Select at least one artist for project-scoped access.';
+    return 'Select at least one project for project-scoped access.';
   }
   if (input.scopeType === 'tours' && input.tourIds.length === 0) {
     return 'Select at least one tour for tour-scoped access.';
@@ -518,6 +518,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [attachmentsExpanded, setAttachmentsExpanded] = useState(true);
   const [attachmentCount, setAttachmentCount] = useState(0);
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  // Last deleted schedule line, kept for a few seconds so it can be undone.
+  const [deletedLine, setDeletedLine] = useState<{ item: ShowFormValues['schedule_items'][number]; index: number } | null>(null);
+  const deletedLineTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+  }, []);
   const [visibilityModes, setVisibilityModes] = useState<VisibilityModeMap>(() => defaultVisibilityModes());
   const [form, setForm] = useState<ShowFormValues>(() => applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, defaultVisibilityModes()));
   const [message, setMessage] = useState('');
@@ -949,7 +955,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   async function handleCreateArtist() {
     if (!activeWorkspaceId || !canManageProjectActions) return;
     if (!newArtistName.trim()) {
-      setMessage('Enter an artist name to continue.');
+      setMessage('Enter a project name to continue.');
       return;
     }
 
@@ -968,7 +974,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       await refreshContext();
       setActiveProjectId(created.id);
       setNewArtistName('');
-      setMessage('Artist created. You can now create your first tour day.');
+      setMessage('Project created. You can now create your first tour day.');
       void trackActivationEvent({
         event: 'activation.create_success',
         stateType: 'admin.no_artists',
@@ -978,7 +984,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         role: activeWorkspaceRole,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Unable to create artist.';
+      const reason = error instanceof Error ? error.message : 'Unable to create project.';
       setMessage(reason);
       void trackActivationEvent({
         event: 'activation.create_failure',
@@ -997,7 +1003,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!activeWorkspaceId || !projectId || !canManageProjectActions) return;
     const nextName = nextNameRaw.trim();
     if (!nextName) {
-      setMessage('Enter a new artist name.');
+      setMessage('Enter a new project name.');
       return;
     }
 
@@ -1006,9 +1012,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const renamed = await renameArtist({ workspaceId: activeWorkspaceId, projectId, name: nextName });
       await refreshContext();
       setActiveProjectId(renamed.id);
-      setMessage('Artist renamed.');
+      setMessage('Project renamed.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to rename artist.');
+      setMessage(error instanceof Error ? error.message : 'Unable to rename project.');
     } finally {
       setRenamingArtist(false);
     }
@@ -1018,7 +1024,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!activeWorkspaceId || !isWorkspaceOwner) return;
     const projectName = project.name || project.slug || project.id;
     const confirmed = await requestConfirmation({
-      title: 'Delete artist?',
+      title: 'Delete project?',
       description: `Are you sure you want to delete ${projectName}? This cannot be undone.`,
       confirmLabel: 'Delete',
       tone: 'danger',
@@ -1032,9 +1038,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         const remaining = workspaceProjects.filter((item) => item.id !== project.id);
         setActiveProjectId(remaining[0]?.id ?? null);
       }
-      setMessage('Artist deleted.');
+      setMessage('Project deleted.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to delete artist.');
+      setMessage(error instanceof Error ? error.message : 'Unable to delete project.');
     }
   }
 
@@ -1256,6 +1262,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     const nextModes = defaultVisibilityModes();
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
+    setDeletedLine(null);
     setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
     setPendingAttachments([]);
     handledLoadRef.current = null;
@@ -1281,10 +1288,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   function removeScheduleRow(id: string) {
+    const index = form.schedule_items.findIndex((item) => item.id === id);
+    if (index === -1) return;
+    const removed = form.schedule_items[index];
     updateForm((current) => ({
       ...current,
       schedule_items: current.schedule_items.filter((item) => item.id !== id),
     }));
+    // No "are you sure?" pop-up: offer a short Undo instead.
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+    setDeletedLine({ item: removed, index });
+    deletedLineTimerRef.current = window.setTimeout(() => setDeletedLine(null), 5000);
+  }
+
+  function undoRemoveScheduleRow() {
+    if (!deletedLine) return;
+    const { item, index } = deletedLine;
+    if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
+    setDeletedLine(null);
+    updateForm((current) => {
+      if (current.schedule_items.some((existing) => existing.id === item.id)) return current;
+      const next = [...current.schedule_items];
+      next.splice(Math.min(index, next.length), 0, item);
+      return { ...current, schedule_items: next };
+    });
   }
 
   function setSectionExpanded(section: SectionKey, expanded: boolean) {
@@ -1337,7 +1364,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setSaving(true);
 
     try {
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
       const cleanedForm = sanitizeShowFormForDayType({
         ...form,
         id: form.id,
@@ -1544,7 +1571,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setMessage('Draft needs a valid date before it can be published.');
         return;
       }
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
       await upsertShow({ ...show, status: 'published', region: show.region.trim().toUpperCase(), tour_name: show.tour_name.trim() }, { workspaceId: activeWorkspaceId, projectId: activeProjectId });
       await loadShows();
       setMessage('Draft published.');
@@ -1637,7 +1664,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const textFromFiles = await buildImportTextFromFiles(importFiles);
       const combinedText = [importSourceText.trim(), textFromFiles].filter(Boolean).join('\n\n');
       if (!activeWorkspaceId || !activeProjectId) {
-        throw new Error('No active workspace or artist selected.');
+        throw new Error('No active workspace or project selected.');
       }
 
       body.append('text', combinedText);
@@ -1728,7 +1755,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     });
 
     try {
-      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or artist selected.');
+      if (!activeWorkspaceId || !activeProjectId) throw new Error('No active workspace or project selected.');
 
       const supabase = getBrowserSupabaseClient();
       const {
@@ -1867,9 +1894,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     return (
       <div className="space-y-3">
         <ActivationEmptyState
-          title={projectsForActiveWorkspace.length ? 'No artist selected.' : 'No artists found in this workspace.'}
+          title={projectsForActiveWorkspace.length ? 'No project selected.' : 'No projects found in this workspace.'}
           body={projectsForActiveWorkspace.length
-            ? 'Pick an artist below to activate the admin workflow for this workspace.'
+            ? 'Pick a project below to activate the admin workflow for this workspace.'
             : noArtistGuardrail.emptyBody}
           actions={[{ label: 'Go to Crew View', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
           telemetry={{
@@ -1894,13 +1921,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </label>
 
           <label className="grid gap-2 text-sm text-zinc-300">
-            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artist</span>
+            <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project</span>
             <select
               value=""
               onChange={(event) => handleArtistSelection(event.target.value || null)}
               className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
             >
-              <option value="">Select artist…</option>
+              <option value="">Select project…</option>
               {projectsForActiveWorkspace.map((project) => (
                 <option key={project.id} value={project.id}>{project.name || project.slug || project.id}</option>
               ))}
@@ -1958,16 +1985,16 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         {!projectsForActiveWorkspace.length ? (
           canManageProjectActions ? (
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first artist</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first project</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={newArtistName}
                   onChange={(event) => setNewArtistName(event.target.value)}
-                  placeholder="Artist name"
+                  placeholder="Project name"
                   className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-sky-400/40"
                 />
                 <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
-                  {creatingArtist ? 'Creating…' : 'Create Artist'}
+                  {creatingArtist ? 'Creating…' : 'Create project'}
                 </button>
               </div>
             </div>
@@ -2286,10 +2313,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           <>
             <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
             <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
-            <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+            {/* Phones: Team and Projects live in the header's … menu instead. */}
+            <Link href="/admin/team" className={`${adminTabClassName(isTeamMode)} max-sm:hidden`}>
               Team
             </Link>
-            <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+            <Link href="/admin/projects" className={`${adminTabClassName(isProjectsMode)} max-sm:hidden`}>
               Projects
             </Link>
           </>
@@ -2375,37 +2403,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               <h1 className="mt-1 text-lg font-medium tracking-tight text-zinc-300">{isEditing ? `Edit ${getDayTypeBadge(form.day_type)}` : getDayTypeBadge(form.day_type)}</h1>
               <p className="mt-1 text-sm text-zinc-500">{form.day_type === 'show' ? 'Full show-day details with guest-list support.' : form.day_type === 'travel' ? 'Routing-focused itinerary entry for transit days.' : 'Simple itinerary entry for days off and reset days.'}</p>
             </div>
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <div className={`w-full flex-wrap items-center justify-end gap-2 ${isEditing ? 'hidden' : 'flex'}`}>
               <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:flex-wrap sm:overflow-visible sm:pb-0">
-                {isEditingDraft ? (
-                  <>
-                    <button type="button" onClick={() => handleDelete(form.id)} className={dangerButtonClassName()}>
-                      Delete
-                    </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 px-3 text-[13px] sm:h-11 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={primaryButtonClassName()}>
-                      {saving ? 'Publishing...' : 'Publish'}
-                    </button>
-                  </>
-                ) : isEditing ? (
-                  <button type="submit" form="admin-show-form" disabled={saving} className={primaryButtonClassName()}>
-                    {primaryActionLabel}
+                {/* Save / Create / Update / Publish live in the pinned bar at the bottom of the form. */}
+                {!isEditing ? (
+                  <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
+                    Import
                   </button>
-                ) : (
-                  <>
-                    <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      Import
-                    </button>
-                    <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Save Draft'}
-                    </button>
-                    <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} h-10 min-w-[7rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                      {saving ? 'Saving...' : 'Create'}
-                    </button>
-                  </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -2509,26 +2514,45 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               visibilityState={form.visibility.show_schedule}
               onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
             >
-              <div className="space-y-3">
-                {form.schedule_items.map((item, index) => (
-                  <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                      <button type="button" onClick={() => removeScheduleRow(item.id)} className={dangerButtonClassName()}>
-                        Delete
-                      </button>
-                    </div>
-                    <div className="grid gap-3 md:hidden">
-                      <InlineInput label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} labelWidthClassName="w-[56px]" />
-                      <InlineInput label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} labelWidthClassName="w-[56px]" />
-                    </div>
-                    <div className="hidden gap-3 md:grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-                      <Input label="Label" value={item.label} onChange={(value) => updateScheduleItem(item.id, 'label', value)} />
-                      <Input label="Time" value={item.time} onChange={(value) => updateScheduleItem(item.id, 'time', value)} />
-                    </div>
-                  </div>
-                ))}
-                <button type="button" onClick={addScheduleRow} className={secondaryButtonClassName()}>
+              <div>
+                {/* Compact rows: "LINE n" + trash on one row, Item and Time side by side
+                    underneath (stacked on very narrow phones), thin dividers between lines. */}
+                <ul className="divide-y divide-white/10">
+                  {form.schedule_items.map((item, index) => (
+                    <li key={item.id} className="py-3 first:pt-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeScheduleRow(item.id)}
+                          aria-label={`Delete line ${index + 1}`}
+                          className="-my-2.5 -mr-2.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1fr)_10rem] sm:grid-cols-[minmax(0,1fr)_13rem]">
+                        <input
+                          type="text"
+                          value={item.label}
+                          placeholder="Item"
+                          aria-label="Item"
+                          onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
+                          className={`${fieldClassName()} min-w-0`}
+                        />
+                        <input
+                          type="text"
+                          value={item.time}
+                          placeholder="Time"
+                          aria-label="Time"
+                          onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
+                          className={`${fieldClassName()} min-w-0 px-3 tabular-nums`}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3`}>
                   Add line
                 </button>
               </div>
@@ -2619,6 +2643,50 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
           </form>
         </section>
+
+        {/* Pinned action bar: stays at the bottom of the screen while the form is on screen. */}
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/10 bg-zinc-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur sm:mx-0 sm:rounded-t-2xl sm:border-x sm:px-4">
+          <div className="flex items-center justify-end gap-2">
+            {isEditingDraft ? (
+              <>
+                <button type="button" onClick={() => handleDelete(form.id)} className={`${dangerButtonClassName()} mr-auto`}>
+                  Delete
+                </button>
+                <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} flex-1 sm:flex-none`}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={() => void saveShow('published')} disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                  {saving ? 'Publishing...' : 'Publish'}
+                </button>
+              </>
+            ) : isEditing ? (
+              <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                {primaryActionLabel}
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => void saveShow('draft')} disabled={saving} className={`${secondaryButtonClassName()} flex-1 sm:flex-none`}>
+                  {saving ? 'Saving...' : 'Save Draft'}
+                </button>
+                <button type="submit" form="admin-show-form" disabled={saving} className={`${primaryButtonClassName()} flex-1 sm:flex-none sm:min-w-[7rem]`}>
+                  {saving ? 'Saving...' : 'Create'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {deletedLine ? (
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] z-30 flex justify-center px-4">
+            <div role="status" aria-live="polite" className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900 py-1 pl-4 pr-1 text-sm text-zinc-200 shadow-2xl shadow-black/60">
+              <span>Line deleted</span>
+              <span className="text-zinc-600" aria-hidden="true">·</span>
+              <button type="button" onClick={undoRemoveScheduleRow} className="inline-flex h-9 items-center rounded-full px-3 font-medium text-sky-300 transition hover:bg-white/[0.06]">
+                Undo
+              </button>
+            </div>
+          </div>
+        ) : null}
         </div>
       ) : mode === 'dates' || mode === 'drafts' ? (
         showsLoading && !showsHasLoadedOnce ? (
@@ -2797,7 +2865,8 @@ function WorkspaceSelfServeAccessPanel({
 function formatInviteDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  // Date only ("Dec 5, 2026") — the time down to the second was just noise.
+  return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
 function ProjectManagementSection({
@@ -2859,27 +2928,22 @@ function ProjectManagementSection({
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Project management</p>
-          <h2 className="mt-1 text-base font-semibold text-zinc-100">Manage artists</h2>
-        </div>
-
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             value={newArtistName}
             onChange={(event) => onNewArtistNameChange(event.target.value)}
-            placeholder="New artist name"
+            placeholder="New project name"
             className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
           />
           <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
-            {creatingArtist ? 'Creating…' : 'Create artist'}
+            {creatingArtist ? 'Creating…' : 'Create'}
           </button>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Artists in workspace</p>
+          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
           {projects.length === 0 ? (
-            <p className="text-sm text-zinc-400">No artists yet. Create your first artist above.</p>
+            <p className="text-sm text-zinc-400">No projects yet. Create your first project above.</p>
           ) : (
             <div ref={menuRootRef} className="space-y-2">
               {projects.map((project) => {
@@ -2949,7 +3013,7 @@ function ProjectManagementSection({
                 className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 px-4"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Rename artist"
+                aria-label="Rename project"
                 onClick={() => {
                   setRenameTargetId(null);
                   setRenameValue('');
@@ -2957,13 +3021,13 @@ function ProjectManagementSection({
               >
                 <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
                   <div className="mb-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename artist</p>
-                    <h3 className="mt-1 text-base font-semibold text-zinc-100">Update artist name</h3>
+                    <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename project</p>
+                    <h3 className="mt-1 text-base font-semibold text-zinc-100">Update project name</h3>
                   </div>
                   <input
                     value={renameValue}
                     onChange={(event) => setRenameValue(event.target.value)}
-                    placeholder="Artist name"
+                    placeholder="Project name"
                     className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/40"
                     autoFocus
                   />
@@ -3016,34 +3080,30 @@ function TeamDirectoryCard({
   title,
   secondary,
   subtitle,
-  detail,
   role,
   status,
-  contextLabel,
   action,
 }: {
   title: string;
+  /** Small grey line under the name (the email, when a name exists). */
   secondary?: string | null;
+  /** What they can access, e.g. "Texas King" or "All projects". */
   subtitle: string;
-  detail?: string | null;
   role: 'owner' | 'admin' | 'editor' | 'viewer';
   status?: WorkspaceInviteSummary['status'] | null;
-  contextLabel?: string | null;
   action?: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-medium text-zinc-100">{title}</p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{title}</p>
             <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span>
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
-            {contextLabel ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-300">{contextLabel}</span> : null}
           </div>
-          {secondary ? <p className="mt-1 text-xs text-zinc-500">{secondary}</p> : null}
-          <p className="mt-1 text-sm text-zinc-300">{subtitle}</p>
-          {detail ? <p className="mt-1 text-xs text-zinc-500">{detail}</p> : null}
+          {secondary ? <p className="mt-0.5 truncate text-xs text-zinc-500">{secondary}</p> : null}
+          <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p>
         </div>
         {action ? <div className="w-full sm:w-auto sm:shrink-0">{action}</div> : null}
       </div>
@@ -3218,9 +3278,9 @@ function InviteManagementSection({
           </div>
           {contextProjectName ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-              <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} invites.</p>
+              <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} invites.</p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+                <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
                 <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
               </div>
             </div>
@@ -3239,8 +3299,6 @@ function InviteManagementSection({
                   <p className="text-sm text-zinc-400">No pending invites.</p>
                 ) : (
                   visiblePendingInvites.map((invite) => {
-                    const scope = describeTeamScope(invite, { projectNameById, toursById });
-                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3248,9 +3306,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${scope.label} · expires ${formatInviteDate(invite.expiresAt)}`}
-                        detail={scope.detail}
-                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Expires ${formatInviteDate(invite.expiresAt)}`}
                         action={
                           <div className="flex flex-wrap gap-2">
                             <button type="button" onClick={() => onResendInvite(invite)} className={secondaryButtonClassName()}>Resend</button>
@@ -3266,8 +3322,6 @@ function InviteManagementSection({
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
                   {visibleHistoryInvites.map((invite) => {
-                    const scope = describeTeamScope(invite, { projectNameById, toursById });
-                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3275,9 +3329,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${scope.label} · updated ${formatInviteDate(invite.updatedAt)}`}
-                        detail={scope.detail}
-                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
                       />
                     );
                   })}
@@ -3339,7 +3391,7 @@ function TeamScopeEditor({
             }}
             className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
           />
-          <span className="block font-medium">Selected artists</span>
+          <span className="block font-medium">Selected projects</span>
         </label>
         <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
           <input
@@ -3363,9 +3415,9 @@ function TeamScopeEditor({
       {disableScopedAccess && disabledReason ? <p className="mt-3 text-sm text-zinc-500">{disabledReason}</p> : null}
 
       <div className="mt-3 space-y-2">
-        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Artists</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
         {availableProjects.length === 0 ? (
-          <p className="text-sm text-zinc-400">No artists available in this workspace.</p>
+          <p className="text-sm text-zinc-400">No projects available in this workspace.</p>
         ) : (
           availableProjects.map((project) => {
             const checked = scopeProjectIds.includes(project.id);
@@ -3396,7 +3448,7 @@ function TeamScopeEditor({
         <div className="mt-3 space-y-2">
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
           {availableTours.length === 0 ? (
-            <p className="text-sm text-zinc-400">No tours available for the selected artist scope yet.</p>
+            <p className="text-sm text-zinc-400">No tours available for the selected project scope yet.</p>
           ) : (
             availableTours.map((tour) => {
               const checked = scopeTourIds.includes(tour.id);
@@ -3619,9 +3671,9 @@ function TeamMembersSection({
 
         {contextProjectName ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
-            <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current artist: ${contextProjectName}` : 'full workspace'} members.</p>
+            <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} members.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current artist</button>
+              <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
               <button type="button" onClick={() => setViewMode('workspace')} className={directoryViewButtonClassName(effectiveViewMode === 'workspace')}>Full workspace</button>
             </div>
           </div>
@@ -3636,17 +3688,13 @@ function TeamMembersSection({
         ) : (
           <div className="space-y-2">
             {visibleMembers.map((member) => {
-              const scope = describeTeamScope(member, { projectNameById, toursById });
-              const inContext = matchesProjectContext(member, contextProjectId, toursById);
               return (
                 <TeamDirectoryCard
                   key={member.id}
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
-                  detail={scope.detail}
-                  contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
+                  subtitle={summarizeTeamAccess(member, { projectNameById, toursById })}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
@@ -3720,20 +3768,17 @@ function CollapsibleSection({
   onVisibilityToggle?: (value: boolean) => void;
   children: ReactNode;
 }) {
+  // Sections crew can't see are dimmed (the switch itself stays at full strength).
+  const hiddenFromCrew = visibilityState === false;
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <button type="button" onClick={() => onExpandedChange(!expanded)} className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>
           <h2 className="truncate text-base font-semibold">{title}</h2>
-          {!expanded && hasContent ? (
-            <>
-              <span className="h-2.5 w-2.5 rounded-full bg-sky-300" />
-              {typeof visibilityState === 'boolean' ? <span className="text-xs font-medium text-zinc-400">{visibilityState ? 'Visible' : 'Hidden'}</span> : null}
-            </>
-          ) : null}
+          {!expanded && hasContent ? <span className="h-2.5 w-2.5 rounded-full bg-sky-300" /> : null}
         </button>
-        <div className="flex items-center gap-2">
-          {expanded && typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} /> : null}
+        <div className="flex items-center gap-1">
+          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`Show ${title} to crew`} /> : null}
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
@@ -3744,7 +3789,7 @@ function CollapsibleSection({
           </button>
         </div>
       </div>
-      {expanded ? <div className="mt-3">{children}</div> : null}
+      {expanded ? <div className={`mt-3 transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>{children}</div> : null}
     </section>
   );
 }
@@ -4012,15 +4057,26 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
   );
 }
 
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: (value: boolean) => void }) {
+/**
+ * Sliding on/off switch for "can crew see this section?". The visible switch is
+ * small, but the button around it is 44×44px so it's easy to hit with a thumb.
+ */
+function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: (value: boolean) => void; label: string }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
       onClick={() => onToggle(!enabled)}
-      className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium ${enabled ? 'border-sky-400/40 bg-sky-500/10 text-sky-200' : 'border-white/10 text-zinc-300'}`}
+      className="group -my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus:outline-none"
     >
-      <span className={`h-2.5 w-2.5 rounded-full ${enabled ? 'bg-sky-300' : 'bg-zinc-500'}`} />
-      {enabled ? 'Show' : 'Hide'}
+      <span
+        aria-hidden="true"
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 group-focus-visible:ring-2 group-focus-visible:ring-sky-400/60 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950 ${enabled ? 'bg-sky-500' : 'bg-zinc-700'}`}
+      >
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </span>
     </button>
   );
 }

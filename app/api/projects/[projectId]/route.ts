@@ -22,7 +22,7 @@ export async function PATCH(
     return finalizeAuthResponse(NextResponse.json(project), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
-    const message = error instanceof Error ? error.message : 'Unable to rename artist.';
+    const message = error instanceof Error ? error.message : 'Unable to rename project.';
     return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
 }
@@ -46,7 +46,7 @@ export async function DELETE(
     return finalizeAuthResponse(NextResponse.json(result), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
-    const message = error instanceof Error ? error.message : 'Unable to delete artist.';
+    const message = error instanceof Error ? error.message : 'Unable to delete project.';
     return finalizeAuthResponse(NextResponse.json({ error: message }, { status }), authState);
   }
 }

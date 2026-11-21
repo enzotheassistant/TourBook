@@ -35,7 +35,7 @@ async function assertProjectNameAvailable(
   });
 
   if (duplicate) {
-    throw new ApiError(409, 'An artist with this name already exists in this workspace.');
+    throw new ApiError(409, 'A project with this name already exists in this workspace.');
   }
 }
 
@@ -79,16 +79,16 @@ export async function createProjectScoped(
   const access = await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner', 'admin']);
 
   if (access.scopeType !== 'workspace') {
-    throw new ApiError(403, 'Project-limited members cannot create new artists.');
+    throw new ApiError(403, 'Project-limited members cannot create new projects.');
   }
 
   const name = normalizeProjectName(input.name);
   if (!name) {
-    throw new ApiError(400, 'Artist name is required.');
+    throw new ApiError(400, 'Project name is required.');
   }
 
   if (name.length > 120) {
-    throw new ApiError(400, 'Artist name must be 120 characters or fewer.');
+    throw new ApiError(400, 'Project name must be 120 characters or fewer.');
   }
 
   await assertProjectNameAvailable(supabase, input.workspaceId, name);
@@ -131,16 +131,16 @@ export async function renameProjectScoped(
   const access = await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner', 'admin']);
 
   if (access.scopeType !== 'workspace') {
-    throw new ApiError(403, 'Project-limited members cannot rename artists.');
+    throw new ApiError(403, 'Project-limited members cannot rename projects.');
   }
 
   const name = normalizeProjectName(input.name);
   if (!name) {
-    throw new ApiError(400, 'Artist name is required.');
+    throw new ApiError(400, 'Project name is required.');
   }
 
   if (name.length > 120) {
-    throw new ApiError(400, 'Artist name must be 120 characters or fewer.');
+    throw new ApiError(400, 'Project name must be 120 characters or fewer.');
   }
 
   await assertProjectNameAvailable(supabase, input.workspaceId, name, input.projectId);
@@ -161,7 +161,7 @@ export async function renameProjectScoped(
   }
 
   if (!data) {
-    throw new ApiError(404, 'Artist not found.');
+    throw new ApiError(404, 'Project not found.');
   }
 
   return {
@@ -183,7 +183,7 @@ export async function deleteProjectScoped(
   const access = await requireWorkspaceAccess(supabase, userId, input.workspaceId, ['owner']);
 
   if (access.scopeType !== 'workspace') {
-    throw new ApiError(403, 'Project-limited members cannot delete artists.');
+    throw new ApiError(403, 'Project-limited members cannot delete projects.');
   }
 
   await ensureProjectInWorkspace(supabase, input.workspaceId, input.projectId);
@@ -212,7 +212,7 @@ export async function deleteProjectScoped(
   }
 
   if ((datesCount ?? 0) > 0 || (toursCount ?? 0) > 0) {
-    throw new ApiError(409, 'This artist cannot be deleted because it still has related dates or tours. Remove related data first.');
+    throw new ApiError(409, 'This project cannot be deleted because it still has related dates or tours. Remove related data first.');
   }
 
   const { error } = await supabase
