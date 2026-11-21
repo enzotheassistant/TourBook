@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from 'next';
+import { Geist } from 'next/font/google';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { AppContextProvider } from '@/components/providers/app-context-provider';
 import { PwaProvider } from '@/components/pwa-provider';
+
+// Geist for the whole app, loaded by Next.js itself (no flash while it loads).
+const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans', display: 'swap' });
 
 const appName = 'TourBook';
 const appDescription = 'Touring crew dashboard for bands on the road.';
@@ -41,7 +45,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={geist.variable}>
       <body>
         <PwaProvider />
         <AppContextProvider>{children}</AppContextProvider>

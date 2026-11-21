@@ -73,7 +73,7 @@ function OpenFileButton({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex h-11 items-center justify-center rounded-full bg-accent px-5 text-sm font-medium text-zinc-950"
+      className="inline-flex h-11 items-center justify-center rounded-[10px] bg-accent px-5 text-sm font-medium text-zinc-950"
     >
       Open file
     </a>
@@ -315,7 +315,7 @@ export function AttachmentViewer({
         {canDownload ? (
           <a
             href={getAttachmentDownloadHref(attachment.id, { workspaceId })}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-3 text-xs font-medium text-zinc-200 transition hover:bg-white/[0.08]"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] border border-white/10 px-3 text-xs font-medium text-zinc-200 transition hover:bg-white/[0.08]"
           >
             <DownloadIcon />
             Download

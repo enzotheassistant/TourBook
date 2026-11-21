@@ -142,7 +142,7 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-5 shadow-2xl">
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-50">
           {error ? 'Invite needs attention' : 'Joining workspace'}
@@ -159,7 +159,7 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
             <button
               type="button"
               onClick={() => window.location.replace(`/accept-invite?token=${encodeURIComponent(trimmedToken)}`)}
-              className="inline-flex h-11 items-center justify-center rounded-full border border-accent/30 bg-accent/15 px-4 text-sm font-medium text-accent-light transition hover:bg-accent/20"
+              className="inline-flex h-11 items-center justify-center rounded-[10px] border border-accent/30 bg-accent/15 px-4 text-sm font-medium text-accent-light transition hover:bg-accent/20"
             >
               Retry invite access
             </button>
@@ -167,7 +167,7 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
               <button
                 type="button"
                 onClick={() => window.location.replace('/')}
-                className="inline-flex h-11 items-center justify-center rounded-full border border-white/10 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                className="inline-flex h-11 items-center justify-center rounded-[10px] border border-white/10 px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
               >
                 Go to crew view
               </button>

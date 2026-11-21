@@ -120,7 +120,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
       {files.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {files.map((file, index) => (
-            <div key={`${file.name}-${file.size}-${index}`} className="group relative flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20">
+            <div key={`${file.name}-${file.size}-${index}`} className="group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20">
               <div className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]">
                 {isImageFile(file) ? (
                   <FilePreviewImage file={file} />
@@ -137,7 +137,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
                     maxLength={120}
                     onChange={(event) => setDisplayName(file, event.target.value)}
                     placeholder={stripFileExtension(file.name)}
-                    className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
+                    className="h-9 w-full rounded-[10px] border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
                   />
                   <p className="mt-1 truncate text-[11px] text-zinc-500" title={file.name}>{formatFileSize(file.size)} · name optional</p>
                 </div>

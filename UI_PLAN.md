@@ -1,6 +1,6 @@
 # UI Plan — Progress
 
-Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 went live 2026-11-21 (pull request #6). Phase 3 branch: `ui-plan-3`, draft pull request #9, preview: https://tour-book-git-ui-plan-3-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
+Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 went live 2026-11-21 (pull request #6). Phase 3 went live 2026-11-21 (pull request #9). Phase 4 approved by Phil and went live 2026-11-21 (pull request #10). All phases done; back-burner items below are not started. To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
 
 - [x] 1.1 Day sheet section order
 - [x] 1.2 Tappable phone numbers
@@ -20,9 +20,9 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - [x] 3.4 Loading placeholders everywhere
 - [x] 3.5 One accent colour
 - [x] 3.6 One chevron for collapsible sections
-- [ ] 4.1 Geist font + tabular numbers
-- [ ] 4.2 Corner radius
-- [ ] 4.3 Flatten nested boxes
+- [x] 4.1 Geist font + tabular numbers
+- [x] 4.2 Corner radius
+- [x] 4.3 Flatten nested boxes
 
 ## Notes for Phil
 
@@ -48,7 +48,7 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
   - Pull request #8: the Save / Create / Update bar was `sticky` but AppShell's `overflow-x-hidden` wrapper stopped it pinning; it's now `position: fixed` to the bottom of the screen while the form is open.
 - 2.6 Before/after approved by Phil before saving. Undo lasts 5 seconds and only the most recent deleted line can be undone. Time field is 10rem wide on phones, 13rem on desktop; fields stack under 360px wide.
 
-**Phase 3 (done 2026-11-21 on `ui-plan-3`, waiting for Phil's test on the preview before merging)**
+**Phase 3 (live 2026-11-21)**
 - 3.1 One shared field style (lib/ui/field-styles.ts) used by the address fields and the rest of the admin form.
 - 3.2 Shared upload box (components/upload-dropzone.tsx). Phil chose the grey outlined "Choose files" button for both, keeping blue for each screen's main action.
 - 3.3 One drawn "…" icon (components/icons.tsx, MoreIcon) on all seven menu buttons.
@@ -56,6 +56,13 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - 3.5 Accent defined once in app/globals.css (`--color-accent`, with -hover, -soft, -light worked out from it). To change the accent later: edit that one line, plus the glow colour in app/icon.tsx and app/apple-icon.tsx (app icons can't read CSS variables). Green removed (background glow, text selection, app icon glow now blue; Phil OK'd changing the icon). Error messages kept red, using the same red as Delete (Phil OK'd); "Revoked" badge now grey. Amber is still used for warnings (offline, import warnings) and the Owner badge.
 - 3.6 One chevron (components/icons.tsx, ChevronIcon) on the admin form's fold-open sections. Dropdown arrows (like "All tours") are separate and unchanged.
 - For Phase 4: globals.css's unlayered `button, input, select, textarea { font: inherit }` makes Tailwind text-size classes on buttons and fields do nothing (they all inherit 16px). Fields must stay at 16px on iPhone to avoid zoom-on-tap, but buttons could be fixed as part of the visual polish (with a preview first).
+
+**Phase 4 (approved by Phil after testing the preview; live 2026-11-21)**
+- Phil approved the picture mockup and chose B: 10px corners for buttons, fields and tabs; 12px for cards/boxes; pills only for tags; round icon buttons stay circles.
+- 4.1 Geist via next/font/google (app/layout.tsx), wired as Tailwind --font-sans in globals.css; tabular numbers on schedule times, date badges, list dates, day sheet date.
+- 4.2 Corners as above.
+- Extra (from the plan's Phase 4 note): `button` removed from globals.css's unlayered `font: inherit` rule so button text sizes work; fields keep it (16px, no iPhone zoom).
+- 4.3 Existing Dates/Drafts: one card, divider rows, Upcoming/Past as a two-part switch in the card header. Projects: one card, divider rows. Team: member/invite rows are divider rows; invite list separated by a line.
 
 ---
 

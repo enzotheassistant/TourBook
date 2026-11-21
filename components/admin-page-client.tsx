@@ -35,19 +35,19 @@ function slugify(value: string) {
 }
 
 function bubbleClassName() {
-  return 'rounded-[28px] border border-white/10 bg-black/20 p-4';
+  return 'rounded-xl border border-white/10 bg-black/20 p-4';
 }
 
 function primaryButtonClassName() {
-  return 'inline-flex h-11 items-center justify-center rounded-full bg-accent px-4 text-sm font-medium text-zinc-950 transition hover:bg-accent-hover disabled:opacity-60';
+  return 'inline-flex h-11 items-center justify-center rounded-[10px] bg-accent px-4 text-sm font-medium text-zinc-950 transition hover:bg-accent-hover disabled:opacity-60';
 }
 
 function secondaryButtonClassName() {
-  return 'inline-flex h-11 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
+  return 'inline-flex h-11 items-center justify-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
 function dangerButtonClassName() {
-  return 'inline-flex h-11 items-center justify-center rounded-full border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
+  return 'inline-flex h-11 items-center justify-center rounded-[10px] border border-red-500/35 bg-transparent px-4 text-sm font-medium text-red-200 transition hover:border-red-400/40 hover:bg-red-500/10';
 }
 
 function onboardingWorkspaceSlug(value: string) {
@@ -89,7 +89,7 @@ function sortTourNamesForPast(shows: Show[]) {
 }
 
 function adminTabClassName(active: boolean) {
-  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-accent/40 bg-accent-soft text-accent-light' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
+  return `inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-[10px] border px-4 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-2 ${active ? 'border-accent/40 bg-accent-soft text-accent-light' : 'border-white/10 text-zinc-200 hover:border-white/20 hover:bg-white/5'}`;
 }
 
 
@@ -98,11 +98,11 @@ function fieldClassName() {
 }
 
 function filterFieldClassName() {
-  return 'h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40';
+  return 'h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 pr-10 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40';
 }
 
 function inlineFilterButtonClassName() {
-  return 'inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
+  return 'inline-flex h-11 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
 type SectionKey = TourDaySectionKey;
@@ -1859,7 +1859,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create';
 
   if (contextLoading) {
-    return <ListSkeleton rowClassName="h-20 rounded-[28px]" label="Loading dates" />;
+    return <ListSkeleton rowClassName="h-20 rounded-xl" label="Loading dates" />;
   }
 
   if (!activeWorkspaceId) {
@@ -1910,13 +1910,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           }}
         />
 
-        <div className="grid gap-3 rounded-3xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
+        <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:grid-cols-2">
           <label className="grid gap-2 text-sm text-zinc-300">
             <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace</span>
             <select
               value={activeWorkspaceId}
               onChange={(event) => handleWorkspaceSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+              className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
@@ -1929,7 +1929,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             <select
               value=""
               onChange={(event) => handleArtistSelection(event.target.value || null)}
-              className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+              className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
             >
               <option value="">Select project…</option>
               {projectsForActiveWorkspace.map((project) => (
@@ -1988,14 +1988,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
         {!projectsForActiveWorkspace.length ? (
           canManageProjectActions ? (
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Create first project</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={newArtistName}
                   onChange={(event) => setNewArtistName(event.target.value)}
                   placeholder="Project name"
-                  className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+                  className="h-11 min-w-0 flex-1 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
                 />
                 <button type="button" onClick={() => void handleCreateArtist()} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
                   {creatingArtist ? 'Creating…' : 'Create project'}
@@ -2003,7 +2003,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
               {noArtistGuardrail.helperText}
             </div>
           )
@@ -2043,7 +2043,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       />
       {importOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-black/80 px-4 py-4 backdrop-blur-sm sm:py-6">
-          <div className="mx-auto mt-[max(env(safe-area-inset-top),0.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:mt-0 sm:max-h-[calc(100vh-3rem)] sm:p-5">
+          <div className="mx-auto mt-[max(env(safe-area-inset-top),0.5rem)] max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl overflow-y-auto rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl shadow-black/80 sm:mt-0 sm:max-h-[calc(100vh-3rem)] sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">AI Intake</p>
@@ -2060,14 +2060,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   <textarea
                     value={importSourceText}
                     onChange={(event) => setImportSourceText(event.target.value)}
-                    className="min-h-[240px] w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
+                    className="min-h-[240px] w-full rounded-[10px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
                   />
                 </label>
 
                 <div>
                   <span className="mb-2 block text-sm text-zinc-300">Files / images</span>
                   <div
-                    className={importFiles.length ? `rounded-[24px] border border-dashed p-4 transition ${isDraggingImportFiles ? 'border-accent/60 bg-accent/[0.06]' : 'border-white/15 bg-black/20'}` : uploadDropzoneClassName(isDraggingImportFiles)}
+                    className={importFiles.length ? `rounded-xl border border-dashed p-4 transition ${isDraggingImportFiles ? 'border-accent/60 bg-accent/[0.06]' : 'border-white/15 bg-black/20'}` : uploadDropzoneClassName(isDraggingImportFiles)}
                     onDragOver={handleImportDragOver}
                     onDragLeave={handleImportDragLeave}
                     onDrop={handleImportDrop}
@@ -2083,7 +2083,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     {importFiles.length ? (
                       <div className="space-y-2">
                         {importFiles.map((file) => (
-                          <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100">
+                          <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-100">
                             <span className="truncate">{file.name}</span>
                             <button
                               type="button"
@@ -2109,7 +2109,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 </div>
               </div>
 
-              <div className="flex min-h-0 flex-col rounded-[24px] border border-white/10 bg-black/20 p-3">
+              <div className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-medium text-zinc-200">Review</h3>
@@ -2119,11 +2119,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 </div>
 
                 {importError ? (
-                  <div className="mb-3 rounded-2xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-100">{importError}</div>
+                  <div className="mb-3 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-100">{importError}</div>
                 ) : null}
 
                 {importWarnings.length ? (
-                  <div className="mb-3 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                  <div className="mb-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
                     <p className="mb-1 font-medium text-amber-200">Import warnings</p>
                     <div className="space-y-1">
                       {importWarnings.map((warning, index) => (
@@ -2135,10 +2135,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                   {importRows.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">No results yet</div>
+                    <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-sm text-zinc-500">No results yet</div>
                   ) : (
                     importRows.map((row, index) => (
-                      <div key={row.id} className="rounded-2xl border border-white/10 bg-zinc-950/90 p-3">
+                      <div key={row.id} className="rounded-xl border border-white/10 bg-zinc-950/90 p-3">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Row {index + 1}</p>
@@ -2171,7 +2171,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                           <Textarea label="Parking / load" value={row.parking_load_info || ''} onChange={(value) => updateImportRow(row.id, { parking_load_info: value })} ariaLabel="Parking or load info" />
                         </div>
 
-                        <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+                        <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                           <div className="mb-2 flex items-center justify-between gap-2">
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Schedule</p>
                             <button type="button" onClick={() => addImportScheduleItem(row.id)} className="text-xs text-zinc-300 transition hover:text-zinc-100">+ Add line</button>
@@ -2189,7 +2189,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                                   value={item.time}
                                   onChange={(event) => updateImportScheduleItem(row.id, item.id, { time: event.target.value })}
                                   placeholder="Time"
-                                  className="h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40 sm:w-44"
+                                  className="h-12 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40 sm:w-44"
                                 />
                               </div>
                             ))}
@@ -2387,12 +2387,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           {/* Opening a date to edit/duplicate: placeholder boxes instead of a briefly-empty form. */}
           {editorBootstrapLoading && !isEditing ? (
             <div className="space-y-3" role="status" aria-label="Loading date into the editor">
-              <SkeletonBlock className="h-32 rounded-[28px]" />
-              <ListSkeleton rows={4} rowClassName="h-16 rounded-[28px]" label="Loading date into the editor" />
+              <SkeletonBlock className="h-32 rounded-xl" />
+              <ListSkeleton rows={4} rowClassName="h-16 rounded-xl" label="Loading date into the editor" />
             </div>
           ) : null}
 
-        <section className={`rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5 ${editorBootstrapLoading && !isEditing ? 'hidden' : ''}`}>
+        <section className={`rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5 ${editorBootstrapLoading && !isEditing ? 'hidden' : ''}`}>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div className="pt-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{editorCopy.title}</p>
@@ -2437,7 +2437,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     value={form.day_type}
                     onChange={(event) => handleDayTypeChange(event.target.value as TourDayType)}
                     aria-label="Day type"
-                    className="h-11 w-full appearance-none rounded-full border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-accent/40 focus:bg-white/[0.03]"
+                    className="h-11 w-full appearance-none rounded-[10px] border border-white/10 bg-black/20 px-4 pr-11 text-sm font-medium text-zinc-100 outline-none transition focus:border-accent/40 focus:bg-white/[0.03]"
                   >
                     <option value="show">Show Day</option>
                     <option value="travel">Travel Day</option>
@@ -2693,12 +2693,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         showsLoading && !showsHasLoadedOnce ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-20 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />
+              <div key={i} className="h-20 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
             ))}
           </div>
         ) : (
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-          {message ? <div className="mb-3 text-xs text-accent-light/90">{message}</div> : null}
+        <div>
+          {message ? <div className="mb-3 px-1 text-xs text-accent-light/90">{message}</div> : null}
           {isDraftsMode ? (
             <ShowListSection
               title="Drafts"
@@ -2719,18 +2719,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             />
           ) : (
             <>
-              <div className="flex flex-wrap items-start justify-end gap-3">
-                <div className="flex gap-2">
-                  <Link href="/admin/dates?tab=upcoming" className={adminTabClassName(datesTab === 'upcoming')}>
-                    Upcoming
-                  </Link>
-                  <Link href="/admin/dates?tab=past" className={adminTabClassName(datesTab === 'past')}>
-                    Past
-                  </Link>
-                </div>
-              </div>
-
-              <div className="mt-3">
+              <div>
                 {datesTab === 'past' ? (
                   <ShowListSection
                     title="Past dates"
@@ -2743,6 +2732,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     totalCount={pastShows.length}
                     groupedShows={pastShowsByYear}
                     stickyYears
+                    headerAction={<UpcomingPastSwitch active={datesTab} />}
                     onEdit={loadShow}
                     onExport={exportGuestList}
                     onDelete={handleDelete}
@@ -2753,6 +2743,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                 ) : (
                   <ShowListSection
                     title="Upcoming dates"
+                    headerAction={<UpcomingPastSwitch active={datesTab} />}
                     search={upcomingSearch}
                     onSearchChange={setUpcomingSearch}
                     selectedTour={upcomingTour}
@@ -2771,7 +2762,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               </div>
             </>
           )}
-        </section>
+        </div>
         )
       ) : null}
     </div>
@@ -2822,7 +2813,7 @@ function WorkspaceSelfServeAccessPanel({
         telemetry={{ stateType: 'admin.viewer_guardrail' }}
       />
 
-      <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
         <div className="space-y-3">
           <div>
             <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Your workspaces</p>
@@ -2835,7 +2826,7 @@ function WorkspaceSelfServeAccessPanel({
               <select
                 value={activeWorkspaceId ?? ''}
                 onChange={(event) => onSelectWorkspace(event.target.value || null)}
-                className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+                className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
               >
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
@@ -2849,7 +2840,7 @@ function WorkspaceSelfServeAccessPanel({
               value={workspaceName}
               onChange={(event) => setWorkspaceName(event.target.value)}
               placeholder="New workspace name"
-              className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+              className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
             />
             <button type="button" onClick={() => void handleCreateWorkspace()} disabled={creating || !workspaceName.trim()} className={primaryButtonClassName()}>
               {creating ? 'Creating…' : 'Create my workspace'}
@@ -2927,32 +2918,32 @@ function ProjectManagementSection({
   const canUseDom = typeof document !== 'undefined';
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-4">
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             value={newArtistName}
             onChange={(event) => onNewArtistNameChange(event.target.value)}
             placeholder="New project name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+            className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
           <button type="button" onClick={onCreateArtist} disabled={creatingArtist || !newArtistName.trim()} className={primaryButtonClassName()}>
             {creatingArtist ? 'Creating…' : 'Create'}
           </button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
+        <div>
+          <p className="mb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
           {projects.length === 0 ? (
             <p className="text-sm text-zinc-400">No projects yet. Create your first project above.</p>
           ) : (
-            <div ref={menuRootRef} className="space-y-2">
+            <div ref={menuRootRef} className="divide-y divide-white/[0.08]">
               {projects.map((project) => {
                 const isActive = project.id === activeProjectId;
                 return (
-                  <div key={project.id} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <div key={project.id} className="py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-h-10 min-w-0 flex-1 text-left">
                         <p className="truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</p>
                         {isActive ? <p className="text-xs text-zinc-400">Currently selected</p> : null}
                       </button>
@@ -2960,7 +2951,7 @@ function ProjectManagementSection({
                         <button
                           type="button"
                           onClick={() => setMenuProjectId((current) => (current === project.id ? null : project.id))}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]"
+                          className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100"
                           aria-label={`Project options for ${project.name || project.slug || project.id}`}
                         >
                           <MoreIcon />
@@ -3020,7 +3011,7 @@ function ProjectManagementSection({
                   setRenameValue('');
                 }}
               >
-                <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
                   <div className="mb-3">
                     <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Rename project</p>
                     <h3 className="mt-1 text-base font-semibold text-zinc-100">Update project name</h3>
@@ -3029,7 +3020,7 @@ function ProjectManagementSection({
                     value={renameValue}
                     onChange={(event) => setRenameValue(event.target.value)}
                     placeholder="Project name"
-                    className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+                    className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
                     autoFocus
                   />
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -3074,7 +3065,7 @@ function inviteStatusBadgeClassName(status: WorkspaceInviteSummary['status']) {
 }
 
 function directoryViewButtonClassName(active: boolean) {
-  return `inline-flex h-9 items-center justify-center rounded-full border px-3 text-xs font-medium transition ${active ? 'border-accent/40 bg-accent-soft text-accent-light' : 'border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
+  return `inline-flex h-9 items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition ${active ? 'border-accent/40 bg-accent-soft text-accent-light' : 'border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
 function TeamDirectoryCard({
@@ -3095,7 +3086,7 @@ function TeamDirectoryCard({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+    <div className="border-t border-white/[0.08] py-3 first:border-t-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -3192,7 +3183,7 @@ function InviteManagementSection({
   );
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-3">
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
@@ -3205,14 +3196,14 @@ function InviteManagementSection({
             onChange={(event) => onNameChange(event.target.value)}
             type="text"
             placeholder="Name"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+            className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
           <input
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
             type="email"
             placeholder="teammate@example.com"
-            className="h-11 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+            className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
           <select
             value={role}
@@ -3225,7 +3216,7 @@ function InviteManagementSection({
                 onScopeTourIdsChange([]);
               }
             }}
-            className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+            className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
           >
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
@@ -3253,7 +3244,7 @@ function InviteManagementSection({
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
         {lastInviteShare ? (
-          <div className="rounded-2xl border border-accent/25 bg-accent-soft p-3 text-sm text-accent-light">
+          <div className="rounded-xl border border-accent/25 bg-accent-soft p-3 text-sm text-accent-light">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p>Invite sent.</p>
               <button type="button" onClick={onToggleManualShare} className={secondaryButtonClassName()}>{showManualShare ? 'Hide manual invite link' : 'Show manual invite link'}</button>
@@ -3270,7 +3261,7 @@ function InviteManagementSection({
           </div>
         ) : null}
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+        <div className="border-t border-white/10 pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
@@ -3278,7 +3269,7 @@ function InviteManagementSection({
             <div className="text-xs text-zinc-500">{visiblePendingInvites.length} pending · {visibleHistoryInvites.length} recent</div>
           </div>
           {contextProjectName ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
               <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} invites.</p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
@@ -3287,15 +3278,15 @@ function InviteManagementSection({
             </div>
           ) : null}
           {loading ? (
-            <div className="mt-3"><ListSkeleton rows={2} rowClassName="h-[74px] rounded-2xl" label="Loading invites" /></div>
+            <div className="mt-3"><ListSkeleton rows={2} rowClassName="h-[74px] rounded-xl" label="Loading invites" /></div>
           ) : recentInvites.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-400">No invites yet.</p>
           ) : visiblePendingInvites.length === 0 && visibleHistoryInvites.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-400">No invites match this view yet.</p>
           ) : (
             <div className="mt-3 space-y-4">
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
+              <div>
+                <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Pending invites</p>
                 {visiblePendingInvites.length === 0 ? (
                   <p className="text-sm text-zinc-400">No pending invites.</p>
                 ) : (
@@ -3320,8 +3311,8 @@ function InviteManagementSection({
                 )}
               </div>
               {visibleHistoryInvites.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
+                <div>
+                  <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
                   {visibleHistoryInvites.map((invite) => {
                     return (
                       <TeamDirectoryCard
@@ -3370,7 +3361,7 @@ function TeamScopeEditor({
   onScopeTourIdsChange: (value: string[]) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
       <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
       <div className="mt-2 space-y-2">
         <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
@@ -3518,7 +3509,7 @@ function EditMemberDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 px-4 pb-6 pt-12 sm:items-center" role="dialog" aria-modal="true" aria-label="Edit team member" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
+      <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Edit member</p>
@@ -3538,7 +3529,7 @@ function EditMemberDialog({
               onProjectIdsChange([]);
               onTourIdsChange([]);
             }
-          }} className="h-11 rounded-full border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40">
+          }} className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40">
             <option value="viewer">Viewer</option>
             <option value="editor">Editor</option>
             {canAssignAdmin ? <option value="admin">Admin</option> : null}
@@ -3636,7 +3627,7 @@ function TeamMembersSection({
           onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
           disabled={quickRoleMemberId === member.id}
           aria-label={`Change role for ${member.name || member.email || member.userId}`}
-          className="h-9 w-full rounded-full border border-white/10 bg-black/20 px-3 pr-8 text-sm text-zinc-100 outline-none transition focus:border-accent/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10"
+          className="h-9 w-full rounded-[10px] border border-white/10 bg-black/20 px-3 pr-8 text-sm text-zinc-100 outline-none transition focus:border-accent/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10"
         >
           <option value="viewer">Viewer</option>
           <option value="editor">Editor</option>
@@ -3663,7 +3654,7 @@ function TeamMembersSection({
     : sortedMembers.filter((member) => matchesProjectContext(member, contextProjectId, toursById));
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-3">
         <div>
           <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Members</p>
@@ -3671,7 +3662,7 @@ function TeamMembersSection({
         </div>
 
         {contextProjectName ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/20 p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 p-2">
             <p className="px-2 text-xs text-zinc-400">Viewing {effectiveViewMode === 'context' ? `current project: ${contextProjectName}` : 'full workspace'} members.</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setViewMode('context')} className={directoryViewButtonClassName(effectiveViewMode === 'context')}>Current project</button>
@@ -3681,13 +3672,13 @@ function TeamMembersSection({
         ) : null}
 
         {loading ? (
-          <ListSkeleton rowClassName="h-[74px] rounded-2xl" label="Loading members" />
+          <ListSkeleton rowClassName="h-[74px] rounded-xl" label="Loading members" />
         ) : acceptedEntries.length === 0 ? (
           <p className="text-sm text-zinc-400">No team members found yet.</p>
         ) : visibleMembers.length === 0 ? (
           <p className="text-sm text-zinc-400">No accepted members match this view yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div>
             {visibleMembers.map((member) => {
               return (
                 <TeamDirectoryCard
@@ -3711,7 +3702,7 @@ function TeamMembersSection({
                             <MoreIcon />
                           </button>
                           {openMemberMenuId === member.id ? (
-                            <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60">
+                            <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60">
                               {member.role !== 'admin' ? (
                                 <button
                                   type="button"
@@ -3797,6 +3788,22 @@ function CollapsibleSection({
 }
 
 
+/** Small two-part switch for Existing Dates: Upcoming | Past. */
+function UpcomingPastSwitch({ active }: { active: 'upcoming' | 'past' }) {
+  const segment = (selected: boolean) =>
+    `inline-flex min-h-9 items-center rounded-[8px] px-3 text-sm transition ${selected ? 'bg-accent-soft font-medium text-accent-light' : 'text-zinc-400 hover:text-zinc-100'}`;
+  return (
+    <nav aria-label="Show dates" className="inline-flex shrink-0 rounded-[10px] bg-white/[0.05] p-0.5">
+      <Link href="/admin/dates?tab=upcoming" aria-current={active === 'upcoming' ? 'page' : undefined} className={segment(active === 'upcoming')}>
+        Upcoming
+      </Link>
+      <Link href="/admin/dates?tab=past" aria-current={active === 'past' ? 'page' : undefined} className={segment(active === 'past')}>
+        Past
+      </Link>
+    </nav>
+  );
+}
+
 function ShowListSection({
   title,
   search,
@@ -3815,8 +3822,11 @@ function ShowListSection({
   mode = 'dates',
   onPublish,
   loading = false,
+  headerAction,
 }: {
   title: string;
+  /** Shown at the right of the card's title row (e.g. the Upcoming / Past switch). */
+  headerAction?: ReactNode;
   search: string;
   onSearchChange: (value: string) => void;
   selectedTour: string;
@@ -3916,10 +3926,10 @@ function ShowListSection({
         : `/admin/dates/${show.id}?tab=${title.toLowerCase().includes('past') ? 'past' : 'upcoming'}`;
 
     return (
-      <div key={show.id} className="relative rounded-2xl border border-white/8 bg-black/20 p-3">
+      <div key={show.id} className="relative py-3">
         <div className="flex items-start justify-between gap-3">
-          <Link href={href} className="min-w-0 flex-1 rounded-xl outline-none transition hover:opacity-95">
-            <p className="text-xs uppercase tracking-wide text-zinc-400">{formatShowDate(show.date)}</p>
+          <Link href={href} className="min-w-0 flex-1 rounded-md outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/50">
+            <p className="text-xs uppercase tracking-wide tabular-nums text-zinc-400">{formatShowDate(show.date)}</p>
             <div className="mt-1 flex items-center gap-2">
               <p className="text-sm font-medium">{getAdminListPrimaryLabel(show)}</p>
               {show.status === 'draft' ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Draft</span> : null}
@@ -3927,12 +3937,12 @@ function ShowListSection({
             {getAdminListSubLabel(show) ? <p className="text-sm text-zinc-300">{getAdminListSubLabel(show)}</p> : null}
           </Link>
 
-          <div className="flex shrink-0 items-center gap-2 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="-mr-2 flex shrink-0 items-center gap-0.5 self-start" onClick={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
             <button
               type="button"
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => { event.stopPropagation(); onEdit(show); }}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100"
               aria-label="Edit date"
             >
               <PencilIcon />
@@ -3949,7 +3959,7 @@ function ShowListSection({
                 }
                 openMenuForShow(show, event.currentTarget);
               }}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-zinc-200 transition ${menuOpen ? "border-accent-light bg-accent-soft" : "border-white/10 bg-transparent hover:border-white/20 hover:bg-white/[0.05]"}` }
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition ${menuOpen ? 'bg-accent-soft text-accent-light' : 'hover:bg-white/[0.06] hover:text-zinc-100'}`}
               aria-label="More actions"
             >
               <MoreIcon />
@@ -3961,9 +3971,12 @@ function ShowListSection({
   }
 
   return (
-    <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4">
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <div className="flex min-h-10 items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">{title}</h2>
+          {headerAction}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
             <SearchInput value={search} onChange={onSearchChange} />
@@ -3986,22 +3999,22 @@ function ShowListSection({
         </div>
       </div>
 
-      <div className="mt-3 space-y-3">
+      <div className="mt-2">
         {shows.length === 0 && loading ? (
-          <ListSkeleton rowClassName="h-20 rounded-2xl" label="Loading dates" />
+          <div className="pt-2"><ListSkeleton rowClassName="h-16 rounded-xl" label="Loading dates" /></div>
         ) : shows.length === 0 ? (
-          <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">
+          <div className="py-4 text-sm text-zinc-400">
             {totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
           </div>
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (
-            <section key={year} className="space-y-3">
-              <div className={`border-b border-white/10 px-4 py-2 text-sm font-medium tracking-wide text-zinc-400 backdrop-blur ${stickyYears ? 'sticky top-[96px] z-10 bg-zinc-950/95' : ''}`}>{year}</div>
-              <div className="space-y-3">{items.map((show) => renderShowListItem(show))}</div>
+            <section key={year}>
+              <div className={`border-b border-white/[0.08] pb-2 pt-4 text-sm font-medium tabular-nums text-zinc-400 ${stickyYears ? 'sticky top-[var(--app-header-h,96px)] z-10 bg-zinc-950/95 backdrop-blur' : ''}`}>{year}</div>
+              <div className="divide-y divide-white/[0.08]">{items.map((show) => renderShowListItem(show))}</div>
             </section>
           ))
         ) : (
-          shows.map((show) => renderShowListItem(show))
+          <div className="divide-y divide-white/[0.08]">{shows.map((show) => renderShowListItem(show))}</div>
         )}
       </div>
 
@@ -4009,7 +4022,7 @@ function ShowListSection({
         ? createPortal(
             <div
               data-admin-menu-portal="true"
-              className="fixed z-[260] min-w-[220px] overflow-hidden rounded-2xl border border-zinc-700/90 bg-black shadow-[0_28px_80px_rgba(0,0,0,0.92)] ring-1 ring-white/10"
+              className="fixed z-[260] min-w-[220px] overflow-hidden rounded-xl border border-zinc-700/90 bg-black shadow-[0_28px_80px_rgba(0,0,0,0.92)] ring-1 ring-white/10"
               style={{ top: menuState.top, left: menuState.left }}
               onMouseDown={(event) => event.stopPropagation()}
             >
@@ -4408,7 +4421,7 @@ function Textarea({ label, value, onChange, ariaLabel, placeholder }: { label?: 
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         rows={4}
-        className="w-full rounded-[24px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
+        className="w-full rounded-[10px] border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40"
       />
     </label>
   );

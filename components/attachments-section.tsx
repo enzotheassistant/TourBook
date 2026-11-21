@@ -63,7 +63,7 @@ export function AttachmentsSection({ dateId, adminMode = false }: { dateId: stri
             type="button"
             key={attachment.id}
             onClick={() => setOpenAttachment(attachment)}
-            className="flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20 text-left"
+            className="flex flex-col overflow-hidden rounded-xl border border-white/10 bg-black/20 text-left"
           >
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]">
               <AttachmentTilePreview attachment={attachment} workspaceId={activeWorkspaceId} />

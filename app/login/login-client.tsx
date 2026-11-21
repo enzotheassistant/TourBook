@@ -301,7 +301,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl">
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white/5 p-5 shadow-2xl">
         <p className="text-sm uppercase tracking-[0.2em] text-zinc-400">TourBook</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           {mode === "signup" ? "Create account" : mode === "forgot" ? "Reset password" : "Sign in"}
@@ -348,7 +348,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+              className="mt-2 w-full rounded-[10px] border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
               placeholder="you@example.com"
               required
             />
@@ -393,7 +393,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
+                className="mt-2 w-full rounded-[10px] border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-white/20"
                 placeholder="••••••••"
                 minLength={8}
                 required
@@ -432,7 +432,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-[10px] bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitLabel}
           </button>

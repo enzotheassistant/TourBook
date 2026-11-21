@@ -10,6 +10,11 @@
  *   bg-accent-hover                main button hover
  * Red is kept for Delete / Remove / Revoke and error messages only.
  */
+@theme {
+  /* Geist (loaded in app/layout.tsx) for all text, with system fonts as backup. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 @theme static {
   --color-accent: oklch(68.5% 0.169 237.323); /* current blue (Tailwind sky-500) */
   --color-accent-hover: color-mix(in oklab, var(--color-accent) 82%, white);
@@ -53,7 +58,13 @@ body {
   min-width: 0;
 }
 
-button,
+/*
+ * Fields keep inheriting the page text size (16px) on purpose: iPhones zoom in
+ * when you tap a field with smaller text. This rule sits outside Tailwind's
+ * layers, so it wins over text-size classes on fields.
+ * Buttons are NOT listed here (Tailwind's own base styles already reset
+ * them), so their text-size and weight classes now work as written.
+ */
 input,
 select,
 textarea {

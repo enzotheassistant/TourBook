@@ -3,4 +3,4 @@
  * fields, …): same height, shape, border and focus outline everywhere.
  */
 export const FIELD_CLASS_NAME =
-  'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40';
+  'h-12 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-accent/40';

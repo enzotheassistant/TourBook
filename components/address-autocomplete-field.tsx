@@ -172,7 +172,7 @@ export function AddressAutocompleteField({
       </label>
 
       {open ? (
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-xl">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-xl">
           {suggestions.map((suggestion) => (
             <button
               key={suggestion.id}

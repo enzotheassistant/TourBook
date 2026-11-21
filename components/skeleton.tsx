@@ -15,7 +15,7 @@ export function SkeletonLine({ className = '' }: { className?: string }) {
 }
 
 /** Stack of card placeholders, e.g. a list of dates. */
-export function ListSkeleton({ rows = 3, rowClassName = 'h-24 rounded-[28px]', label = 'Loading' }: { rows?: number; rowClassName?: string; label?: string }) {
+export function ListSkeleton({ rows = 3, rowClassName = 'h-24 rounded-xl', label = 'Loading' }: { rows?: number; rowClassName?: string; label?: string }) {
   return (
     <div className="space-y-3" role="status" aria-label={label}>
       {Array.from({ length: rows }, (_, index) => (
@@ -48,9 +48,9 @@ export function AppShellSkeleton({ mode = 'crew' }: { mode?: 'crew' | 'admin' })
               <SkeletonBlock className="h-10 w-10 rounded-full" />
             </div>
             <div className="flex gap-2 py-2">
-              <SkeletonBlock className="h-10 w-24 rounded-full" />
-              <SkeletonBlock className="h-10 w-32 rounded-full" />
-              <SkeletonBlock className="h-10 w-20 rounded-full" />
+              <SkeletonBlock className="h-10 w-24 rounded-[10px]" />
+              <SkeletonBlock className="h-10 w-32 rounded-[10px]" />
+              <SkeletonBlock className="h-10 w-20 rounded-[10px]" />
             </div>
           </>
         )}
@@ -75,10 +75,10 @@ export function DaySheetSkeleton() {
             <SkeletonLine className="h-3 w-20" />
           </div>
         </div>
-        <SkeletonBlock className="h-[60px] rounded-[28px]" />
-        <SkeletonBlock className="h-28 rounded-[28px]" />
-        <SkeletonBlock className="h-44 rounded-[28px]" />
-        <SkeletonBlock className="h-24 rounded-[28px]" />
+        <SkeletonBlock className="h-[60px] rounded-xl" />
+        <SkeletonBlock className="h-28 rounded-xl" />
+        <SkeletonBlock className="h-44 rounded-xl" />
+        <SkeletonBlock className="h-24 rounded-xl" />
       </div>
     </div>
   );
