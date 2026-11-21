@@ -191,12 +191,12 @@ function ManagedAttachmentTile({
               if (event.key === 'Escape') setEditing(false);
             }}
             placeholder={stripFileExtension(attachment.file_name)}
-            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/50"
+            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
           />
           <p className="text-[11px] text-zinc-500">Leave empty to use the file name.</p>
-          {renameError ? <p className="text-[11px] text-rose-300">{renameError}</p> : null}
+          {renameError ? <p className="text-[11px] text-red-300">{renameError}</p> : null}
           <div className="flex gap-2">
-            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-sky-500 px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-accent px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button type="button" onClick={() => setEditing(false)} className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-white/10 px-3 text-xs font-medium text-zinc-200">
@@ -372,7 +372,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
         </div>
       ) : null}
 
-      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
       {openAttachment ? (
         <AttachmentViewer

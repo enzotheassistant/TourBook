@@ -67,7 +67,7 @@ export function LogoutButton({ compact = false, variant }: { compact?: boolean; 
         >
           {isPending ? 'Logging out…' : 'Logout'}
         </button>
-        {error ? <p className="px-4 pb-3 text-xs text-rose-300">{error}</p> : null}
+        {error ? <p className="px-4 pb-3 text-xs text-red-300">{error}</p> : null}
       </>
     );
   }
@@ -82,7 +82,7 @@ export function LogoutButton({ compact = false, variant }: { compact?: boolean; 
       >
         {isPending ? 'Logging out…' : 'Logout'}
       </button>
-      {error ? <p className="text-xs text-rose-300">{error}</p> : null}
+      {error ? <p className="text-xs text-red-300">{error}</p> : null}
     </div>
   );
 }

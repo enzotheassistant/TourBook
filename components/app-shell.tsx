@@ -143,11 +143,11 @@ function HeaderActionMenu({ actionHref, actionLabel, extraItems = [] }: { action
               key={item.href}
               href={item.href}
               aria-current={item.active ? 'page' : undefined}
-              className={`flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-sm transition hover:bg-white/[0.04] ${item.active ? 'text-sky-200' : 'text-zinc-100'}`}
+              className={`flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-sm transition hover:bg-white/[0.04] ${item.active ? 'text-accent-light' : 'text-zinc-100'}`}
               onClick={() => setOpen(false)}
             >
               {item.label}
-              {item.active ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" aria-hidden="true" /> : null}
+              {item.active ? <span className="h-1.5 w-1.5 rounded-full bg-accent-light" aria-hidden="true" /> : null}
             </Link>
           ))}
           {extraItems.length ? <div className="border-b border-white/10" aria-hidden="true" /> : null}

@@ -13,9 +13,9 @@ function getStatusTone(isOnline: boolean, source?: 'live' | 'cache') {
   }
 
   return {
-    wrap: 'border-sky-400/20 bg-linear-to-br from-sky-500/10 to-white/[0.03] text-zinc-100',
-    pill: 'border-sky-300/20 bg-sky-300/10 text-sky-100',
-    dot: 'bg-sky-300',
+    wrap: 'border-accent/20 bg-linear-to-br from-accent/10 to-white/[0.03] text-zinc-100',
+    pill: 'border-accent-light/20 bg-accent-light/10 text-accent-light',
+    dot: 'bg-accent-light',
     meta: 'text-zinc-400',
   };
 }

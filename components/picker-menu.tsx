@@ -118,7 +118,7 @@ function PickerMenu({
             className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition focus:outline-none focus-visible:bg-white/[0.08] ${active ? 'text-zinc-50' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100'}`}
           >
             <span className="min-w-0 truncate">{option.label}</span>
-            {active ? <span className="text-sky-300"><CheckIcon /></span> : null}
+            {active ? <span className="text-accent-light"><CheckIcon /></span> : null}
           </button>
         );
       })}
@@ -194,7 +194,7 @@ export function PickerHeading({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="group inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+        className="group inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         {/* Looks like plain heading text (no box): the name, then a small arrow.
             One line only: the name uses all the room it has and is cut short

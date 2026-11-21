@@ -123,7 +123,7 @@ export default function ResetPasswordPage() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Set a new password</h1>
         <p className="mt-2 text-sm text-zinc-400">Choose a new password for your account.</p>
         {inviteToken ? (
-          <p className="mt-2 text-xs text-sky-300">Invite token detected. You can continue invite acceptance after sign in.</p>
+          <p className="mt-2 text-xs text-accent-light">Invite token detected. You can continue invite acceptance after sign in.</p>
         ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -163,8 +163,8 @@ export default function ResetPasswordPage() {
             />
           </div>
 
-          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-          {success ? <p className="text-sm text-sky-300">{success}</p> : null}
+          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {success ? <p className="text-sm text-accent-light">{success}</p> : null}
 
           <button
             type="submit"

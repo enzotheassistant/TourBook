@@ -85,7 +85,7 @@ function MultilineText({ children }: { children: string }) {
 }
 
 function viewButtonClassName(active: boolean) {
-  return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-sky-400/45 bg-sky-500/12 text-sky-200' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
+  return `inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium transition ${active ? 'border border-accent/45 bg-accent-soft text-accent-light' : 'border border-white/10 bg-transparent text-zinc-300 hover:border-white/20 hover:bg-white/[0.05]'}`;
 }
 
 function formatHeaderDate(date: string) {
@@ -317,7 +317,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
         {isSoftRefreshing ? (
           <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent/70" aria-hidden="true" />
             Loading latest details…
           </div>
         ) : null}
@@ -334,11 +334,11 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         {requestedView === 'day-sheet' || !canShowGuestList ? (
           show.day_type === 'show' ? (
             <>
-              {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
+              {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-accent-light underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
               {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList allowPartial items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
               {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><MultilineText>{show.parking_load_info}</MultilineText></SectionCard> : null}
               {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone, href: telHref(show.dos_phone) }]} /></SectionCard> : null}
-              {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}</div></SectionCard> : null}
+              {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-accent-light underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}</div></SectionCard> : null}
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
               <AttachmentsSection dateId={show.id} adminMode={adminMode} />
             </>
@@ -349,7 +349,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                   <div className="space-y-3 text-sm text-zinc-200">
                     <p className="font-medium">{getLocationTitle(show)}</p>
                     {getCityRegionCountry(show) ? <p className="text-zinc-300">{getCityRegionCountry(show)}</p> : null}
-                    {show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}
+                    {show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-accent-light underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}
                   </div>
                 </SectionCard>
               ) : null}
@@ -397,7 +397,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                 <SectionCard title="Accommodation">
                   <div className="space-y-3 text-sm text-zinc-200">
                     {show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}
-                    {show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}
+                    {show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-accent-light underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}
                     {show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}
                   </div>
                 </SectionCard>

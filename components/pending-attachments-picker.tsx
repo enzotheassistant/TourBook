@@ -115,7 +115,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
         />
       </div>
 
-      {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
       {files.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -137,7 +137,7 @@ export function PendingAttachmentsPicker({ files, onFilesChange }: { files: File
                     maxLength={120}
                     onChange={(event) => setDisplayName(file, event.target.value)}
                     placeholder={stripFileExtension(file.name)}
-                    className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/50"
+                    className="h-9 w-full rounded-lg border border-white/10 bg-black/30 px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/50"
                   />
                   <p className="mt-1 truncate text-[11px] text-zinc-500" title={file.name}>{formatFileSize(file.size)} · name optional</p>
                 </div>

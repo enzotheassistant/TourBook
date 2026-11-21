@@ -149,8 +149,8 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
         </h1>
         <p className="mt-3 text-sm text-zinc-300">{message}</p>
         {!error ? (
-          <div className="mt-4 flex items-center gap-2 text-xs text-sky-300">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/80" aria-hidden="true" />
+          <div className="mt-4 flex items-center gap-2 text-xs text-accent-light">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent/80" aria-hidden="true" />
             Applying access before entering the app…
           </div>
         ) : null}
@@ -159,7 +159,7 @@ export function InviteContinuationClient({ token }: InviteContinuationClientProp
             <button
               type="button"
               onClick={() => window.location.replace(`/accept-invite?token=${encodeURIComponent(trimmedToken)}`)}
-              className="inline-flex h-11 items-center justify-center rounded-full border border-sky-400/30 bg-sky-500/15 px-4 text-sm font-medium text-sky-100 transition hover:bg-sky-500/20"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-accent/30 bg-accent/15 px-4 text-sm font-medium text-accent-light transition hover:bg-accent/20"
             >
               Retry invite access
             </button>

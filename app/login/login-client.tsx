@@ -307,7 +307,7 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
           {mode === "signup" ? "Create account" : mode === "forgot" ? "Reset password" : "Sign in"}
         </h1>
         {inviteToken ? (
-          <p className="mt-2 text-xs text-sky-300">Invite token detected. Complete auth and invite acceptance will continue.</p>
+          <p className="mt-2 text-xs text-accent-light">Invite token detected. Complete auth and invite acceptance will continue.</p>
         ) : null}
 
         {mode !== "forgot" ? (
@@ -426,8 +426,8 @@ export function LoginPageClient({ initialEmail, initialRememberEmail = true, inv
             </button>
           )}
 
-          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-          {success ? <p className="text-sm text-sky-300">{success}</p> : null}
+          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {success ? <p className="text-sm text-accent-light">{success}</p> : null}
 
           <button
             type="submit"
