@@ -36,13 +36,14 @@ type AttachmentRow = {
   storage_path: string;
   thumbnail_path: string | null;
   file_name: string;
+  display_name: string | null;
   content_type: string;
   file_size: number;
   uploaded_by: string | null;
   created_at: string;
 };
 
-const ATTACHMENT_ROW_COLUMNS = 'id, workspace_id, project_id, date_id, storage_path, thumbnail_path, file_name, content_type, file_size, uploaded_by, created_at';
+const ATTACHMENT_ROW_COLUMNS = 'id, workspace_id, project_id, date_id, storage_path, thumbnail_path, file_name, display_name, content_type, file_size, uploaded_by, created_at';
 
 function normalizeAttachment(row: AttachmentRow): DateAttachment {
   return {
@@ -51,6 +52,7 @@ function normalizeAttachment(row: AttachmentRow): DateAttachment {
     project_id: String(row.project_id),
     date_id: String(row.date_id),
     file_name: String(row.file_name ?? ''),
+    display_name: row.display_name ? String(row.display_name) : null,
     content_type: String(row.content_type ?? 'application/octet-stream'),
     file_size: Number(row.file_size ?? 0),
     uploaded_by: row.uploaded_by ? String(row.uploaded_by) : null,
@@ -63,6 +65,15 @@ function sanitizeFileName(rawName: string) {
   const trimmed = rawName.trim().slice(-180) || 'file';
   const cleaned = trimmed.replace(/[/\\]/g, '_').replace(/[^a-zA-Z0-9._ -]/g, '_');
   return cleaned || 'file';
+}
+
+export const MAX_DISPLAY_NAME_LENGTH = 120; // matches the date_attachments_display_name_length check
+
+/** Optional custom name: trimmed, capped, and empty means "no custom name". */
+function normalizeDisplayName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.replace(/\s+/g, ' ').trim().slice(0, MAX_DISPLAY_NAME_LENGTH).trim();
+  return cleaned || null;
 }
 
 async function requireAttachmentWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
@@ -188,7 +199,7 @@ export async function finalizeAttachmentUploadScoped(
   userId: string,
   workspaceId: string,
   dateId: string,
-  input: AttachmentUploadInput & { attachmentId: unknown; thumbnailUploaded?: unknown },
+  input: AttachmentUploadInput & { attachmentId: unknown; thumbnailUploaded?: unknown; displayName?: unknown },
 ): Promise<DateAttachment> {
   const supabase = requireScopedDataClient(supabaseInput);
   await requireAttachmentWriteAccess(supabase, userId, workspaceId);
@@ -226,6 +237,7 @@ export async function finalizeAttachmentUploadScoped(
       storage_path: paths.storagePath,
       thumbnail_path: thumbnailPath,
       file_name: validated.fileName,
+      display_name: normalizeDisplayName(input.displayName),
       content_type: contentType,
       file_size: fileSize,
       uploaded_by: userId,
@@ -272,6 +284,36 @@ async function getAttachmentRowScoped(
 
   await getDateScoped(supabase, userId, workspaceId, String(data.date_id));
   return data as AttachmentRow;
+}
+
+/** Sets (or clears, when empty) an attachment's custom display name. */
+export async function renameAttachmentScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  workspaceId: string,
+  attachmentId: string,
+  displayName: unknown,
+): Promise<DateAttachment> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  await requireAttachmentWriteAccess(supabase, userId, workspaceId);
+  await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
+
+  const { data, error } = await supabase
+    .from('date_attachments')
+    .update({ display_name: normalizeDisplayName(displayName) })
+    .eq('id', attachmentId)
+    .eq('workspace_id', workspaceId)
+    .select(ATTACHMENT_ROW_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    if (isMissingRelationError(error)) {
+      throw new ApiError(409, 'Attachments schema is not ready yet.');
+    }
+    throw new ApiError(500, error?.message ?? 'Unable to rename the attachment.');
+  }
+
+  return normalizeAttachment(data);
 }
 
 export async function deleteAttachmentScoped(

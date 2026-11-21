@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AttachmentViewer } from '@/components/attachment-viewer';
-import { FileIcon, fileExtensionLabel, hasPreviewThumbnail } from '@/components/attachments-manager';
+import { AttachmentTilePreview } from '@/components/attachments-manager';
+import { attachmentDisplayName, compareAttachmentsByName } from '@/lib/attachments/display-name';
 import { SectionCard } from '@/components/section-card';
-import { getAttachmentDownloadHref, listAttachments } from '@/lib/data-client';
+import { listAttachments } from '@/lib/data-client';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import { useAppContext } from '@/hooks/use-app-context';
 import type { DateAttachment } from '@/lib/types/date-record';
@@ -52,7 +53,7 @@ export function AttachmentsSection({ dateId, adminMode = false }: { dateId: stri
 
   if (!loaded || attachments.length === 0) return null;
 
-  const sortedAttachments = [...attachments].sort((a, b) => a.file_name.localeCompare(b.file_name));
+  const sortedAttachments = [...attachments].sort(compareAttachmentsByName);
 
   return (
     <SectionCard title="Attachments">
@@ -65,23 +66,10 @@ export function AttachmentsSection({ dateId, adminMode = false }: { dateId: stri
             className="flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20 text-left"
           >
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]">
-              {hasPreviewThumbnail(attachment) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId }, 'thumbnail')}
-                  alt={attachment.file_name}
-                  loading="lazy"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <FileIcon />
-                  <span className="text-[10px] font-semibold tracking-wide text-zinc-500">{fileExtensionLabel(attachment)}</span>
-                </div>
-              )}
+              <AttachmentTilePreview attachment={attachment} workspaceId={activeWorkspaceId} />
             </div>
             <div className="px-3 py-2">
-              <p className="truncate text-xs font-medium text-zinc-100" title={attachment.file_name}>{attachment.file_name}</p>
+              <p className="truncate text-xs font-medium text-zinc-100" title={attachmentDisplayName(attachment)}>{attachmentDisplayName(attachment)}</p>
             </div>
           </button>
         ))}

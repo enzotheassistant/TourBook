@@ -75,6 +75,8 @@ export type DateAttachment = {
   project_id: string;
   date_id: string;
   file_name: string;
+  /** Optional custom name set by an admin; when empty the UI shows file_name without its extension. */
+  display_name: string | null;
   content_type: string;
   file_size: number;
   uploaded_by: string | null;

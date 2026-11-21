@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
 import { AttachmentsManager } from '@/components/attachments-manager';
-import { PendingAttachmentsPicker } from '@/components/pending-attachments-picker';
+import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
@@ -1352,7 +1352,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         const failures: string[] = [];
         for (const file of pendingAttachments) {
           try {
-            await uploadAttachment(show.id, file, { workspaceId: activeWorkspaceId });
+            await uploadAttachment(show.id, file, { workspaceId: activeWorkspaceId }, getPendingDisplayName(file));
           } catch {
             failures.push(file.name);
           }
