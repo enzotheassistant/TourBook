@@ -278,7 +278,8 @@ export function AppShell({
             </div>
           )}
           {mode === 'crew' ? <div className="border-t border-white/10" /> : null}
-          {mode === 'admin' ? <div className="py-2" /> : null}
+          {/* Admin: no extra spacer under the header (was 16px) — the header's own
+              padding plus the page's top padding leave a comfortable gap (per Phil). */}
         </div>
       </header>
 
