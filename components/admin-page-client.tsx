@@ -2393,31 +2393,38 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           ) : null}
 
         <section className={`rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5 ${editorBootstrapLoading && !isEditing ? 'hidden' : ''}`}>
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div className="pt-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{editorCopy.title}</p>
-              <h1 className="mt-1 text-lg font-medium tracking-tight text-zinc-300">{isEditing ? `Edit ${getDayTypeBadge(form.day_type)}` : getDayTypeBadge(form.day_type)}</h1>
-              <p className="mt-1 text-sm text-zinc-500">{form.day_type === 'show' ? 'Full show-day details with guest-list support.' : form.day_type === 'travel' ? 'Routing-focused itinerary entry for transit days.' : 'Simple itinerary entry for days off and reset days.'}</p>
-            </div>
-            <div className={`w-full flex-wrap items-center justify-end gap-2 ${isEditing ? 'hidden' : 'flex'}`}>
-              <div className="flex w-full items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:flex-wrap sm:overflow-visible sm:pb-0">
-                {/* Save / Create / Update / Publish live in the pinned bar at the bottom of the form. */}
-                {!isEditing ? (
-                  <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 min-w-[5.5rem] shrink-0 px-3 text-[13px] sm:h-11 sm:min-w-0 sm:px-4 sm:text-sm`}>
-                    Import
-                  </button>
-                ) : null}
+          {/* Title row: "New show day" / "Edit travel day" … with Import on the right.
+              Expand/Collapse all sit in this row on desktop and just below it on phones. */}
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-zinc-50">
+              {`${isEditing ? 'Edit' : 'New'} ${getDayTypeBadge(form.day_type).toLowerCase()}`}
+            </h1>
+            <div className="flex shrink-0 items-center gap-4">
+              <div className="hidden items-center gap-3 text-xs text-zinc-500 sm:flex">
+                <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
+                  Expand all
+                </button>
+                <span className="text-zinc-700" aria-hidden="true">•</span>
+                <button type="button" onClick={collapseAllSections} className="transition hover:text-zinc-300">
+                  Collapse all
+                </button>
               </div>
+              {/* Save / Create / Update / Publish live in the pinned bar at the bottom of the form. */}
+              {!isEditing ? (
+                <button type="button" onClick={openImportModal} className={`${secondaryButtonClassName()} h-10 shrink-0 px-4`}>
+                  Import
+                </button>
+              ) : null}
             </div>
           </div>
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <div className={`mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500 ${message ? '' : 'sm:hidden'}`}>
             <div className="min-h-[1rem] text-accent-light/90">{message || ''}</div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 sm:hidden">
               <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
                 Expand all
               </button>
-              <span className="text-zinc-700">•</span>
+              <span className="text-zinc-700" aria-hidden="true">•</span>
               <button type="button" onClick={collapseAllSections} className="transition hover:text-zinc-300">
                 Collapse all
               </button>
