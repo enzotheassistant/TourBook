@@ -1,13 +1,13 @@
 # UI Plan — Progress
 
-Work branch: `ui-plan` (each item is its own commit). To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
+Work branch: `ui-plan` (each item is its own commit). Draft pull request: #5. Preview: https://tour-book-git-ui-plan-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
 
-- [ ] 1.1 Day sheet section order
-- [ ] 1.2 Tappable phone numbers
-- [ ] 1.3 Attachments (custom name, name without extension, file tiles)
-- [ ] 1.4 Header title becomes the project switcher
-- [ ] 1.5 Upcoming / Past switcher
-- [ ] 1.6 Crew "…" menu Logout styling
+- [x] 1.1 Day sheet section order
+- [x] 1.2 Tappable phone numbers
+- [x] 1.3 Attachments (custom name, name without extension, file tiles)
+- [x] 1.4 Header title becomes the project switcher
+- [x] 1.5 Upcoming / Past switcher
+- [x] 1.6 Crew "…" menu Logout styling
 - [ ] 2.1 Admin mobile navigation
 - [ ] 2.2 Pinned Save Draft / Create buttons
 - [ ] 2.3 Section visibility toggle switches
@@ -26,7 +26,15 @@ Work branch: `ui-plan` (each item is its own commit). To resume in a new session
 
 ## Notes for Phil
 
-(Notes are added here as items are finished.)
+**Phase 1 (done 2026-11-21, waiting for Phil's test on the preview before merging)**
+- 1.1 Only show days were reordered. Travel and off days have a different layout (Route → Departure & arrival → Transport…) and were left as they were.
+- 1.2 Only the DOS / contact phone fields are tappable. Numbers typed inside Notes are not linked (the app deliberately tells phones not to guess phone numbers in text, so times and dates don't get mistaken for numbers).
+- 1.3 Database: added an optional `display_name` column to `date_attachments`, plus a rule that lets owners/admins/editors change only that column. Applied to the live Supabase project on 2026-11-21 (file: database/migrations/2026-11-21_date_attachments_display_name.sql). Rename = pencil on each file tile in the admin edit form; new dates get an optional name box under each staged file. Empty name = the file name without its extension.
+- 1.3 PDF previews only exist for PDFs uploaded from now on. Older PDFs show the file-icon tile until re-uploaded. Word/Excel/other docs always show the file-icon tile.
+- 1.4 The header picker is shared code (components/picker-menu.tsx) reused by 1.5. On phones the header is now one row.
+- 1.5 The "←" back arrow on Past dates was removed (agreed with Phil; the picker replaces it).
+- 1.6 The admin "…" menu on phones uses the same Logout row, so it changed too.
+- Checks: GitHub CI (lint, typecheck, unit tests, build) passed on every Phase 1 commit. The app couldn't be run in Claude's workspace, so the screen-by-screen check is Phil's test on the preview link.
 
 ---
 
