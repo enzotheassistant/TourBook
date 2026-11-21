@@ -346,7 +346,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
               {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}</div></SectionCard> : null}
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
-              <AttachmentsSection dateId={show.id} />
+              <AttachmentsSection dateId={show.id} adminMode={adminMode} />
             </>
           ) : (
             <>
@@ -419,7 +419,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                   </div>
                 </SectionCard>
               ) : null}
-              <AttachmentsSection dateId={show.id} />
+              <AttachmentsSection dateId={show.id} adminMode={adminMode} />
             </>
           )
         ) : (
