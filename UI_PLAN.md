@@ -13,7 +13,7 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - [x] 2.3 Section visibility toggle switches
 - [x] 2.4 Team page rows
 - [x] 2.5 "project" instead of "artist"
-- [ ] 2.6 Compact schedule editor
+- [x] 2.6 Compact schedule editor
 - [ ] 3.1 Address fields match other inputs
 - [ ] 3.2 Matching upload boxes
 - [ ] 3.3 One "…" menu icon
@@ -37,12 +37,13 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - Checks: GitHub CI (lint, typecheck, unit tests, build) passed on every Phase 1 commit. The app couldn't be run in Claude's workspace, so the screen-by-screen check is Phil's test on the preview link.
 - Phase 1 merged and live on 2026-11-21.
 
-**Phase 2 (in progress on `ui-plan-2`)**
+**Phase 2 (done 2026-11-21 on `ui-plan-2`, waiting for Phil's test on the preview before merging)**
 - 2.1 Phil chose to also switch the admin header's project dropdown to the Phase 1 picker (plain text when there's only one project).
 - 2.2 Pinned bar also covers editing: Update (published date) and Delete / Save / Publish (draft), per Phil.
 - 2.3 The switch shows even when a section is folded shut; the "Visible / Hidden" words were removed (Phil OK'd). Hidden sections dim to 70%.
 - 2.4 Email kept as small grey text under the name (Phil's choice). Invites keep email + expiry as a plain date. "Pending" badges kept.
 - 2.5 UI text and error messages only. Database, code names and analytics labels still say "artist". 4 unit tests updated to the new wording; all 108 pass.
+- 2.6 Before/after approved by Phil before saving. Undo lasts 5 seconds and only the most recent deleted line can be undone. Time field is 10rem wide on phones, 13rem on desktop; fields stack under 360px wide.
 
 ---
 
