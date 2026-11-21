@@ -16,7 +16,7 @@
 }
 
 @theme static {
-  --color-accent: oklch(68.5% 0.169 237.323); /* current blue (Tailwind sky-500) */
+  --color-accent: oklch(72% 0.065 245); /* Steel: muted blue chosen by Phil 2026-11-21 (was sky-500 oklch(68.5% 0.169 237.323)) */
   --color-accent-hover: color-mix(in oklab, var(--color-accent) 82%, white);
   --color-accent-soft: color-mix(in oklab, var(--color-accent) 12%, transparent);
   --color-accent-light: color-mix(in oklab, var(--color-accent) 55%, white);
