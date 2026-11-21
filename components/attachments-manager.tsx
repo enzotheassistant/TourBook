@@ -1,6 +1,7 @@
 'use client';
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { AttachmentViewer } from '@/components/attachment-viewer';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { deleteAttachment, getAttachmentDownloadHref, listAttachments, uploadAttachment } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -88,6 +89,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [openAttachment, setOpenAttachment] = useState<DateAttachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
@@ -223,6 +225,16 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
 
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
+      {openAttachment ? (
+        <AttachmentViewer
+          key={openAttachment.id}
+          attachment={openAttachment}
+          workspaceId={activeWorkspaceId}
+          canDownload={canManage}
+          onClose={() => setOpenAttachment(null)}
+        />
+      ) : null}
+
       {!loaded ? (
         <p className="text-sm text-zinc-400">Loading attachments…</p>
       ) : sortedAttachments.length === 0 ? (
@@ -231,10 +243,10 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {sortedAttachments.map((attachment) => (
             <div key={attachment.id} className="group relative flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20">
-              <a
-                href={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId })}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => setOpenAttachment(attachment)}
+                aria-label={`View ${attachment.file_name}`}
                 className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]"
               >
                 {hasPreviewThumbnail(attachment) ? (
@@ -251,7 +263,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
                     <span className="text-[10px] font-semibold tracking-wide text-zinc-500">{fileExtensionLabel(attachment)}</span>
                   </div>
                 )}
-              </a>
+              </button>
               <div className="flex items-start justify-between gap-2 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium text-zinc-100" title={attachment.file_name}>{attachment.file_name}</p>

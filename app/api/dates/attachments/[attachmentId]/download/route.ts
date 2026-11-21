@@ -10,11 +10,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const workspaceId = request.nextUrl.searchParams.get('workspaceId') ?? '';
   const variant = request.nextUrl.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'original';
+  // ?mode=view returns a short-lived link as JSON for the in-app viewer,
+  // without the "download" label (so phones display the file directly).
+  const viewMode = request.nextUrl.searchParams.get('mode') === 'view';
   const { attachmentId } = await params;
 
   try {
-    const { url } = await getAttachmentDownloadUrlScoped(authState.supabase, authState.user.id, workspaceId, attachmentId, variant);
-    return finalizeAuthResponse(NextResponse.redirect(url), authState);
+    const result = await getAttachmentDownloadUrlScoped(
+      authState.supabase,
+      authState.user.id,
+      workspaceId,
+      attachmentId,
+      variant,
+      viewMode ? 'inline' : 'download',
+    );
+    if (viewMode) {
+      return finalizeAuthResponse(NextResponse.json(result), authState);
+    }
+    return finalizeAuthResponse(NextResponse.redirect(result.url), authState);
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
     await recordApiRuntimeError(request, {
