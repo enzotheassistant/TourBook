@@ -39,8 +39,13 @@ export function formatUploadedAt(iso: string) {
   return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
-export function isImageAttachment(attachment: DateAttachment) {
-  return attachment.content_type.startsWith('image/');
+/**
+ * Only show a picture tile when a preview thumbnail exists. Images the browser
+ * couldn't preview (e.g. a HEIC photo uploaded from Chrome) fall back to a
+ * file tile instead of a broken image.
+ */
+export function hasPreviewThumbnail(attachment: DateAttachment) {
+  return attachment.has_thumbnail;
 }
 
 export function fileExtensionLabel(attachment: DateAttachment) {
@@ -232,7 +237,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
                 rel="noreferrer"
                 className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]"
               >
-                {isImageAttachment(attachment) ? (
+                {hasPreviewThumbnail(attachment) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId }, 'thumbnail')}

@@ -79,6 +79,8 @@ export type DateAttachment = {
   file_size: number;
   uploaded_by: string | null;
   created_at: string;
+  /** True when a small preview image exists; otherwise show a generic file tile. */
+  has_thumbnail: boolean;
 };
 
 export type WorkspaceAccess = {

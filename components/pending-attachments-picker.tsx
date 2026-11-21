@@ -10,7 +10,9 @@ function fileExtensionLabelForName(name: string) {
 }
 
 function isImageFile(file: File) {
-  return file.type.startsWith('image/');
+  // HEIC/HEIF can't be shown in an <img> on most non-Apple browsers, so show a
+  // file tile for those rather than a broken preview.
+  return file.type.startsWith('image/') && file.type !== 'image/heic' && file.type !== 'image/heif';
 }
 
 function FilePreviewImage({ file }: { file: File }) {

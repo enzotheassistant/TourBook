@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileIcon, fileExtensionLabel, formatFileSize, formatUploadedAt, isImageAttachment } from '@/components/attachments-manager';
+import { FileIcon, fileExtensionLabel, formatFileSize, formatUploadedAt, hasPreviewThumbnail } from '@/components/attachments-manager';
 import { SectionCard } from '@/components/section-card';
 import { getAttachmentDownloadHref, listAttachments } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -57,7 +57,7 @@ export function AttachmentsSection({ dateId }: { dateId: string }) {
             className="flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20"
           >
             <div className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]">
-              {isImageAttachment(attachment) ? (
+              {hasPreviewThumbnail(attachment) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId }, 'thumbnail')}
