@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { attachmentDisplayName } from '@/lib/attachments/display-name';
 import { openPdfDocument, type PdfDocument } from '@/lib/attachments/pdfjs-loader';
 import { getAttachmentDownloadHref, getAttachmentViewUrl } from '@/lib/data-client';
 import type { DateAttachment } from '@/lib/types/date-record';
@@ -282,7 +283,7 @@ export function AttachmentViewer({
   } else if (view.status === 'error') {
     content = <CenteredMessage><p>This file couldn&apos;t be loaded. Check your connection and try again.</p></CenteredMessage>;
   } else if (kind === 'image') {
-    content = <ImageView url={view.url} alt={attachment.file_name} zoomed={zoomed} />;
+    content = <ImageView url={view.url} alt={attachmentDisplayName(attachment)} zoomed={zoomed} />;
   } else if (kind === 'pdf') {
     content = <PdfPages url={view.url} zoomed={zoomed} />;
   } else if (kind === 'text') {
@@ -298,9 +299,9 @@ export function AttachmentViewer({
   }
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={attachment.file_name} className="fixed inset-0 z-[120] flex flex-col bg-[#0b080b]">
+    <div role="dialog" aria-modal="true" aria-label={attachmentDisplayName(attachment)} className="fixed inset-0 z-[120] flex flex-col bg-[#0b080b]">
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-[#120d12] px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-        <p className="min-w-0 flex-1 truncate pl-1 text-sm font-medium text-zinc-100">{attachment.file_name}</p>
+        <p className="min-w-0 flex-1 truncate pl-1 text-sm font-medium text-zinc-100">{attachmentDisplayName(attachment)}</p>
         {canZoom ? (
           <button
             type="button"

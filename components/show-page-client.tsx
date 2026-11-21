@@ -9,7 +9,7 @@ import { GuestListManager } from '@/components/guest-list-manager';
 import { OfflineStatus } from '@/components/offline-status';
 import { deleteShow, exportGuestListCsv, getShow, peekCachedShow } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
-import { KeyValueList } from '@/components/key-value-list';
+import { KeyValueList, telHref } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
 import { filterVisibleScheduleItems } from '@/lib/schedule-items';
@@ -333,9 +333,9 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
           show.day_type === 'show' ? (
             <>
               {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
-              {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><MultilineText>{show.parking_load_info}</MultilineText></SectionCard> : null}
               {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList allowPartial items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
-              {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} /></SectionCard> : null}
+              {show.visibility.show_parking_load_info && show.parking_load_info ? <SectionCard title="Load / parking info"><MultilineText>{show.parking_load_info}</MultilineText></SectionCard> : null}
+              {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? <SectionCard title="DOS contact"><KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone, href: telHref(show.dos_phone) }]} /></SectionCard> : null}
               {show.visibility.show_accommodation && hasAccommodation(show) ? <SectionCard title="Accommodation"><div className="space-y-3 text-sm text-zinc-200">{show.hotel_name ? <p className="font-medium">{show.hotel_name}</p> : null}{show.hotel_address ? show.hotel_maps_url ? <a href={show.hotel_maps_url} target="_blank" rel="noreferrer" className="break-words text-sky-300 underline underline-offset-4">{show.hotel_address}</a> : <p>{show.hotel_address}</p> : null}{show.hotel_notes ? <MultilineText>{show.hotel_notes}</MultilineText> : null}</div></SectionCard> : null}
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
               <AttachmentsSection dateId={show.id} adminMode={adminMode} />
@@ -387,7 +387,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
               {show.visibility.show_dos_contact && (show.dos_name || show.dos_phone) ? (
                 <SectionCard title={show.day_type === 'travel' ? 'Travel contact' : 'Contact'}>
-                  <KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone }]} />
+                  <KeyValueList items={[{ label: 'Name', value: show.dos_name }, { label: 'Phone', value: show.dos_phone, href: telHref(show.dos_phone) }]} />
                 </SectionCard>
               ) : null}
 

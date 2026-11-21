@@ -3,7 +3,8 @@
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentViewer } from '@/components/attachment-viewer';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { deleteAttachment, getAttachmentDownloadHref, listAttachments, uploadAttachment } from '@/lib/data-client';
+import { deleteAttachment, getAttachmentDownloadHref, listAttachments, renameAttachment, uploadAttachment } from '@/lib/data-client';
+import { attachmentDisplayName, compareAttachmentsByName, stripFileExtension } from '@/lib/attachments/display-name';
 import { useAppContext } from '@/hooks/use-app-context';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import type { DateAttachment } from '@/lib/types/date-record';
@@ -64,12 +65,52 @@ export function UploadIcon() {
   );
 }
 
-export function FileIcon() {
+export function FileIcon({ className = 'h-6 w-6' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-6 w-6 text-zinc-400">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`${className} text-zinc-400`}>
       <path d="M6 3H13L18 8V19C18 20.1046 17.1046 21 16 21H6C4.89543 21 4 20.1046 4 19V5C4 3.89543 4.89543 3 6 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
       <path d="M13 3V8H18" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+export function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-4 w-4">
+      <path d="M12 20H21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L8 18L4 19L5 15L16.5 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Square placeholder for files without a picture preview: a file icon plus the type (PDF, DOCX…). */
+export function FileTypeTile({ label }: { label: string }) {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-white/[0.03]">
+      <FileIcon className="h-9 w-9" />
+      <span className="rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-zinc-400">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * The square preview part of an attachment tile. Shows the thumbnail (photos,
+ * and PDFs uploaded since PDF previews were added) or a file-type tile. If a
+ * thumbnail fails to load it falls back to the file-type tile, so there's never
+ * a broken image box.
+ */
+export function AttachmentTilePreview({ attachment, workspaceId }: { attachment: DateAttachment; workspaceId: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!hasPreviewThumbnail(attachment) || failed) return <FileTypeTile label={fileExtensionLabel(attachment)} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={getAttachmentDownloadHref(attachment.id, { workspaceId }, 'thumbnail')}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={`h-full w-full object-cover ${attachment.content_type === 'application/pdf' ? 'object-top bg-white' : ''}`}
+    />
   );
 }
 
@@ -78,6 +119,127 @@ export function TrashIcon() {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-4 w-4">
       <path d="M4 7H20M9 7V5C9 4.44772 9.44772 4 10 4H14C14.5523 4 15 4.44772 15 5V7M18 7L17.3 19.0501C17.2508 19.8992 16.5477 20.5626 15.6971 20.5626H8.30294C7.45227 20.5626 6.74918 19.8992 6.7 19.0501L6 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function ManagedAttachmentTile({
+  attachment,
+  workspaceId,
+  canManage,
+  onOpen,
+  onDelete,
+  onRenamed,
+}: {
+  attachment: DateAttachment;
+  workspaceId: string | null;
+  canManage: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+  onRenamed: (attachment: DateAttachment) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [renameError, setRenameError] = useState('');
+  const name = attachmentDisplayName(attachment);
+
+  function startEditing() {
+    setDraftName(attachment.display_name ?? '');
+    setRenameError('');
+    setEditing(true);
+  }
+
+  async function saveName() {
+    if (saving) return;
+    const next = draftName.trim();
+    if (next === (attachment.display_name ?? '')) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setRenameError('');
+    try {
+      const updated = await renameAttachment(attachment.id, next, { workspaceId });
+      onRenamed(updated);
+      setEditing(false);
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : 'Unable to rename.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="group relative flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`View ${name}`}
+        className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]"
+      >
+        <AttachmentTilePreview attachment={attachment} workspaceId={workspaceId} />
+      </button>
+      {editing ? (
+        <form
+          className="space-y-2 px-3 py-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveName();
+          }}
+        >
+          <label className="sr-only" htmlFor={`attachment-name-${attachment.id}`}>Display name</label>
+          <input
+            id={`attachment-name-${attachment.id}`}
+            autoFocus
+            value={draftName}
+            maxLength={120}
+            onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setEditing(false);
+            }}
+            placeholder={stripFileExtension(attachment.file_name)}
+            className="h-10 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-sky-400/50"
+          />
+          <p className="text-[11px] text-zinc-500">Leave empty to use the file name.</p>
+          {renameError ? <p className="text-[11px] text-rose-300">{renameError}</p> : null}
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center rounded-full bg-sky-500 px-3 text-xs font-medium text-zinc-950 disabled:opacity-60">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-white/10 px-3 text-xs font-medium text-zinc-200">
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex items-start justify-between gap-1 py-2 pl-3 pr-1">
+          <div className="min-w-0 py-1">
+            <p className="truncate text-xs font-medium text-zinc-100" title={name}>{name}</p>
+            <p className="mt-0.5 text-[11px] text-zinc-500">{formatFileSize(attachment.file_size)} · {formatUploadedAt(attachment.created_at)}</p>
+          </div>
+          {canManage ? (
+            <div className="flex shrink-0">
+              <button
+                type="button"
+                onClick={startEditing}
+                aria-label={`Rename ${name}`}
+                className="inline-flex h-11 w-9 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200"
+              >
+                <PencilIcon />
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label={`Delete ${name}`}
+                className="inline-flex h-11 w-9 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white/[0.06] hover:text-red-300"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -178,7 +340,7 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
   }
 
   const sortedAttachments = useMemo(
-    () => [...attachments].sort((a, b) => a.file_name.localeCompare(b.file_name)),
+    () => [...attachments].sort(compareAttachmentsByName),
     [attachments],
   );
 
@@ -242,45 +404,15 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {sortedAttachments.map((attachment) => (
-            <div key={attachment.id} className="group relative flex flex-col overflow-hidden rounded-[20px] border border-white/10 bg-black/20">
-              <button
-                type="button"
-                onClick={() => setOpenAttachment(attachment)}
-                aria-label={`View ${attachment.file_name}`}
-                className="flex aspect-square items-center justify-center overflow-hidden bg-white/[0.03]"
-              >
-                {hasPreviewThumbnail(attachment) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={getAttachmentDownloadHref(attachment.id, { workspaceId: activeWorkspaceId }, 'thumbnail')}
-                    alt={attachment.file_name}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <FileIcon />
-                    <span className="text-[10px] font-semibold tracking-wide text-zinc-500">{fileExtensionLabel(attachment)}</span>
-                  </div>
-                )}
-              </button>
-              <div className="flex items-start justify-between gap-2 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-zinc-100" title={attachment.file_name}>{attachment.file_name}</p>
-                  <p className="mt-0.5 text-[11px] text-zinc-500">{formatFileSize(attachment.file_size)} · {formatUploadedAt(attachment.created_at)}</p>
-                </div>
-                {canManage ? (
-                  <button
-                    type="button"
-                    onClick={() => setPendingDeleteId(attachment.id)}
-                    aria-label={`Delete ${attachment.file_name}`}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white/[0.06] hover:text-red-300"
-                  >
-                    <TrashIcon />
-                  </button>
-                ) : null}
-              </div>
-            </div>
+            <ManagedAttachmentTile
+              key={attachment.id}
+              attachment={attachment}
+              workspaceId={activeWorkspaceId}
+              canManage={canManage}
+              onOpen={() => setOpenAttachment(attachment)}
+              onDelete={() => setPendingDeleteId(attachment.id)}
+              onRenamed={(updated) => setAttachments((current) => current.map((item) => (item.id === updated.id ? updated : item)))}
+            />
           ))}
         </div>
       )}

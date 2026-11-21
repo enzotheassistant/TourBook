@@ -279,7 +279,7 @@ type AttachmentUploadTicket = {
  *   3. tell our API the upload finished; it confirms the file really landed
  *      in Storage before recording it.
  */
-export async function uploadAttachment(dateId: string, file: File, scope?: ScopeInput) {
+export async function uploadAttachment(dateId: string, file: File, scope?: ScopeInput, displayName?: string | null) {
   const resolved = resolveScope(scope);
   const params = new URLSearchParams();
   if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
@@ -322,7 +322,19 @@ export async function uploadAttachment(dateId: string, file: File, scope?: Scope
       contentType: prepared.contentType,
       fileSize,
       thumbnailUploaded,
+      displayName: displayName?.trim() || null,
     }),
+  });
+}
+
+/** Sets an attachment's custom display name; an empty name goes back to the file name. */
+export async function renameAttachment(attachmentId: string, displayName: string, scope?: ScopeInput) {
+  const resolved = resolveScope(scope);
+  const params = new URLSearchParams();
+  if (resolved.workspaceId) params.set('workspaceId', resolved.workspaceId);
+  return request<DateAttachment>(`/api/dates/attachments/${attachmentId}?${params.toString()}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
   });
 }
 

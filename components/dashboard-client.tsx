@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { WorkspaceInviteSummary } from '@/lib/types/tenant';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { OfflineStatus } from '@/components/offline-status';
+import { PickerHeading } from '@/components/picker-menu';
 import { ShowCard } from '@/components/show-card';
 import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
@@ -347,6 +348,7 @@ export function DashboardClient() {
   const [upcomingSearch, setUpcomingSearch] = useState('');
   const [pastSearch, setPastSearch] = useState('');
   const searchParams = useSearchParams();
+  const router = useRouter();
   const tab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const urlInviteToken = (searchParams.get('inviteToken') || searchParams.get('token') || '').trim();
   const inviteToken = urlInviteToken || readPendingInviteToken();
@@ -679,13 +681,25 @@ export function DashboardClient() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
                 Crew itinerary
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl">
-                  {tab === 'past' ? 'Past dates' : 'Upcoming dates'}
-                </h1>
-                <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-zinc-300">
-                  {activeCollection.length}
-                </span>
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <h2 className="flex min-w-0 items-center gap-2">
+                  <PickerHeading
+                    title="Show dates"
+                    className="text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl"
+                    options={[{ value: 'upcoming', label: 'Upcoming dates' }, { value: 'past', label: 'Past dates' }]}
+                    selected={tab}
+                    onSelect={(next) => {
+                      if (next !== tab) router.push(next === 'past' ? '/?tab=past' : '/?tab=upcoming');
+                    }}
+                    trailing={(
+                      <span className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-zinc-300">
+                        {activeCollection.length}
+                      </span>
+                    )}
+                  >
+                    {tab === 'past' ? 'Past dates' : 'Upcoming dates'}
+                  </PickerHeading>
+                </h2>
               </div>
             </div>
           </div>
@@ -722,7 +736,7 @@ export function DashboardClient() {
           <div className="space-y-6">
             {pastByYear.map(([year, items]) => (
               <section key={year} className="space-y-3">
-                <div className="sticky top-[100px] z-10 flex items-center gap-3 bg-zinc-950/92 py-1.5 backdrop-blur">
+                <div className="sticky top-[var(--app-header-h,100px)] z-10 flex items-center gap-3 bg-zinc-950/92 py-1.5 backdrop-blur">
                   <div className="h-px flex-1 bg-white/10" aria-hidden="true" />
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">{year}</span>
                   <div className="h-px flex-1 bg-white/10" aria-hidden="true" />

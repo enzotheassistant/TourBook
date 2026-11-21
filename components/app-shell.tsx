@@ -2,81 +2,15 @@
 
 import Link from 'next/link';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
+import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
 import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
-}
-
-function iconButtonClassName() {
-  return 'inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-transparent text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
-}
-
-function ProjectSwitchSheet({ open, onClose, projects, activeProjectId, onSelect }: { open: boolean; onClose: () => void; projects: Array<{ id: string; name: string; slug: string | null }>; activeProjectId: string | null; onSelect: (projectId: string) => void; }) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const sheet = (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Switch project">
-      <button type="button" className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close project switcher" />
-      <div className="absolute inset-x-0 bottom-0 flex justify-center px-0 pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:right-4 sm:top-20 sm:block sm:w-[340px] sm:px-0 sm:pb-0">
-        <div
-          ref={panelRef}
-          className="relative z-10 flex w-full max-h-[82svh] min-h-0 flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-zinc-950 px-4 pb-4 pt-3 shadow-2xl sm:max-h-[70vh] sm:rounded-2xl"
-        >
-          <div className="mb-2 h-1.5 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden="true" />
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-zinc-100">Switch project</p>
-            <button type="button" onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200" aria-label="Close">
-              ×
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1 overscroll-contain">
-            {projects.map((project) => {
-              const active = project.id === activeProjectId;
-              return (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => onSelect(project.id)}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-3 py-3 text-left text-sm transition ${active ? 'border-sky-400/45 bg-sky-500/12 text-sky-200' : 'border-white/10 bg-white/[0.02] text-zinc-100 hover:border-white/20 hover:bg-white/[0.05]'}`}
-                  aria-pressed={active}
-                >
-                  <span className="min-w-0 truncate">{project.name || project.slug || project.id}</span>
-                  {active ? <span className="ml-2 text-xs font-semibold uppercase tracking-wide">Current</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  return createPortal(sheet, document.body);
 }
 
 function AdminProjectSelector() {
@@ -108,39 +42,41 @@ function AdminProjectSelector() {
   );
 }
 
-function ProjectSwitchControl() {
+/**
+ * The big title on the left of the crew header: the current project's name.
+ * With more than one project it becomes the project switcher ("Texas King ▾");
+ * with just one it's a plain title.
+ */
+function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
   const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
-  const [open, setOpen] = useState(false);
   const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
-  const showSwitch = canSwitchProject(projects, activeWorkspaceId);
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
+  const title = currentProject?.name || currentProject?.slug || fallbackTitle;
+  const titleClassName = 'text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl';
 
-  function handleSelect(projectId: string) {
-    const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
-    if (next !== activeProjectId) setActiveProjectId(next);
-    setOpen(false);
+  if (!currentProject || !canSwitchProject(projects, activeWorkspaceId)) {
+    return <h1 className={`min-w-0 truncate ${titleClassName}`}>{title}</h1>;
   }
 
-  if (!currentProject || !showSwitch) return null;
-
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex h-9 max-w-[55vw] items-center gap-1 rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-zinc-100 sm:h-8 sm:max-w-[220px]"
-        aria-label="Switch project"
-        title={currentProject.name || currentProject.slug || currentProject.id}
+    <h1 className="flex min-w-0">
+      <PickerHeading
+        title="Switch project"
+        className={titleClassName}
+        options={scopedProjects.map((project) => ({ value: project.id, label: project.name || project.slug || project.id }))}
+        selected={currentProject.id}
+        onSelect={(projectId) => {
+          const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
+          if (next !== activeProjectId) setActiveProjectId(next);
+        }}
       >
-        <span className="truncate">{currentProject.name || currentProject.slug || currentProject.id}</span>
-        <span aria-hidden="true" className="text-zinc-500">▾</span>
-      </button>
-      <ProjectSwitchSheet open={open} onClose={() => setOpen(false)} projects={scopedProjects} activeProjectId={activeProjectId} onSelect={handleSelect} />
-    </>
+        {title}
+      </PickerHeading>
+    </h1>
   );
 }
 
-function CrewMenu({ activeTab, showAdminLink }: { activeTab: 'upcoming' | 'past'; showAdminLink: boolean }) {
+function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -159,20 +95,12 @@ function CrewMenu({ activeTab, showAdminLink }: { activeTab: 'upcoming' | 'past'
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-          <Link href={activeTab === 'upcoming' ? '/?tab=past' : '/?tab=upcoming'} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-            {activeTab === 'upcoming' ? 'Past' : 'Upcoming'}
-          </Link>
           {showAdminLink ? (
-            <>
-              <div className="border-b border-white/10" />
-              <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
-                Admin
-              </Link>
-            </>
+            <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
+              Admin
+            </Link>
           ) : null}
-          <div className="px-2 py-2">
-            <LogoutButton compact />
-          </div>
+          <LogoutButton variant="menu" />
         </div>
       ) : null}
     </div>
@@ -203,12 +131,10 @@ function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; act
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-          <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100" onClick={() => setOpen(false)}>
+          <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
             {actionLabel}
           </Link>
-          <div className="px-2 py-2">
-            <LogoutButton compact />
-          </div>
+          <LogoutButton variant="menu" />
         </div>
       ) : null}
     </div>
@@ -217,13 +143,13 @@ function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; act
 
 export function AppShell({
   children,
-  activeTab = 'upcoming',
   mode = 'crew',
   title = 'TourBook',
   subtitle = 'Touring crew dashboard',
   showSubtitle = true,
 }: {
   children: ReactNode;
+  /** No longer used by the header (Upcoming/Past is chosen from the dates heading); still accepted so callers don't change. */
   activeTab?: 'upcoming' | 'past';
   mode?: 'crew' | 'admin';
   title?: string;
@@ -244,6 +170,24 @@ export function AppShell({
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
   const displayTitle = mode === 'crew' ? (currentProject?.name || currentProject?.slug || title) : title;
   const shouldShowSubtitle = mode === 'admin' ? showSubtitle : false;
+  const headerRef = useRef<HTMLElement | null>(null);
+  const isReady = Boolean(user) && !isLoading;
+
+  // Share the header's real height so things that stick below it (like the
+  // year dividers on Past dates) line up, whatever the header's height.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty('--app-header-h', `${Math.round(header.getBoundingClientRect().height)}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--app-header-h');
+    };
+  }, [isReady]);
 
   // Guard: Do not render protected content if user is not authenticated and loading is complete.
   // This prevents the flash of protected UI during logout/session loss.
@@ -257,54 +201,23 @@ export function AppShell({
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-zinc-950 text-zinc-50">
-      <header className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
+      <header ref={headerRef} className="sticky top-0 z-20 bg-zinc-950/94 backdrop-blur">
         <div className={`mx-auto flex w-full max-w-5xl flex-col px-4 ${mode === 'admin' ? 'pt-3' : 'pt-[max(calc(env(safe-area-inset-top)+0.35rem),1.25rem)] sm:pt-4'} sm:px-6`}>
           {mode === 'crew' ? (
-            <>
-              <div className="pb-4 sm:hidden">
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <ProjectSwitchControl />
-                  </div>
-                  {isCrewList ? (
-                    <>
-                      {activeTab === 'past' ? (
-                        <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
-                          ←
-                        </Link>
-                      ) : null}
-                      <CrewMenu activeTab={activeTab} showAdminLink={showAdminLink} />
-                    </>
-                  ) : (
-                    <HeaderActionMenu actionHref={showAdminLink ? actionHref : '/'} actionLabel={showAdminLink ? actionLabel : 'Crew View'} />
-                  )}
-                </div>
-                <div className="mt-3 min-w-0">
-                  <Link href="/" className="block truncate text-xl font-semibold tracking-tight text-zinc-50">
-                    {displayTitle}
-                  </Link>
-                </div>
+            <div className="flex min-h-11 items-center justify-between gap-3 pb-3 sm:pb-4">
+              <div className="flex min-w-0 flex-1 items-center">
+                <ProjectTitle fallbackTitle={title} />
               </div>
-
-              <div className="hidden items-start justify-between gap-3 pb-4 sm:flex">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Link href="/" className="text-2xl font-semibold tracking-tight text-zinc-50">
-                    {displayTitle}
-                  </Link>
+              {isCrewList ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <CrewMenu showAdminLink={showAdminLink} />
                 </div>
-                {isCrewList ? (
-                  <div className="flex shrink-0 items-center gap-2">
-                    {activeTab === 'past' ? (
-                      <Link href="/?tab=upcoming" className={iconButtonClassName()} aria-label="Back to upcoming dates">
-                        ←
-                      </Link>
-                    ) : null}
-                    <ProjectSwitchControl />
-                    <CrewMenu activeTab={activeTab} showAdminLink={showAdminLink} />
+              ) : (
+                <>
+                  <div className="flex shrink-0 items-center gap-2 sm:hidden">
+                    <HeaderActionMenu actionHref={showAdminLink ? actionHref : '/'} actionLabel={showAdminLink ? actionLabel : 'Crew View'} />
                   </div>
-                ) : (
-                  <div className="flex shrink-0 items-center gap-2 self-start">
-                    <ProjectSwitchControl />
+                  <div className="hidden shrink-0 items-center gap-2 sm:flex">
                     {showAdminLink ? (
                       <Link href={actionHref} className={ghostButtonClassName()}>
                         {actionLabel}
@@ -312,9 +225,9 @@ export function AppShell({
                     ) : null}
                     <LogoutButton />
                   </div>
-                )}
-              </div>
-            </>
+                </>
+              )}
+            </div>
           ) : (
             <div className="flex items-start justify-between gap-3 pb-3">
               <div className="min-w-0 flex-1 space-y-2">
