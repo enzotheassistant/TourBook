@@ -2644,9 +2644,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </form>
         </section>
 
-        {/* Pinned action bar: stays at the bottom of the screen while the form is on screen. */}
-        <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/10 bg-zinc-950/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur sm:mx-0 sm:rounded-t-2xl sm:border-x sm:px-4">
-          <div className="flex items-center justify-end gap-2">
+        {/* Pinned action bar: fixed to the bottom of the screen the whole time the
+            form is open, so Save / Create / Update are always one tap away.
+            (Fixed rather than sticky: AppShell's overflow-x-hidden wrapper stops
+            position: sticky from pinning.) The spacer below keeps the end of the
+            form from hiding behind it. */}
+        <div aria-hidden="true" className="h-16" />
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-5xl items-center justify-end gap-2 px-4 sm:px-6">
             {isEditingDraft ? (
               <>
                 <button type="button" onClick={() => handleDelete(form.id)} className={`${dangerButtonClassName()} mr-auto`}>
@@ -2677,7 +2682,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         </div>
 
         {deletedLine ? (
-          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] z-30 flex justify-center px-4">
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4">
             <div role="status" aria-live="polite" className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900 py-1 pl-4 pr-1 text-sm text-zinc-200 shadow-2xl shadow-black/60">
               <span>Line deleted</span>
               <span className="text-zinc-600" aria-hidden="true">·</span>
