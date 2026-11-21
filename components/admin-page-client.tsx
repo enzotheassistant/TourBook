@@ -2286,10 +2286,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           <>
             <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
             <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
-            <Link href="/admin/team" className={adminTabClassName(isTeamMode)}>
+            {/* Phones: Team and Projects live in the header's … menu instead. */}
+            <Link href="/admin/team" className={`${adminTabClassName(isTeamMode)} max-sm:hidden`}>
               Team
             </Link>
-            <Link href="/admin/projects" className={adminTabClassName(isProjectsMode)}>
+            <Link href="/admin/projects" className={`${adminTabClassName(isProjectsMode)} max-sm:hidden`}>
               Projects
             </Link>
           </>

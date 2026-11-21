@@ -13,31 +13,33 @@ function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
+/** Admin header: which project you're working in. A picker when there's more than one. */
 function AdminProjectSelector() {
   const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
   const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
 
   if (!currentProject) return null;
+  const currentName = currentProject.name || currentProject.slug || currentProject.id;
+
+  if (scopedProjects.length < 2) {
+    return <p className="truncate text-sm text-zinc-400">{currentName}</p>;
+  }
 
   return (
-    <div className="pt-1">
-      <label htmlFor="admin-project-selector" className="sr-only">Active project</label>
-      <select
-        id="admin-project-selector"
-        value={currentProject.id}
-        onChange={(event) => {
-          const next = pickNextProjectId(activeProjectId, event.target.value, scopedProjects);
+    <div className="flex min-w-0">
+      <PickerHeading
+        title="Switch project"
+        className="text-sm text-zinc-300"
+        options={scopedProjects.map((project) => ({ value: project.id, label: project.name || project.slug || project.id }))}
+        selected={currentProject.id}
+        onSelect={(projectId) => {
+          const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
           if (next !== activeProjectId) setActiveProjectId(next);
         }}
-        className="h-8 max-w-[260px] rounded-lg border border-white/15 bg-white/[0.03] px-2 text-xs text-zinc-200 outline-none transition hover:border-white/25 focus:border-white/30"
       >
-        {scopedProjects.map((project) => (
-          <option key={project.id} value={project.id} className="bg-zinc-900 text-zinc-100">
-            {project.name || project.slug || project.id}
-          </option>
-        ))}
-      </select>
+        {currentName}
+      </PickerHeading>
     </div>
   );
 }
@@ -107,7 +109,9 @@ function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
   );
 }
 
-function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; actionLabel: string }) {
+type HeaderMenuItem = { href: string; label: string; active?: boolean };
+
+function HeaderActionMenu({ actionHref, actionLabel, extraItems = [] }: { actionHref: string; actionLabel: string; extraItems?: HeaderMenuItem[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -131,6 +135,19 @@ function HeaderActionMenu({ actionHref, actionLabel }: { actionHref: string; act
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-30 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
+          {extraItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={item.active ? 'page' : undefined}
+              className={`flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3 text-sm transition hover:bg-white/[0.04] ${item.active ? 'text-sky-200' : 'text-zinc-100'}`}
+              onClick={() => setOpen(false)}
+            >
+              {item.label}
+              {item.active ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" aria-hidden="true" /> : null}
+            </Link>
+          ))}
+          {extraItems.length ? <div className="border-b border-white/10" aria-hidden="true" /> : null}
           <Link href={actionHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
             {actionLabel}
           </Link>
@@ -230,7 +247,7 @@ export function AppShell({
             </div>
           ) : (
             <div className="flex items-start justify-between gap-3 pb-3">
-              <div className="min-w-0 flex-1 space-y-2">
+              <div className="min-w-0 flex-1 space-y-1">
                 <Link href="/admin" className="text-2xl font-semibold tracking-tight text-zinc-50">
                   {displayTitle}
                 </Link>
@@ -238,7 +255,14 @@ export function AppShell({
                 <AdminProjectSelector />
               </div>
               <div className="flex shrink-0 items-center gap-2 self-start sm:hidden">
-                <HeaderActionMenu actionHref={actionHref} actionLabel={actionLabel} />
+                <HeaderActionMenu
+                  actionHref={actionHref}
+                  actionLabel={actionLabel}
+                  extraItems={canAccessAdminWorkspace(activeWorkspaceRole) ? [
+                    { href: '/admin/team', label: 'Team', active: pathname === '/admin/team' },
+                    { href: '/admin/projects', label: 'Projects', active: pathname === '/admin/projects' },
+                  ] : []}
+                />
               </div>
               <div className="hidden shrink-0 items-center gap-2 self-start sm:flex">
                 <Link href={actionHref} className={ghostButtonClassName()}>
