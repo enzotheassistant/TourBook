@@ -1,6 +1,6 @@
 # UI Plan — Progress
 
-Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 branch: `ui-plan-2`, draft pull request #6, preview: https://tour-book-git-ui-plan-2-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
+Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 went live 2026-11-21 (pull request #6). Phase 3 branch: `ui-plan-3`, draft pull request #9, preview: https://tour-book-git-ui-plan-3-enzotheassistants-projects.vercel.app To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
 
 - [x] 1.1 Day sheet section order
 - [x] 1.2 Tappable phone numbers
@@ -14,12 +14,12 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - [x] 2.4 Team page rows
 - [x] 2.5 "project" instead of "artist"
 - [x] 2.6 Compact schedule editor
-- [ ] 3.1 Address fields match other inputs
-- [ ] 3.2 Matching upload boxes
-- [ ] 3.3 One "…" menu icon
-- [ ] 3.4 Loading placeholders everywhere
-- [ ] 3.5 One accent colour
-- [ ] 3.6 One chevron for collapsible sections
+- [x] 3.1 Address fields match other inputs
+- [x] 3.2 Matching upload boxes
+- [x] 3.3 One "…" menu icon
+- [x] 3.4 Loading placeholders everywhere
+- [x] 3.5 One accent colour
+- [x] 3.6 One chevron for collapsible sections
 - [ ] 4.1 Geist font + tabular numbers
 - [ ] 4.2 Corner radius
 - [ ] 4.3 Flatten nested boxes
@@ -37,13 +37,25 @@ Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-
 - Checks: GitHub CI (lint, typecheck, unit tests, build) passed on every Phase 1 commit. The app couldn't be run in Claude's workspace, so the screen-by-screen check is Phil's test on the preview link.
 - Phase 1 merged and live on 2026-11-21.
 
-**Phase 2 (done 2026-11-21 on `ui-plan-2`, waiting for Phil's test on the preview before merging)**
+**Phase 2 (live 2026-11-21)**
 - 2.1 Phil chose to also switch the admin header's project dropdown to the Phase 1 picker (plain text when there's only one project).
 - 2.2 Pinned bar also covers editing: Update (published date) and Delete / Save / Publish (draft), per Phil.
 - 2.3 The switch shows even when a section is folded shut; the "Visible / Hidden" words were removed (Phil OK'd). Hidden sections dim to 70%.
 - 2.4 Email kept as small grey text under the name (Phil's choice). Invites keep email + expiry as a plain date. "Pending" badges kept.
 - 2.5 UI text and error messages only. Database, code names and analytics labels still say "artist". 4 unit tests updated to the new wording; all 108 pass.
+- Fixes after Phil's phone test (both live 2026-11-21):
+  - Pull request #7: crew project title and "Upcoming dates" had become small/regular weight (cause: globals.css has an unlayered `button { font: inherit }` that overrides Tailwind text classes on buttons) and the title was cut off ("Texas ..."). Now: big bold heading, just the name + a small arrow (no box), one line, only cut short with "…" if it truly runs out of room.
+  - Pull request #8: the Save / Create / Update bar was `sticky` but AppShell's `overflow-x-hidden` wrapper stopped it pinning; it's now `position: fixed` to the bottom of the screen while the form is open.
 - 2.6 Before/after approved by Phil before saving. Undo lasts 5 seconds and only the most recent deleted line can be undone. Time field is 10rem wide on phones, 13rem on desktop; fields stack under 360px wide.
+
+**Phase 3 (done 2026-11-21 on `ui-plan-3`, waiting for Phil's test on the preview before merging)**
+- 3.1 One shared field style (lib/ui/field-styles.ts) used by the address fields and the rest of the admin form.
+- 3.2 Shared upload box (components/upload-dropzone.tsx). Phil chose the grey outlined "Choose files" button for both, keeping blue for each screen's main action.
+- 3.3 One drawn "…" icon (components/icons.tsx, MoreIcon) on all seven menu buttons.
+- 3.4 Shared placeholders (components/skeleton.tsx): app frame while sign-in is checked (was the dark flash), page fallbacks, day sheet, admin date lists, Team members/invites, edit-form attachments, opening a date into the editor. The day sheet keeps its existing 200ms delay before placeholders appear so cached loads don't strobe. The file viewer keeps its small "Loading…".
+- 3.5 Accent defined once in app/globals.css (`--color-accent`, with -hover, -soft, -light worked out from it). To change the accent later: edit that one line, plus the glow colour in app/icon.tsx and app/apple-icon.tsx (app icons can't read CSS variables). Green removed (background glow, text selection, app icon glow now blue; Phil OK'd changing the icon). Error messages kept red, using the same red as Delete (Phil OK'd); "Revoked" badge now grey. Amber is still used for warnings (offline, import warnings) and the Owner badge.
+- 3.6 One chevron (components/icons.tsx, ChevronIcon) on the admin form's fold-open sections. Dropdown arrows (like "All tours") are separate and unchanged.
+- For Phase 4: globals.css's unlayered `button, input, select, textarea { font: inherit }` makes Tailwind text-size classes on buttons and fields do nothing (they all inherit 16px). Fields must stay at 16px on iPhone to avoid zoom-on-tap, but buttons could be fixed as part of the visual polish (with a preview first).
 
 ---
 
