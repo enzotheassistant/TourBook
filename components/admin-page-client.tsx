@@ -9,6 +9,7 @@ import { AddressAutocompleteField } from '@/components/address-autocomplete-fiel
 import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { useAppContext } from '@/hooks/use-app-context';
+import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
@@ -90,7 +91,7 @@ function adminTabClassName(active: boolean) {
 
 
 function fieldClassName() {
-  return 'h-12 w-full rounded-full border border-white/10 bg-black/20 px-4 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-400/40';
+  return FIELD_CLASS_NAME;
 }
 
 function filterFieldClassName() {

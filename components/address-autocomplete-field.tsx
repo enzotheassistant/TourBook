@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AddressSuggestion } from '@/lib/types';
+import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 
 const DEFAULT_BIAS = 'CA,US';
 const STORAGE_KEY = 'tourbook_address_bias_v1';
@@ -165,7 +166,7 @@ export function AddressAutocompleteField({
               setOpen(true);
             }
           }}
-          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+          className={FIELD_CLASS_NAME}
           placeholder="Start typing an address"
         />
       </label>
@@ -204,7 +205,7 @@ export function AddressAutocompleteField({
           <input
             value={mapsUrl}
             onChange={(event) => onMapsUrlChange(event.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-white/20"
+            className={FIELD_CLASS_NAME}
             placeholder="https://maps.google.com/..."
           />
         </label>
