@@ -27,7 +27,7 @@ import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteS
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
-import { MoreIcon } from '@/components/icons';
+import { ChevronIcon, MoreIcon } from '@/components/icons';
 import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
 
 function slugify(value: string) {
@@ -3783,10 +3783,11 @@ function CollapsibleSection({
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
-            className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300"
+            className="-my-1 -mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
             aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+            aria-expanded={expanded}
           >
-            <span className={`inline-block transition-transform ${expanded ? 'rotate-90' : 'rotate-0'}`}>›</span>
+            <ChevronIcon open={expanded} />
           </button>
         </div>
       </div>
