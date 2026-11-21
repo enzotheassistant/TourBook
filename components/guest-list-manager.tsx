@@ -5,6 +5,7 @@ import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCa
 import { useAppContext } from '@/hooks/use-app-context';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import { GuestListEntry } from '@/lib/types';
+import { MoreIcon } from '@/components/icons';
 
 function parseBulkInput(value: string) {
   return value
@@ -14,7 +15,7 @@ function parseBulkInput(value: string) {
 }
 
 function DotsIcon() {
-  return <span className="text-lg leading-none">…</span>;
+  return <MoreIcon />;
 }
 
 export function GuestListManager({ showId, note, showNote }: { showId: string; note: string; showNote: boolean }) {

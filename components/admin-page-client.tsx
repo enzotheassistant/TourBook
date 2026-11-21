@@ -27,6 +27,7 @@ import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteS
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
+import { MoreIcon } from '@/components/icons';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -2960,7 +2961,7 @@ function ProjectManagementSection({
                           className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]"
                           aria-label={`Project options for ${project.name || project.slug || project.id}`}
                         >
-                          ⋯
+                          <MoreIcon />
                         </button>
                         {menuProjectId === project.id ? (
                           <div className="absolute right-0 z-10 mt-2 min-w-44 rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-lg shadow-black/60">
@@ -3705,7 +3706,7 @@ function TeamMembersSection({
                             aria-label={`More actions for ${member.name || member.email || member.userId}`}
                             aria-expanded={openMemberMenuId === member.id}
                           >
-                            <span aria-hidden="true" className="text-lg leading-none">…</span>
+                            <MoreIcon />
                           </button>
                           {openMemberMenuId === member.id ? (
                             <div className="absolute right-0 top-full z-20 mt-2 min-w-[180px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60">
@@ -3948,7 +3949,7 @@ function ShowListSection({
               className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-zinc-200 transition ${menuOpen ? "border-sky-300 bg-sky-500/10" : "border-white/10 bg-transparent hover:border-white/20 hover:bg-white/[0.05]"}` }
               aria-label="More actions"
             >
-              …
+              <MoreIcon />
             </button>
           </div>
         </div>

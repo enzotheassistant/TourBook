@@ -14,6 +14,7 @@ import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
 import { filterVisibleScheduleItems } from '@/lib/schedule-items';
 import { ScheduleItem, Show } from '@/lib/types';
+import { MoreIcon } from '@/components/icons';
 
 function hasAccommodation(show: Show) {
   return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
@@ -299,7 +300,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
                   <Link href={editHref} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="Edit date">
                     <PencilIcon />
                   </Link>
-                  <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions">…</button>
+                  <button type="button" onClick={() => setMenuOpen((current) => !current)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]" aria-label="More actions"><MoreIcon /></button>
                   {menuOpen ? (
                     <div className="absolute right-0 top-full z-20 mt-2 min-w-[220px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/60 backdrop-blur-none">
                       <Link href={duplicateHref} className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-200">Duplicate date</Link>
