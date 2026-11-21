@@ -58,6 +58,37 @@ export function describeTeamScope(
   };
 }
 
+/**
+ * One short, human line saying what someone can access, naming each project
+ * once: "All projects", "Texas King", "Texas King, Side Project",
+ * "Texas King · Fall Tour". Used on the Team page rows.
+ */
+export function summarizeTeamAccess(
+  entry: ScopedEntry,
+  options: {
+    projectNameById?: Map<string, string>;
+    toursById?: Map<string, Pick<TourSummary, 'id' | 'name' | 'projectId'>>;
+  } = {},
+): string {
+  const projectNameById = options.projectNameById ?? new Map<string, string>();
+  const toursById = options.toursById ?? new Map<string, Pick<TourSummary, 'id' | 'name' | 'projectId'>>();
+
+  if (entry.scopeType === 'workspace') return 'All projects';
+
+  if (entry.scopeType === 'projects') {
+    const names = joinNames(entry.projectIds, projectNameById);
+    return names.length ? names.join(', ') : 'Selected projects';
+  }
+
+  const tours = entry.tourIds
+    .map((tourId) => toursById.get(tourId) ?? { id: tourId, name: tourId, projectId: '' })
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  const projectNames = [...new Set(tours.map((tour) => projectNameById.get(tour.projectId) ?? null).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b));
+  const tourNames = tours.map((tour) => tour.name || tour.id);
+  const parts = [projectNames.join(', '), tourNames.join(', ')].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Selected tours';
+}
+
 export function matchesProjectContext(
   entry: ScopedEntry,
   contextProjectId: string | null | undefined,

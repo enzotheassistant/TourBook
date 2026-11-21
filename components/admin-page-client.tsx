@@ -23,7 +23,7 @@ import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
 import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
-import { buildAcceptedTeamDirectory, describeTeamScope, getContextLabel, matchesProjectContext, splitInvitesByStatus } from '@/lib/ui/team-directory';
+import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 
 function slugify(value: string) {
@@ -2807,7 +2807,8 @@ function WorkspaceSelfServeAccessPanel({
 function formatInviteDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
+  // Date only ("Dec 5, 2026") — the time down to the second was just noise.
+  return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
 function ProjectManagementSection({
@@ -3026,34 +3027,30 @@ function TeamDirectoryCard({
   title,
   secondary,
   subtitle,
-  detail,
   role,
   status,
-  contextLabel,
   action,
 }: {
   title: string;
+  /** Small grey line under the name (the email, when a name exists). */
   secondary?: string | null;
+  /** What they can access, e.g. "Texas King" or "All projects". */
   subtitle: string;
-  detail?: string | null;
   role: 'owner' | 'admin' | 'editor' | 'viewer';
   status?: WorkspaceInviteSummary['status'] | null;
-  contextLabel?: string | null;
   action?: ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-medium text-zinc-100">{title}</p>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{title}</p>
             <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span>
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
-            {contextLabel ? <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-zinc-300">{contextLabel}</span> : null}
           </div>
-          {secondary ? <p className="mt-1 text-xs text-zinc-500">{secondary}</p> : null}
-          <p className="mt-1 text-sm text-zinc-300">{subtitle}</p>
-          {detail ? <p className="mt-1 text-xs text-zinc-500">{detail}</p> : null}
+          {secondary ? <p className="mt-0.5 truncate text-xs text-zinc-500">{secondary}</p> : null}
+          <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p>
         </div>
         {action ? <div className="w-full sm:w-auto sm:shrink-0">{action}</div> : null}
       </div>
@@ -3249,8 +3246,6 @@ function InviteManagementSection({
                   <p className="text-sm text-zinc-400">No pending invites.</p>
                 ) : (
                   visiblePendingInvites.map((invite) => {
-                    const scope = describeTeamScope(invite, { projectNameById, toursById });
-                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3258,9 +3253,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${scope.label} · expires ${formatInviteDate(invite.expiresAt)}`}
-                        detail={scope.detail}
-                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Expires ${formatInviteDate(invite.expiresAt)}`}
                         action={
                           <div className="flex flex-wrap gap-2">
                             <button type="button" onClick={() => onResendInvite(invite)} className={secondaryButtonClassName()}>Resend</button>
@@ -3276,8 +3269,6 @@ function InviteManagementSection({
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
                   {visibleHistoryInvites.map((invite) => {
-                    const scope = describeTeamScope(invite, { projectNameById, toursById });
-                    const inContext = matchesProjectContext(invite, contextProjectId, toursById);
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3285,9 +3276,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${scope.label} · updated ${formatInviteDate(invite.updatedAt)}`}
-                        detail={scope.detail}
-                        contextLabel={getContextLabel(invite.scopeType, inContext, contextProjectName)}
+                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
                       />
                     );
                   })}
@@ -3646,17 +3635,13 @@ function TeamMembersSection({
         ) : (
           <div className="space-y-2">
             {visibleMembers.map((member) => {
-              const scope = describeTeamScope(member, { projectNameById, toursById });
-              const inContext = matchesProjectContext(member, contextProjectId, toursById);
               return (
                 <TeamDirectoryCard
                   key={member.id}
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  subtitle={`${scope.label}${member.createdAt ? ` · joined ${formatInviteDate(member.createdAt)}` : ''}`}
-                  detail={scope.detail}
-                  contextLabel={getContextLabel(member.scopeType, inContext, contextProjectName)}
+                  subtitle={summarizeTeamAccess(member, { projectNameById, toursById })}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
