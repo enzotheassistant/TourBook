@@ -13,11 +13,11 @@ function CheckIcon() {
   );
 }
 
-/** Small "▾" shown next to a tappable heading. */
-export function DropdownCaret({ open = false }: { open?: boolean }) {
+/** Small "▾" shown next to a tappable heading. Sized relative to the heading text. */
+export function DropdownCaret({ open = false, className = 'h-4 w-4' }: { open?: boolean; className?: string }) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
-      <path d="M5.5 8L10 12.5L14.5 8" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={`${className} shrink-0 text-zinc-500 transition duration-200 group-hover:text-zinc-300 ${open ? 'rotate-180' : ''}`}>
+      <path d="M5.5 8L10 12.5L14.5 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -191,13 +191,19 @@ export function PickerHeading({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="group -mx-1.5 inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-xl px-1.5 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
+        className="group -my-1.5 block max-w-full rounded-md py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
       >
-        {/* Text styling goes on the span, not the button: globals.css sets
+        {/* Looks like plain heading text (no box): the name, then a small arrow.
+            Long names wrap onto another line instead of being cut off.
+            Text styling goes on the span, not the button: globals.css sets
             `button { font: inherit }` outside Tailwind's layers, which would
             override text-size/weight classes placed on the button itself. */}
-        <span className={`min-w-0 truncate ${className}`}>{children}</span>
-        <DropdownCaret open={open} />
+        <span className={`break-words [overflow-wrap:anywhere] ${className}`}>
+          {children}
+          <span className="ml-1.5 inline-flex align-middle">
+            <DropdownCaret open={open} className="h-[0.8em] w-[0.8em]" />
+          </span>
+        </span>
       </button>
       {trailing}
       <PickerMenu
