@@ -15,6 +15,7 @@ import { parseStoredDate } from '@/lib/date';
 import { filterVisibleScheduleItems } from '@/lib/schedule-items';
 import { ScheduleItem, Show } from '@/lib/types';
 import { MoreIcon } from '@/components/icons';
+import { DaySheetSkeleton } from '@/components/skeleton';
 
 function hasAccommodation(show: Show) {
   return Boolean(show.hotel_name || show.hotel_address || show.hotel_notes || show.hotel_maps_url);
@@ -264,7 +265,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     // Return null until the deferred timer fires (200ms), so fast/cached loads never
     // flash a loading card. Slow first-loads will show the card after the delay.
     if (!showLoadingUI) return null;
-    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading show...</div>;
+    return <DaySheetSkeleton />;
   }
   if (!show) return <div className="rounded-3xl border border-white/10 bg-white/5 p-4"><h1 className="text-xl font-semibold">Show not found</h1><p className="mt-2 text-sm text-zinc-300">That show does not exist in the current dataset.</p></div>;
 

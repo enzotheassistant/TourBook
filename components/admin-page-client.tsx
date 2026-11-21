@@ -28,6 +28,7 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 import { MoreIcon } from '@/components/icons';
+import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -1858,7 +1859,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save Draft' : isEditing ? 'Update' : 'Create';
 
   if (contextLoading) {
-    return <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">Loading dates...</div>;
+    return <ListSkeleton rowClassName="h-20 rounded-[28px]" label="Loading dates" />;
   }
 
   if (!activeWorkspaceId) {
@@ -2383,14 +2384,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
       {mode === 'new' ? (
         <div ref={formRef} className="space-y-3">
+          {/* Opening a date to edit/duplicate: placeholder boxes instead of a briefly-empty form. */}
           {editorBootstrapLoading && !isEditing ? (
-            <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-sky-400/70" aria-hidden="true" />
-              Loading date into the editor…
+            <div className="space-y-3" role="status" aria-label="Loading date into the editor">
+              <SkeletonBlock className="h-32 rounded-[28px]" />
+              <ListSkeleton rows={4} rowClassName="h-16 rounded-[28px]" label="Loading date into the editor" />
             </div>
           ) : null}
 
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+        <section className={`rounded-[28px] border border-white/10 bg-white/[0.045] p-4 sm:p-5 ${editorBootstrapLoading && !isEditing ? 'hidden' : ''}`}>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div className="pt-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">{editorCopy.title}</p>
@@ -2644,7 +2646,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             position: sticky from pinning.) The spacer below keeps the end of the
             form from hiding behind it. */}
         <div aria-hidden="true" className="h-16" />
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur">
+        <div className={`fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-zinc-950/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 backdrop-blur ${editorBootstrapLoading && !isEditing ? 'hidden' : ''}`}>
           <div className="mx-auto flex w-full max-w-5xl items-center justify-end gap-2 px-4 sm:px-6">
             {isEditingDraft ? (
               <>
@@ -3285,7 +3287,7 @@ function InviteManagementSection({
             </div>
           ) : null}
           {loading ? (
-            <p className="mt-3 text-sm text-zinc-400">Loading invites…</p>
+            <div className="mt-3"><ListSkeleton rows={2} rowClassName="h-[74px] rounded-2xl" label="Loading invites" /></div>
           ) : recentInvites.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-400">No invites yet.</p>
           ) : visiblePendingInvites.length === 0 && visibleHistoryInvites.length === 0 ? (
@@ -3679,7 +3681,7 @@ function TeamMembersSection({
         ) : null}
 
         {loading ? (
-          <p className="text-sm text-zinc-400">Loading members…</p>
+          <ListSkeleton rowClassName="h-[74px] rounded-2xl" label="Loading members" />
         ) : acceptedEntries.length === 0 ? (
           <p className="text-sm text-zinc-400">No team members found yet.</p>
         ) : visibleMembers.length === 0 ? (
@@ -3984,9 +3986,11 @@ function ShowListSection({
       </div>
 
       <div className="mt-3 space-y-3">
-        {shows.length === 0 ? (
+        {shows.length === 0 && loading ? (
+          <ListSkeleton rowClassName="h-20 rounded-2xl" label="Loading dates" />
+        ) : shows.length === 0 ? (
           <div className="rounded-2xl bg-black/20 p-3 text-sm text-zinc-400">
-            {loading ? 'Loading dates…' : totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
+            {totalCount === 0 ? `No ${mode === 'drafts' ? 'drafts' : 'dates'} yet.` : 'No shows match this filter.'}
           </div>
         ) : groupedShows && groupedShows.length > 0 ? (
           groupedShows.map(([year, items]) => (

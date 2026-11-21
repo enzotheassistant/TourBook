@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
 import { MoreIcon } from '@/components/icons';
+import { AppShellSkeleton } from '@/components/skeleton';
 
 function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-full border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
@@ -214,8 +215,10 @@ export function AppShell({
   if (!user && !isLoading) {
     return null;
   }
+  // While sign-in is being checked, show placeholder boxes instead of a blank screen.
+  // (No account data is shown, so nothing protected can flash.)
   if (isLoading) {
-    return null;
+    return <AppShellSkeleton mode={mode} />;
   }
 
   return (

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { DashboardClient } from '@/components/dashboard-client';
+import { ListSkeleton } from '@/components/skeleton';
 
 // Revalidate every 60 seconds instead of force-dynamic
 // This allows browsers to cache the shell, reducing first-click lag while keeping data reasonably fresh
@@ -17,7 +18,7 @@ export default async function DashboardPage({
 
   return (
     <AppShell activeTab={activeTab}>
-      <Suspense fallback={null}>
+      <Suspense fallback={<ListSkeleton />}>
         <DashboardClient />
       </Suspense>
     </AppShell>

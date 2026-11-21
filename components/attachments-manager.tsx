@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
 import type { DateAttachment } from '@/lib/types/date-record';
+import { SkeletonBlock } from '@/components/skeleton';
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 export const ACCEPTED_FILE_TYPES = [
@@ -384,7 +385,10 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
       ) : null}
 
       {!loaded ? (
-        <p className="text-sm text-zinc-400">Loading attachments…</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="status" aria-label="Loading attachments">
+          <SkeletonBlock className="aspect-square rounded-[20px]" />
+          <SkeletonBlock className="aspect-square rounded-[20px]" />
+        </div>
       ) : sortedAttachments.length === 0 ? (
         <p className="text-sm text-zinc-400">No attachments yet.</p>
       ) : (
