@@ -1,12 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
+import { GUEST_LIST_ADD_ROLES, canMutateGuestList } from '@/lib/data/server/authorization';
 import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { getDateScoped } from '@/lib/data/server/dates';
 import { toCsvCell } from '@/lib/data/server/csv-utils';
 import type { ScopedGuestListEntry } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 
-function normalizeGuestListEntry(row: any): ScopedGuestListEntry {
+// Who added a name stays on the server: the app only learns whether the
+// signed-in person added it (so Crew can fix their own names).
+const GUEST_COLUMNS = 'id, workspace_id, project_id, date_id, name, created_at, added_by_user_id';
+
+function normalizeGuestListEntry(row: any, userId: string): ScopedGuestListEntry {
   return {
     id: String(row.id),
     workspace_id: String(row.workspace_id),
@@ -14,11 +18,25 @@ function normalizeGuestListEntry(row: any): ScopedGuestListEntry {
     date_id: String(row.date_id),
     name: String(row.name ?? ''),
     created_at: String(row.created_at ?? ''),
+    added_by_me: !!row.added_by_user_id && String(row.added_by_user_id) === userId,
   };
 }
 
-async function requireGuestListWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
-  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
+/**
+ * Managers and Owners can change any name. Crew can change only the names
+ * they added themselves. Viewers can't change anything.
+ */
+async function requireOwnOrManagedGuestEntry(supabase: SupabaseClient, userId: string, workspaceId: string, entryId: string) {
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_ADD_ROLES]);
+  const entry = await getGuestListEntryScoped(supabase, userId, workspaceId, entryId);
+  if (!canMutateGuestList(access.role) && !entry.added_by_me) {
+    throw new ApiError(403, 'You can only change names you added.');
+  }
+  return entry;
+}
+
+async function requireGuestListAddAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
+  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_ADD_ROLES]);
 }
 
 async function resolveWorkspaceForDate(
@@ -84,11 +102,15 @@ export async function listGuestListEntriesScoped(
   dateId: string,
 ): Promise<ScopedGuestListEntry[]> {
   const supabase = requireScopedDataClient(supabaseInput);
-  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForDate(supabase, userId, dateId);
+  const resolvedWorkspaceId = workspaceId?.trim()
+    ? workspaceId
+    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
+  // Viewers don't get the guest list at all.
+  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
   await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const { data, error } = await supabase
     .from('guest_list_entries')
-    .select('id, workspace_id, project_id, date_id, name, created_at')
+    .select(GUEST_COLUMNS)
     .eq('workspace_id', resolvedWorkspaceId)
     .eq('date_id', dateId)
     .order('created_at', { ascending: true })
@@ -99,7 +121,7 @@ export async function listGuestListEntriesScoped(
     throw new ApiError(500, error.message);
   }
 
-  return (data ?? []).map(normalizeGuestListEntry);
+  return (data ?? []).map((row: any) => normalizeGuestListEntry(row, userId));
 }
 
 export async function addGuestListEntriesScoped(
@@ -112,8 +134,8 @@ export async function addGuestListEntriesScoped(
   const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
+    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
+  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
   const dateRecord = await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const cleanedNames = names.map((name) => name.trim()).filter(Boolean);
 
@@ -126,12 +148,13 @@ export async function addGuestListEntriesScoped(
     project_id: dateRecord.project_id,
     date_id: dateId,
     name,
+    added_by_user_id: userId,
   }));
 
   const { data, error } = await supabase
     .from('guest_list_entries')
     .insert(payload)
-    .select('id, workspace_id, project_id, date_id, name, created_at');
+    .select(GUEST_COLUMNS);
 
   if (error) {
     if (isMissingRelationError(error)) {
@@ -140,7 +163,7 @@ export async function addGuestListEntriesScoped(
     throw new ApiError(500, error.message);
   }
 
-  return (data ?? []).map(normalizeGuestListEntry);
+  return (data ?? []).map((row: any) => normalizeGuestListEntry(row, userId));
 }
 
 async function getGuestListEntryScoped(
@@ -153,7 +176,7 @@ async function getGuestListEntryScoped(
   await requireWorkspaceAccess(supabase, userId, resolvedWorkspaceId);
   const { data, error } = await supabase
     .from('guest_list_entries')
-    .select('id, workspace_id, project_id, date_id, name, created_at')
+    .select(GUEST_COLUMNS)
     .eq('id', entryId)
     .eq('workspace_id', resolvedWorkspaceId)
     .maybeSingle();
@@ -170,7 +193,7 @@ async function getGuestListEntryScoped(
   }
 
   await getDateScoped(supabase, userId, resolvedWorkspaceId, String(data.date_id));
-  return normalizeGuestListEntry(data);
+  return normalizeGuestListEntry(data, userId);
 }
 
 export async function updateGuestListEntryScoped(
@@ -183,9 +206,8 @@ export async function updateGuestListEntryScoped(
   const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
-  await getGuestListEntryScoped(supabase, userId, resolvedWorkspaceId, entryId);
+    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_ADD_ROLES);
+  await requireOwnOrManagedGuestEntry(supabase, userId, resolvedWorkspaceId, entryId);
   const nextName = name.trim();
   if (!nextName) {
     throw new ApiError(400, 'Guest name is required.');
@@ -196,7 +218,7 @@ export async function updateGuestListEntryScoped(
     .update({ name: nextName })
     .eq('id', entryId)
     .eq('workspace_id', resolvedWorkspaceId)
-    .select('id, workspace_id, project_id, date_id, name, created_at')
+    .select(GUEST_COLUMNS)
     .single();
 
   if (error || !data) {
@@ -206,7 +228,7 @@ export async function updateGuestListEntryScoped(
     throw new ApiError(500, error?.message ?? 'Unable to update guest list entry.');
   }
 
-  return normalizeGuestListEntry(data);
+  return normalizeGuestListEntry(data, userId);
 }
 
 export async function deleteGuestListEntryScoped(
@@ -218,9 +240,8 @@ export async function deleteGuestListEntryScoped(
   const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
-  await getGuestListEntryScoped(supabase, userId, resolvedWorkspaceId, entryId);
+    : await resolveWorkspaceForEntry(supabase, userId, entryId, GUEST_LIST_ADD_ROLES);
+  await requireOwnOrManagedGuestEntry(supabase, userId, resolvedWorkspaceId, entryId);
   const { error } = await supabase.from('guest_list_entries').delete().eq('id', entryId).eq('workspace_id', resolvedWorkspaceId);
 
   if (error) {

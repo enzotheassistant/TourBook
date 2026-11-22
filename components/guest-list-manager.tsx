@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCachedGuestList, updateGuestListEntry } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
+import { canAddGuests, canEditGuests, getWorkspaceRole } from '@/lib/roles';
 import { GuestListEntry } from '@/lib/types';
 import { MoreIcon } from '@/components/icons';
 
@@ -69,13 +69,17 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
   const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  const canManageGuestList = canCreateDates(workspaceRole);
+  // Crew can add names and fix/remove the ones they added. Managers and
+  // Owners can change any name. (Who added a name is never shown.)
+  const canAddToGuestList = canAddGuests(workspaceRole);
+  const canManageGuestList = canEditGuests(workspaceRole);
+  const canChangeEntry = (entry: { added_by_me?: boolean }) => canManageGuestList || (canAddToGuestList && entry.added_by_me === true);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const lines = parseBulkInput(value);
-    if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+    if (!canAddToGuestList) {
+      setError('You can\'t add names to this guest list. Ask your tour manager.');
       return;
     }
     if (!lines.length || saving) return;
@@ -93,8 +97,9 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleDelete(entryId: string) {
-    if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+    const target = entries.find((entry) => entry.id === entryId);
+    if (!target || !canChangeEntry(target)) {
+      setError('You can only change names you added.');
       return;
     }
     setError('');
@@ -108,8 +113,9 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleSaveEdit(entryId: string) {
-    if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+    const target = entries.find((entry) => entry.id === entryId);
+    if (!target || !canChangeEntry(target)) {
+      setError('You can only change names you added.');
       return;
     }
     const trimmed = editingValue.trim();
@@ -130,7 +136,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     <div className="space-y-5">
       {showNote && note ? <p className="text-sm text-zinc-400">{note}</p> : null}
 
-      {canManageGuestList ? (
+      {canAddToGuestList ? (
         <form onSubmit={handleSubmit} className="space-y-3">
           <textarea
             value={value}
@@ -182,7 +188,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
                 ) : (
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-zinc-100">{entry.name}</span>
-                    {canManageGuestList ? (
+                    {canChangeEntry(entry) ? (
                       <div data-guest-menu-root="true" className="relative">
                         <button type="button" onClick={() => setOpenMenuId(menuOpen ? null : entry.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]">
                           <DotsIcon />

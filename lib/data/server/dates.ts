@@ -324,7 +324,7 @@ async function assertDateReadable(supabase: SupabaseClient, userId: string, work
   }
 
   const status = normalizeStatus(data.status);
-  if (membership.role === 'viewer' && status !== 'published') {
+  if ((membership.role === 'viewer' || membership.role === 'crew') && status !== 'published') {
     throw new ApiError(404, 'Date not found.');
   }
 
@@ -357,7 +357,7 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
     .order('created_at', { ascending: true });
 
   if (input.tourId) {
-    await ensureTourAccess(supabase, input.userId, input.workspaceId, input.projectId, input.tourId, ['owner', 'admin', 'editor', 'viewer']);
+    await ensureTourAccess(supabase, input.userId, input.workspaceId, input.projectId, input.tourId, ['owner', 'admin', 'editor', 'crew', 'viewer']);
     const previous = buildQuery;
     buildQuery = (selectClause: string) => previous(selectClause).eq('tour_id', input.tourId as string);
   } else if (membership.scopeType === 'tours') {
@@ -365,7 +365,7 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
     buildQuery = (selectClause: string) => previous(selectClause).in('tour_id', membership.tourIds);
   }
 
-  if (membership.role === 'viewer' || !input.includeDrafts) {
+  if (membership.role === 'viewer' || membership.role === 'crew' || !input.includeDrafts) {
     const previous = buildQuery;
     buildQuery = (selectClause: string) => previous(selectClause).eq('status', 'published');
   }
@@ -542,7 +542,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
 
 export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
   await getDateScoped(supabase, userId, workspaceId, dateId);
   const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
   if (error) {
@@ -556,7 +556,7 @@ export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: st
 export async function canUserSeeDrafts(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
   const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
-  return access.role !== 'viewer';
+  return access.role !== 'viewer' && access.role !== 'crew';
 }
 
 export async function getWorkspaceRoleForDateScope(supabaseInput: SupabaseClient, userId: string, workspaceId: string): Promise<WorkspaceRole> {

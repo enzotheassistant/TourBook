@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { buildInviteExpiry, generateInviteToken, hashInviteToken, normalizeInviteEmail, validateInviteRole, type WorkspaceInviteRole } from '@/lib/invites/security';
 import type { WorkspaceScopeType } from '@/lib/types/tenant';
+import { hasFullWorkspaceControl, isWithinActorScope } from '@/lib/data/server/manager-scope';
 import { hasExactTourInviteSet, normalizeScopeTypeValue, resolveScopePrecedence } from '@/lib/data/server/invite-scope-utils';
 import { grantsMembershipOnAccept, resolveInviteAcceptOutcome } from '@/lib/data/server/invite-accept-utils';
 
@@ -32,8 +33,28 @@ export function normalizeScopeType(value: unknown): WorkspaceScopeType {
   throw new ApiError(400, 'scopeType must be workspace, projects, or tours.');
 }
 
+/**
+ * Owners (and the retired admin level) manage every invite with their own
+ * signed-in database access. Managers ('editor') can manage invites only for
+ * the projects/tours they have; the app checks that here, then uses the
+ * server's own access for the database work (same pattern as Team members).
+ */
+async function requireInviteManagerAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  const fullControl = hasFullWorkspaceControl(access.role);
+  return { access, fullControl, client: fullControl ? supabase : getPrivilegedDataClient() };
+}
+
+function inviteWithinManagerScope(
+  manager: Awaited<ReturnType<typeof requireInviteManagerAccess>>,
+  invite: { scopeType: WorkspaceScopeType; projectIds: string[]; tourIds: string[] },
+) {
+  if (manager.fullControl) return true;
+  return isWithinActorScope(manager.access, invite);
+}
+
 function resolveRolePrecedence(currentRole: WorkspaceInviteRole | 'owner', inviteRole: WorkspaceInviteRole) {
-  const precedence = { viewer: 0, editor: 1, admin: 2, owner: 3 } as const;
+  const precedence = { viewer: 0, crew: 1, editor: 2, admin: 3, owner: 4 } as const;
   return precedence[inviteRole] > precedence[currentRole] ? inviteRole : currentRole;
 }
 
@@ -164,8 +185,8 @@ async function assertValidScopeTourIds(supabase: SupabaseClient, workspaceId: st
 }
 
 export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
-  const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const manager = await requireInviteManagerAccess(requireScopedDataClient(supabaseInput), userId, workspaceId);
+  const supabase = manager.client;
 
   const { data, error } = await supabase
     .from('workspace_invites')
@@ -182,7 +203,9 @@ export async function listWorkspaceInvitesScoped(supabaseInput: SupabaseClient, 
   const inviteIds = rows.map((row: any) => String(row.id));
   const byInvite = await getInviteProjectIds(supabase, inviteIds);
   const tourByInvite = await getInviteTourIds(supabase, inviteIds);
-  const mapped = rows.map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? [], tourByInvite.get(String(row.id)) ?? []));
+  const mapped = rows
+    .map((row: any) => mapInviteRow(row, byInvite.get(String(row.id)) ?? [], tourByInvite.get(String(row.id)) ?? []))
+    .filter((invite) => inviteWithinManagerScope(manager, invite));
 
   // Write-back expired status for any invites that are logically expired but still 'pending' in the DB.
   // This keeps the DB consistent so duplicate-creation checks (which filter by status) remain accurate.
@@ -214,14 +237,10 @@ export async function createWorkspaceInviteScoped(
   try {
     role = validateInviteRole(input.role);
   } catch {
-    throw new ApiError(400, 'Invite role must be one of: admin, editor, viewer.');
+    throw new ApiError(400, 'Choose Viewer, Crew or Manager for this invite.');
   }
 
   const scopeType = normalizeScopeType(input.scopeType ?? 'workspace');
-
-  if (role === 'admin' && scopeType !== 'workspace') {
-    throw new ApiError(400, 'Admins must have full workspace access.');
-  }
 
   if (!workspaceId) {
     throw new ApiError(400, 'workspaceId is required.');
@@ -231,7 +250,8 @@ export async function createWorkspaceInviteScoped(
     throw new ApiError(400, 'email is required.');
   }
 
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const manager = await requireInviteManagerAccess(supabase, userId, workspaceId);
+  const db = manager.client;
 
   const expiresAt = input.expiresAt ? new Date(input.expiresAt).toISOString() : buildInviteExpiry();
   if (!Number.isFinite(new Date(expiresAt).getTime())) {
@@ -239,15 +259,19 @@ export async function createWorkspaceInviteScoped(
   }
 
   const validatedProjectIds = scopeType === 'projects'
-    ? await assertValidScopeProjectIds(supabase, workspaceId, input.projectIds ?? [])
+    ? await assertValidScopeProjectIds(db, workspaceId, input.projectIds ?? [])
     : [];
   const validatedTours = scopeType === 'tours'
-    ? await assertValidScopeTourIds(supabase, workspaceId, input.tourIds ?? [])
+    ? await assertValidScopeTourIds(db, workspaceId, input.tourIds ?? [])
     : { tourIds: [], projectIds: [] };
   const projectIds = scopeType === 'tours' ? validatedTours.projectIds : validatedProjectIds;
   const tourIds = validatedTours.tourIds;
 
-  const { data: duplicateRows, error: duplicateError } = await supabase
+  if (!inviteWithinManagerScope(manager, { scopeType, projectIds, tourIds })) {
+    throw new ApiError(403, 'You can only invite people to projects you manage.');
+  }
+
+  const { data: duplicateRows, error: duplicateError } = await db
     .from('workspace_invites')
     .select('id')
     .eq('workspace_id', workspaceId)
@@ -270,7 +294,7 @@ export async function createWorkspaceInviteScoped(
 
   if (scopeType === 'tours' && (duplicateRows ?? []).length > 0) {
     const duplicateIds = (duplicateRows ?? []).map((row: any) => String(row.id));
-    const existingTourIds = await getInviteTourIds(supabase, duplicateIds);
+    const existingTourIds = await getInviteTourIds(db, duplicateIds);
     const exactDuplicate = duplicateIds.some((inviteId) => hasExactTourInviteSet(existingTourIds.get(inviteId) ?? [], tourIds));
     if (exactDuplicate) {
       throw new ApiError(409, 'An active invite already exists for this user, role, and tour scope.');
@@ -280,7 +304,7 @@ export async function createWorkspaceInviteScoped(
   const token = generateInviteToken();
   const tokenHash = hashInviteToken(token);
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('workspace_invites')
     .insert({
       workspace_id: workspaceId,
@@ -308,14 +332,14 @@ export async function createWorkspaceInviteScoped(
 
   if (scopeType === 'projects' && projectIds.length) {
     const grants = projectIds.map((projectId) => ({ invite_id: String(data.id), workspace_id: workspaceId, project_id: projectId }));
-    const { error: grantError } = await supabase.from('workspace_invite_projects').insert(grants);
+    const { error: grantError } = await db.from('workspace_invite_projects').insert(grants);
     if (grantError) {
       throw new ApiError(500, grantError.message);
     }
   }
 
   if (scopeType === 'tours' && tourIds.length) {
-    const { data: toursData, error: toursReadError } = await supabase
+    const { data: toursData, error: toursReadError } = await db
       .from('tours')
       .select('id, project_id')
       .eq('workspace_id', workspaceId)
@@ -330,7 +354,7 @@ export async function createWorkspaceInviteScoped(
       project_id: projectByTour.get(tourId) ?? projectIds[0],
       tour_id: tourId,
     }));
-    const { error: grantError } = await supabase.from('workspace_invite_tours').insert(grantRows);
+    const { error: grantError } = await db.from('workspace_invite_tours').insert(grantRows);
     if (grantError) {
       throw new ApiError(500, grantError.message);
     }
@@ -347,18 +371,19 @@ export async function revokeWorkspaceInviteScoped(
   userId: string,
   input: { workspaceId: string; inviteId: string },
 ) {
-  const supabase = requireScopedDataClient(supabaseInput);
+  const scoped = requireScopedDataClient(supabaseInput);
   const workspaceId = String(input.workspaceId ?? '').trim();
   const inviteId = String(input.inviteId ?? '').trim();
 
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!inviteId) throw new ApiError(400, 'inviteId is required.');
 
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const manager = await requireInviteManagerAccess(scoped, userId, workspaceId);
+  const supabase = manager.client;
 
   const { data: existing, error: existingError } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, status')
+    .select('id, workspace_id, status, scope_type')
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
     .maybeSingle();
@@ -372,6 +397,21 @@ export async function revokeWorkspaceInviteScoped(
 
   if (!existing) {
     throw new ApiError(404, 'Invite not found.');
+  }
+
+  if (!manager.fullControl) {
+    const [existingProjects, existingTours] = await Promise.all([
+      getInviteProjectIds(supabase, [inviteId]),
+      getInviteTourIds(supabase, [inviteId]),
+    ]);
+    const existingScope = {
+      scopeType: normalizeScopeType((existing as any).scope_type),
+      projectIds: existingProjects.get(inviteId) ?? [],
+      tourIds: existingTours.get(inviteId) ?? [],
+    };
+    if (!inviteWithinManagerScope(manager, existingScope)) {
+      throw new ApiError(404, 'Invite not found.');
+    }
   }
 
   const existingStatus = String(existing.status);
@@ -426,18 +466,19 @@ export async function resendWorkspaceInviteScoped(
   userId: string,
   input: { workspaceId: string; inviteId: string },
 ): Promise<{ invite: WorkspaceInviteSummary; token: string }> {
-  const supabase = requireScopedDataClient(supabaseInput);
+  const scoped = requireScopedDataClient(supabaseInput);
   const workspaceId = String(input.workspaceId ?? '').trim();
   const inviteId = String(input.inviteId ?? '').trim();
 
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!inviteId) throw new ApiError(400, 'inviteId is required.');
 
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin']);
+  const manager = await requireInviteManagerAccess(scoped, userId, workspaceId);
+  const supabase = manager.client;
 
   const { data: existing, error: existingError } = await supabase
     .from('workspace_invites')
-    .select('id, workspace_id, status')
+    .select('id, workspace_id, status, scope_type')
     .eq('id', inviteId)
     .eq('workspace_id', workspaceId)
     .maybeSingle();
@@ -451,6 +492,21 @@ export async function resendWorkspaceInviteScoped(
 
   if (!existing) {
     throw new ApiError(404, 'Invite not found.');
+  }
+
+  if (!manager.fullControl) {
+    const [existingProjects, existingTours] = await Promise.all([
+      getInviteProjectIds(supabase, [inviteId]),
+      getInviteTourIds(supabase, [inviteId]),
+    ]);
+    const existingScope = {
+      scopeType: normalizeScopeType((existing as any).scope_type),
+      projectIds: existingProjects.get(inviteId) ?? [],
+      tourIds: existingTours.get(inviteId) ?? [],
+    };
+    if (!inviteWithinManagerScope(manager, existingScope)) {
+      throw new ApiError(404, 'Invite not found.');
+    }
   }
 
   const existingStatus = String(existing.status);

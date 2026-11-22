@@ -67,6 +67,8 @@ export type ScopedGuestListEntry = {
   date_id: string;
   name: string;
   created_at: string;
+  /** True when the signed-in person added this name. Who added a name is never shown. */
+  added_by_me?: boolean;
 };
 
 export type DateAttachment = {

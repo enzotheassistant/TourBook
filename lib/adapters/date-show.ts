@@ -112,5 +112,6 @@ export function mapScopedGuestListEntryToLegacy(entry: ScopedGuestListEntry): Gu
     show_id: entry.date_id,
     name: entry.name,
     created_at: entry.created_at,
+    added_by_me: entry.added_by_me === true,
   };
 }

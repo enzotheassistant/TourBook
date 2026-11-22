@@ -1,4 +1,4 @@
-export type EditableWorkspaceMemberRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type EditableWorkspaceMemberRole = 'owner' | 'admin' | 'editor' | 'crew' | 'viewer';
 export type EditableWorkspaceScopeType = 'workspace' | 'projects' | 'tours';
 
 export class MemberUpdateValidationError extends Error {
@@ -12,8 +12,8 @@ export class MemberUpdateValidationError extends Error {
 
 function normalizeMemberRole(value: unknown): EditableWorkspaceMemberRole {
   const raw = String(value ?? '').trim().toLowerCase();
-  if (raw === 'owner' || raw === 'admin' || raw === 'editor' || raw === 'viewer') return raw;
-  throw new MemberUpdateValidationError(400, 'role must be owner, admin, editor, or viewer.');
+  if (raw === 'owner' || raw === 'admin' || raw === 'editor' || raw === 'crew' || raw === 'viewer') return raw;
+  throw new MemberUpdateValidationError(400, 'role must be owner, admin, editor, crew, or viewer.');
 }
 
 function normalizeScopeType(value: unknown): EditableWorkspaceScopeType {

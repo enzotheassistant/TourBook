@@ -126,7 +126,8 @@ export async function requireApiAuthForWorkspaceAdmin(
   }
 
   const role = String(data?.role ?? '');
-  if (role !== 'owner' && role !== 'admin') {
+  // Managers ('editor') use the admin side too (e.g. Quick import).
+  if (role !== 'owner' && role !== 'admin' && role !== 'editor') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
