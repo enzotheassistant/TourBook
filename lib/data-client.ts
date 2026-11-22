@@ -374,6 +374,15 @@ export async function createWorkspace(input: { name: string; slug?: string | nul
   });
 }
 
+/** Rename a workspace (owner only). */
+export async function renameWorkspace(input: { workspaceId: string; name: string }) {
+  const payload = await request<{ workspace: WorkspaceSummary }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: input.name }),
+  });
+  return payload.workspace;
+}
+
 export async function createArtist(input: { workspaceId: string; name: string; slug?: string | null }) {
   return request<ProjectSummary>('/api/projects', {
     method: 'POST',

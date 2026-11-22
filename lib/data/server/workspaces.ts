@@ -214,3 +214,35 @@ export async function canUserAccessWorkspace(supabaseInput: SupabaseClient, user
   await requireWorkspaceAccess(supabase, userId, workspaceId);
   return true;
 }
+
+/** Rename a workspace. Only its owner can (the database checks this too). */
+export async function renameWorkspaceForUser(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  input: { workspaceId: string; name: string },
+): Promise<WorkspaceSummary> {
+  const supabase = requireScopedDataClient(supabaseInput);
+  const workspaceId = String(input.workspaceId ?? '').trim();
+  const name = normalizeWorkspaceName(input.name);
+  if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
+  if (!name) throw new ApiError(400, 'Enter a workspace name.');
+  if (name.length > 120) throw new ApiError(400, 'Workspace name must be 120 characters or fewer.');
+
+  const { data, error } = await supabase
+    .from('workspaces')
+    .update({ name })
+    .eq('id', workspaceId)
+    .eq('owner_user_id', userId)
+    .select('id, name, slug, owner_user_id')
+    .maybeSingle();
+
+  if (error) throw new ApiError(500, error.message);
+  if (!data) throw new ApiError(403, 'Only the workspace owner can rename it.');
+
+  return {
+    id: String(data.id),
+    name: String(data.name ?? ''),
+    slug: String(data.slug ?? ''),
+    ownerUserId: data.owner_user_id ? String(data.owner_user_id) : null,
+  };
+}

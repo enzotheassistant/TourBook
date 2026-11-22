@@ -94,7 +94,7 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
   );
 }
 
-function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
+function CrewMenu({ showAdminLink, showStartWorkspace = false }: { showAdminLink: boolean; showStartWorkspace?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -116,6 +116,11 @@ function CrewMenu({ showAdminLink }: { showAdminLink: boolean }) {
           {showAdminLink ? (
             <Link href="/admin" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
               Admin
+            </Link>
+          ) : null}
+          {showStartWorkspace ? (
+            <Link href="/admin/settings" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
+              Start your own workspace
             </Link>
           ) : null}
           <LogoutButton variant="menu" />
@@ -198,6 +203,8 @@ export function AppShell({
   // where you're a Manager or Owner. Switch to a band where you're Crew or a
   // Viewer and it goes away.
   const showAdminLink = mode === 'admin' ? true : canAccessAdminWorkspace(activeWorkspaceRole);
+  // People who don't own a workspace can start one from the menu.
+  const ownsAWorkspace = memberships.some((membership) => membership.role === 'owner');
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew view' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
@@ -257,7 +264,7 @@ export function AppShell({
               </div>
               {isCrewList ? (
                 <div className="flex shrink-0 items-center gap-2">
-                  <CrewMenu showAdminLink={showAdminLink} />
+                  <CrewMenu showAdminLink={showAdminLink} showStartWorkspace={!ownsAWorkspace} />
                 </div>
               ) : (
                 <>
