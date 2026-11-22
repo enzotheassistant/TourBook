@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canAccessAdminWorkspace, getWorkspaceRole, canManageInvites } from '@/lib/roles';
+import { canAccessAdminWorkspace, getProjectRole, canManageInvites } from '@/lib/roles';
 import { buildProjectOptions, getProjectsForWorkspace } from '@/lib/ui/project-context';
 import { CalendarIcon, EyeIcon, MoreIcon, SettingsIcon, UsersIcon } from '@/components/icons';
 import { AppShellSkeleton } from '@/components/skeleton';
@@ -26,7 +26,7 @@ function useProjectSwitcher(managedOnly: boolean) {
   const options = useMemo(() => buildProjectOptions(
     projects,
     workspaces,
-    managedOnly ? (project) => canAccessAdminWorkspace(getWorkspaceRole(memberships, project.workspaceId)) : undefined,
+    managedOnly ? (project) => canAccessAdminWorkspace(getProjectRole(memberships, project.workspaceId, project.id)) : undefined,
   ), [projects, workspaces, memberships, managedOnly]);
   const scopedProjects = getProjectsForWorkspace(projects, activeWorkspaceId);
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
@@ -192,7 +192,8 @@ export function AppShell({
   const pathname = usePathname();
   const { activeWorkspaceId, activeProjectId, projects, memberships, user, isLoading } = useAppContext();
   
-  const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  // Level on the band you're looking at — the Admin option and Team follow it.
+  const activeWorkspaceRole = useMemo(() => getProjectRole(memberships, activeWorkspaceId, activeProjectId), [memberships, activeWorkspaceId, activeProjectId]);
   // The Admin option follows the project you're looking at: it shows only
   // where you're a Manager or Owner. Switch to a band where you're Crew or a
   // Viewer and it goes away.

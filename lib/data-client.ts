@@ -407,10 +407,17 @@ export async function listWorkspaceInvites(workspaceId: string) {
   return payload.invites ?? [];
 }
 
-export async function createWorkspaceInvite(input: { workspaceId: string; name?: string | null; email: string; role: WorkspaceInviteRole; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
+/** Per-band access sent to the server: one level per band (tourIds empty = whole band), or all projects. */
+export type AccessPayload =
+  | { allProjects: true; role: 'viewer' | 'crew' | 'editor' }
+  | { allProjects: false; entries: Array<{ projectId: string; role: string; tourIds: string[] }> };
+
+export async function createWorkspaceInvite(input: { workspaceId: string; name?: string | null; email: string; access?: AccessPayload; role?: WorkspaceInviteRole; scopeType?: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
   return request<{ invite: WorkspaceInviteSummary; acceptToken: string; emailDelivery?: { attempted?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
     method: 'POST',
-    body: JSON.stringify({ name: input.name ?? null, email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [], tourIds: input.tourIds ?? [] }),
+    body: JSON.stringify(input.access
+      ? { name: input.name ?? null, email: input.email, access: input.access }
+      : { name: input.name ?? null, email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [], tourIds: input.tourIds ?? [] }),
   });
 }
 
@@ -440,15 +447,14 @@ export async function listWorkspaceMembers(workspaceId: string) {
   return payload.members ?? [];
 }
 
-export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; role: 'admin' | 'editor' | 'crew' | 'viewer'; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
-  const payload = await request<{ member: WorkspaceMemberDirectoryEntry }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
+/**
+ * Change someone's access. Send `access` (per band). The result has
+ * `removed: true` when they no longer have any band left (off the team).
+ */
+export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; access: AccessPayload | null }) {
+  const payload = await request<{ member: WorkspaceMemberDirectoryEntry & { removed?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      role: input.role,
-      scopeType: input.scopeType,
-      projectIds: input.projectIds ?? [],
-      tourIds: input.tourIds ?? [],
-    }),
+    body: JSON.stringify({ access: input.access ?? { allProjects: false, entries: [] } }),
   });
   return payload.member;
 }

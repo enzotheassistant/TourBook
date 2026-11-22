@@ -21,12 +21,14 @@ import { ensureMinimumScheduleItems } from '@/lib/normalize';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { canAccessAdminWorkspace, canCreateArtists, canManageInvites, canManageProjects, getFirstAdminWorkspaceId, getWorkspaceRole, hasAnyAdminAccess, roleDescription, roleLabel, type AssignableRole } from '@/lib/roles';
+import { canAccessAdminWorkspace, canCreateArtists, canManageInvites, canManageProjects, getProjectRole, getWorkspaceRole, hasAnyAdminAccess, roleLabel, type AssignableRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceRole, WorkspaceSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceRole, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
+import { AccessEditor } from '@/components/access-editor';
+import { accessWithBandRole, accessWithoutBand, draftForProject, draftFromAccess, draftProblem, draftToAccessPayload, summarizeBandAccess, type AccessDraft } from '@/lib/ui/access-draft';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 import { ChevronIcon, EyeIcon, EyeOffIcon, MoreIcon, PlusIcon } from '@/components/icons';
 import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
@@ -111,7 +113,6 @@ type SectionKey = TourDaySectionKey;
 type VisibilityKey = keyof ShowFormValues['visibility'];
 type VisibilityModeMap = Record<VisibilityKey, 'auto' | 'manual'>;
 type ExpandedSections = Record<SectionKey, boolean>;
-type EditableWorkspaceMemberRole = Exclude<WorkspaceMemberDirectoryEntry['role'], 'owner'>;
 
 const EXPANDED_SECTIONS_STORAGE_KEY = 'tourbook:new-date-expanded-sections';
 
@@ -477,27 +478,6 @@ async function buildImportTextFromFiles(files: File[]) {
   return textChunks.filter(Boolean).join('\n\n');
 }
 
-// Shared by handleCreateInvite and handleSaveMemberEdit, which previously
-// repeated this same scope-selection validation near-verbatim with slightly
-// different wording -- a future rule change risked being applied to only
-// one of the two.
-function validateScopeSelection(input: {
-  role: WorkspaceInviteRole | EditableWorkspaceMemberRole;
-  scopeType: 'workspace' | 'projects' | 'tours';
-  projectIds: string[];
-  tourIds: string[];
-}): string | null {
-  if (input.role === 'admin' && input.scopeType !== 'workspace') {
-    return 'Admins must have full workspace access.';
-  }
-  if (input.scopeType === 'projects' && input.projectIds.length === 0) {
-    return 'Select at least one project for project-scoped access.';
-  }
-  if (input.scopeType === 'tours' && input.tourIds.length === 0) {
-    return 'Select at least one tour for tour-scoped access.';
-  }
-  return null;
-}
 
 export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'drafts' | 'team' | 'projects' }) {
   const {
@@ -558,17 +538,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [membersLoading, setMembersLoading] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
-  const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
-  const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
+  // Per-band access for a new invite (a level on each band, or all projects).
+  const [inviteAccess, setInviteAccess] = useState<AccessDraft>(() => draftForProject(null));
   const [inviteFormOpen, setInviteFormOpen] = useState(false);
-  const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberDirectoryEntry[]>([]);
   const [editingMember, setEditingMember] = useState<WorkspaceMemberDirectoryEntry | null>(null);
-  const [editingMemberRole, setEditingMemberRole] = useState<EditableWorkspaceMemberRole>('viewer');
-  const [editingMemberScopeType, setEditingMemberScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
-  const [editingMemberProjectIds, setEditingMemberProjectIds] = useState<string[]>([]);
-  const [editingMemberTourIds, setEditingMemberTourIds] = useState<string[]>([]);
+  // Per-band access in "Edit access".
+  const [editingAccess, setEditingAccess] = useState<AccessDraft>(() => draftForProject(null));
   const [savingMemberEdit, setSavingMemberEdit] = useState(false);
   const [quickRoleMemberId, setQuickRoleMemberId] = useState<string | null>(null);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
@@ -609,6 +585,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const membersRequestIdRef = useRef(0);
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  // Level on the band you're working on (levels can differ by band).
+  const activeProjectRole = useMemo(() => getProjectRole(memberships, activeWorkspaceId, activeProjectId), [memberships, activeWorkspaceId, activeProjectId]);
   const workspaceProjects = useMemo(
     () => projects.filter((project) => project.workspaceId === activeWorkspaceId),
     [projects, activeWorkspaceId],
@@ -636,24 +614,20 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     const allowedProjects = new Set(activeMembership?.projectIds ?? []);
     return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
   }, [activeMembership, canInviteToAllProjects, workspaceTours]);
-  const inviteAvailableTours = useMemo(() => {
-    if (inviteScopeType !== 'tours') return teamTours;
-    if (inviteProjectIds.length === 0) return teamTours;
-    const allowedProjects = new Set(inviteProjectIds);
-    return teamTours.filter((tour) => allowedProjects.has(tour.projectId));
-  }, [inviteProjectIds, inviteScopeType, teamTours]);
-  const editAvailableTours = useMemo(() => {
-    if (editingMemberScopeType !== 'tours') return teamTours;
-    if (editingMemberProjectIds.length === 0) return teamTours;
-    const allowedProjects = new Set(editingMemberProjectIds);
-    return teamTours.filter((tour) => allowedProjects.has(tour.projectId));
-  }, [editingMemberProjectIds, editingMemberScopeType, teamTours]);
+  const teamProjectNameById = useMemo(
+    () => new Map(teamProjects.map((project) => [project.id, project.name || project.slug || project.id])),
+    [teamProjects],
+  );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = canManageProjects(activeWorkspaceRole);
-  const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
+  const canManageInvitesInWorkspace = canManageInvites(activeProjectRole);
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
-  const firstAdminWorkspaceId = useMemo(() => getFirstAdminWorkspaceId(memberships), [memberships]);
+  // The first band (in any workspace) where this person is a Manager or Owner.
+  const firstManagedProject = useMemo(
+    () => projects.find((project) => canAccessAdminWorkspace(getProjectRole(memberships, project.workspaceId, project.id))) ?? null,
+    [projects, memberships],
+  );
 
   // Every mutation both awaits this directly and dispatches
   // 'tourbook:shows-updated' (which other components -- dashboard-client,
@@ -736,22 +710,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }, [activeWorkspaceId, canManageInvitesInWorkspace]);
 
-  useEffect(() => {
-    setInviteProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
-  }, [workspaceProjects]);
-
-  useEffect(() => {
-    setInviteTourIds((current) => current.filter((id) => inviteAvailableTours.some((tour) => tour.id === id)));
-  }, [inviteAvailableTours]);
-
-  useEffect(() => {
-    setEditingMemberProjectIds((current) => current.filter((id) => workspaceProjects.some((project) => project.id === id)));
-  }, [workspaceProjects]);
-
-  useEffect(() => {
-    setEditingMemberTourIds((current) => current.filter((id) => editAvailableTours.some((tour) => tour.id === id)));
-  }, [editAvailableTours]);
-
   // Reset stale shows, filters, and errors whenever the admin view or active scope changes.
   // This prevents sibling admin routes from briefly reusing an out-of-date list.
   useEffect(() => {
@@ -777,12 +735,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     };
   }, [activeProjectId, activeTourId, activeWorkspaceId, contextLoading, loadShows]);
 
+  // Opened the admin side on a band you don't manage? Move to one you do.
   useEffect(() => {
     if (contextLoading) return;
-    if (!activeWorkspaceId || canAccessAdminWorkspace(activeWorkspaceRole)) return;
-    if (!firstAdminWorkspaceId || firstAdminWorkspaceId === activeWorkspaceId) return;
-    setActiveWorkspaceId(firstAdminWorkspaceId);
-  }, [activeWorkspaceId, activeWorkspaceRole, contextLoading, firstAdminWorkspaceId, setActiveWorkspaceId]);
+    if (!activeWorkspaceId || canAccessAdminWorkspace(activeProjectRole)) return;
+    if (!activeProjectId && canAccessAdminWorkspace(activeWorkspaceRole)) return;
+    if (!firstManagedProject) return;
+    if (firstManagedProject.workspaceId !== activeWorkspaceId) setActiveWorkspaceId(firstManagedProject.workspaceId);
+    if (firstManagedProject.id !== activeProjectId) setActiveProjectId(firstManagedProject.id);
+  }, [activeProjectId, activeProjectRole, activeWorkspaceId, activeWorkspaceRole, contextLoading, firstManagedProject, setActiveProjectId, setActiveWorkspaceId]);
 
   useEffect(() => {
     if (contextLoading) return;
@@ -798,8 +759,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (!isTeamMode || !contextProjectId || contextInvitePrefillRef.current === contextProjectId) return;
     if (!workspaceProjects.some((project) => project.id === contextProjectId)) return;
     contextInvitePrefillRef.current = contextProjectId;
-    setInviteScopeType('projects');
-    setInviteProjectIds([contextProjectId]);
+    setInviteAccess(draftForProject(contextProjectId));
     setInviteFormOpen(true);
     setInviteMessage('Project context loaded. Review scope and create invite when ready.');
   }, [contextProjectId, isTeamMode, workspaceProjects]);
@@ -1103,9 +1063,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
 
-    const scopeError = validateScopeSelection({ role: inviteRole, scopeType: inviteScopeType, projectIds: inviteProjectIds, tourIds: inviteTourIds });
-    if (scopeError) {
-      setInviteMessage(scopeError);
+    const accessProblem = draftProblem(inviteAccess, teamProjectNameById);
+    if (accessProblem) {
+      setInviteMessage(accessProblem);
       return;
     }
 
@@ -1119,16 +1079,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         workspaceId: activeWorkspaceId,
         name: inviteName.trim() || null,
         email: inviteEmail.trim(),
-        role: inviteRole,
-        scopeType: inviteScopeType,
-        projectIds: inviteScopeType === 'projects' ? inviteProjectIds : [],
-        tourIds: inviteScopeType === 'tours' ? inviteTourIds : [],
+        access: draftToAccessPayload(inviteAccess),
       });
       const inviteLink = `${window.location.origin}/invite/${encodeURIComponent(created.acceptToken)}`;
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteName('');
       setInviteEmail('');
-      setInviteTourIds([]);
       applyThisProjectInviteScope();
       setInviteMessage('An email invite has been sent to your recipient(s).');
       window.dispatchEvent(new Event('tourbook:invites-updated'));
@@ -1174,28 +1130,35 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   function handleStartEditMember(member: WorkspaceMemberDirectoryEntry) {
     if (member.role === 'owner') return;
     setEditingMember(member);
-    setEditingMemberRole(member.role);
-    setEditingMemberScopeType(member.role === 'admin' ? 'workspace' : member.scopeType);
-    setEditingMemberProjectIds(member.projectIds);
-    setEditingMemberTourIds(member.tourIds);
+    setEditingAccess(draftFromAccess(member.access));
     setInviteMessage('');
   }
 
   function closeMemberEditor() {
     setEditingMember(null);
-    setEditingMemberRole('viewer');
-    setEditingMemberScopeType('workspace');
-    setEditingMemberProjectIds([]);
-    setEditingMemberTourIds([]);
+    setEditingAccess(draftForProject(null));
     setSavingMemberEdit(false);
   }
 
   async function handleSaveMemberEdit() {
     if (!activeWorkspaceId || !editingMember || !canManageInvitesInWorkspace) return;
-    const scopeError = validateScopeSelection({ role: editingMemberRole, scopeType: editingMemberScopeType, projectIds: editingMemberProjectIds, tourIds: editingMemberTourIds });
-    if (scopeError) {
-      setInviteMessage(scopeError);
+    const accessProblem = draftProblem(editingAccess, teamProjectNameById, { allowEmpty: true });
+    if (accessProblem) {
+      setInviteMessage(accessProblem);
       return;
+    }
+    const payload = draftToAccessPayload(editingAccess);
+    const label = editingMember.name || editingMember.email || 'This person';
+    // Every band you can see set to "No access": that takes them off those bands
+    // (and off the team, if they have nothing else).
+    if (!payload.allProjects && payload.entries.length === 0) {
+      const confirmed = await requestConfirmation({
+        title: 'Remove access?',
+        description: `${label} will lose access to every project listed here.`,
+        confirmLabel: 'Remove access',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
     }
 
     setSavingMemberEdit(true);
@@ -1203,13 +1166,15 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       const updated = await updateWorkspaceMember({
         workspaceId: activeWorkspaceId,
         memberId: editingMember.id,
-        role: editingMemberRole,
-        scopeType: editingMemberScopeType,
-        projectIds: editingMemberScopeType === 'projects' || editingMemberScopeType === 'tours' ? editingMemberProjectIds : [],
-        tourIds: editingMemberScopeType === 'tours' ? editingMemberTourIds : [],
+        access: payload,
       });
-      setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setInviteMessage('Member access updated.');
+      if (updated.removed) {
+        setMembers((current) => current.filter((item) => item.id !== updated.id));
+        setInviteMessage(`${label} no longer has access.`);
+      } else {
+        setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setInviteMessage('Access updated.');
+      }
       closeMemberEditor();
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to update member.');
@@ -1217,26 +1182,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
+  // Team page dropdown: change someone's level on the band you're on only.
   async function handleQuickRoleChange(member: WorkspaceMemberDirectoryEntry, role: AssignableRole) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
-    if (member.role === 'owner' || member.role === 'admin' || member.role === role) return;
+    const bandId = contextProjectId || activeProjectId;
+    if (member.role === 'owner' || member.role === 'admin' || !bandId) return;
 
     setQuickRoleMemberId(member.id);
     try {
       const updated = await updateWorkspaceMember({
         workspaceId: activeWorkspaceId,
         memberId: member.id,
-        role,
-        scopeType: member.scopeType,
-        projectIds: member.scopeType === 'projects' || member.scopeType === 'tours' ? member.projectIds : [],
-        tourIds: member.scopeType === 'tours' ? member.tourIds : [],
+        access: accessWithBandRole(member.access, bandId, role),
       });
       setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       if (editingMember?.id === member.id) {
         setEditingMember(updated);
-        setEditingMemberRole(updated.role === 'owner' ? 'viewer' : updated.role);
+        setEditingAccess(draftFromAccess(updated.access));
       }
-      setInviteMessage(`${updated.name || updated.email || 'Member'} is now ${roleLabel(updated.role)}.`);
+      const where = member.access?.allProjects ? 'all projects' : (teamProjectNameById.get(bandId) ?? 'this project');
+      setInviteMessage(`${updated.name || updated.email || 'Member'} is now ${roleLabel(role)} on ${where}.`);
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to update member role.');
     } finally {
@@ -1244,17 +1209,41 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
-  async function handleRemoveMember(member: WorkspaceMemberDirectoryEntry) {
+  /**
+   * Remove someone. From the band view this only takes them off that band
+   * (their other bands stay); from "All projects" it takes them off the team.
+   */
+  async function handleRemoveMember(member: WorkspaceMemberDirectoryEntry, fromProjectId: string | null = null) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
     const label = member.name || member.email || member.userId;
-    const confirmed = await requestConfirmation({ title: 'Remove member?', description: `Remove ${label} from this workspace?`, confirmLabel: 'Remove', tone: 'danger' });
+    const otherBands = fromProjectId && member.access && !member.access.allProjects
+      ? member.access.entries.filter((entry) => entry.projectId !== fromProjectId)
+      : [];
+    const bandName = fromProjectId ? (teamProjectNameById.get(fromProjectId) ?? 'this project') : null;
+
+    if (fromProjectId && otherBands.length) {
+      const confirmed = await requestConfirmation({ title: `Remove from ${bandName}?`, description: `${label} keeps access to their other projects.`, confirmLabel: 'Remove', tone: 'danger' });
+      if (!confirmed) return;
+      try {
+        const updated = await updateWorkspaceMember({ workspaceId: activeWorkspaceId, memberId: member.id, access: accessWithoutBand(member.access, fromProjectId) });
+        if (updated.removed) setMembers((current) => current.filter((item) => item.id !== member.id));
+        else setMembers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        if (editingMember?.id === member.id) closeMemberEditor();
+        setInviteMessage(`${label} removed from ${bandName}.`);
+      } catch (error) {
+        setInviteMessage(error instanceof Error ? error.message : 'Unable to remove member.');
+      }
+      return;
+    }
+
+    const confirmed = await requestConfirmation({ title: 'Remove from team?', description: `Remove ${label} from the team? They'll lose access to everything here.`, confirmLabel: 'Remove', tone: 'danger' });
     if (!confirmed) return;
 
     try {
       await removeWorkspaceMember({ workspaceId: activeWorkspaceId, memberId: member.id });
       setMembers((current) => current.filter((item) => item.id !== member.id));
       if (editingMember?.id === member.id) closeMemberEditor();
-      setInviteMessage('Member removed.');
+      setInviteMessage('Removed from the team.');
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to remove member.');
     }
@@ -1308,20 +1297,18 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   // admins always get the whole workspace.
   function applyThisProjectInviteScope() {
     const thisProjectId = contextProjectId || activeProjectId;
-    if (thisProjectId && inviteRole !== 'admin' && teamProjects.some((project) => project.id === thisProjectId)) {
-      setInviteScopeType('projects');
-      setInviteProjectIds([thisProjectId]);
-    } else if (!canInviteToAllProjects && teamProjects[0]) {
-      setInviteScopeType('projects');
-      setInviteProjectIds([teamProjects[0].id]);
+    if (thisProjectId && teamProjects.some((project) => project.id === thisProjectId)) {
+      setInviteAccess(draftForProject(thisProjectId));
+    } else if (teamProjects[0]) {
+      setInviteAccess(draftForProject(teamProjects[0].id));
+    } else if (canInviteToAllProjects) {
+      setInviteAccess({ allProjects: true, allRole: 'viewer', bands: {} });
     } else {
-      setInviteScopeType('workspace');
-      setInviteProjectIds([]);
+      setInviteAccess(draftForProject(null));
     }
   }
 
   function openInviteForm() {
-    setInviteTourIds([]);
     applyThisProjectInviteScope();
     setInviteFormOpen(true);
   }
@@ -1937,12 +1924,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     loading: invitesLoading,
     name: inviteName,
     email: inviteEmail,
-    role: inviteRole,
-    scopeType: inviteScopeType,
-    scopeProjectIds: inviteProjectIds,
-    scopeTourIds: inviteTourIds,
+    access: inviteAccess,
     availableProjects: teamProjects,
-    availableTours: inviteAvailableTours,
+    availableTours: teamTours,
     allowAllProjects: canInviteToAllProjects,
     message: inviteMessage,
     creating: creatingInvite,
@@ -1951,10 +1935,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     onToggleManualShare: () => setShowManualInviteShare((current) => !current),
     onNameChange: setInviteName,
     onEmailChange: setInviteEmail,
-    onRoleChange: setInviteRole,
-    onScopeTypeChange: setInviteScopeType,
-    onScopeProjectIdsChange: setInviteProjectIds,
-    onScopeTourIdsChange: setInviteTourIds,
+    onAccessChange: setInviteAccess,
     contextProjectId: contextProjectId || activeProjectId,
     onCreateInvite: () => void handleCreateInvite(),
     onRevokeInvite: (invite: WorkspaceInviteSummary) => void handleRevokeInvite(invite),
@@ -1986,7 +1967,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     );
   }
 
-  if (activeWorkspaceId && !canAccessAdminWorkspace(activeWorkspaceRole) && !hasAdminAnywhere) {
+  if (activeWorkspaceId && !canAccessAdminWorkspace(activeProjectRole) && !canAccessAdminWorkspace(activeWorkspaceRole) && !hasAdminAnywhere) {
     return (
       <WorkspaceSelfServeAccessPanel
         workspaces={workspaces}
@@ -2054,12 +2035,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             loading={invitesLoading}
             name={inviteName}
             email={inviteEmail}
-            role={inviteRole}
-            scopeType={inviteScopeType}
-            scopeProjectIds={inviteProjectIds}
-            scopeTourIds={inviteTourIds}
+            access={inviteAccess}
             availableProjects={teamProjects}
-            availableTours={inviteAvailableTours}
+            availableTours={teamTours}
+            allowAllProjects={canInviteToAllProjects}
             message={inviteMessage}
             creating={creatingInvite}
             lastInviteShare={lastInviteShare}
@@ -2067,10 +2046,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
             onNameChange={setInviteName}
             onEmailChange={setInviteEmail}
-            onRoleChange={setInviteRole}
-            onScopeTypeChange={setInviteScopeType}
-            onScopeProjectIdsChange={setInviteProjectIds}
-            onScopeTourIdsChange={setInviteTourIds}
+            onAccessChange={setInviteAccess}
             contextProjectId={contextProjectId || activeProjectId}
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
@@ -2128,20 +2104,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       <EditMemberDialog
         open={Boolean(editingMember)}
         member={editingMember}
-        role={editingMemberRole}
-        scopeType={editingMemberScopeType}
-        projectIds={editingMemberProjectIds}
-        tourIds={editingMemberTourIds}
+        access={editingAccess}
         availableProjects={teamProjects}
-        availableTours={editAvailableTours}
+        availableTours={teamTours}
         allowAllProjects={canInviteToAllProjects}
-        canAssignAdmin={isWorkspaceOwner}
         saving={savingMemberEdit}
         onClose={closeMemberEditor}
-        onRoleChange={setEditingMemberRole}
-        onScopeTypeChange={setEditingMemberScopeType}
-        onProjectIdsChange={setEditingMemberProjectIds}
-        onTourIdsChange={setEditingMemberTourIds}
+        onAccessChange={setEditingAccess}
         onSave={() => void handleSaveMemberEdit()}
       />
       <ConfirmDialog
@@ -2486,7 +2455,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           quickRoleMemberId={quickRoleMemberId}
           onQuickRoleChange={(member, role) => void handleQuickRoleChange(member, role)}
           onEditMember={handleStartEditMember}
-          onRemoveMember={(member) => void handleRemoveMember(member)}
+          onRemoveMember={(member, fromProjectId) => void handleRemoveMember(member, fromProjectId)}
           contextProjectId={contextProjectId || activeProjectId}
         />
       ) : null}
@@ -3434,10 +3403,7 @@ function InviteManagementSection({
   loading,
   name,
   email,
-  role,
-  scopeType,
-  scopeProjectIds,
-  scopeTourIds,
+  access,
   availableProjects,
   availableTours,
   allowAllProjects = true,
@@ -3448,10 +3414,7 @@ function InviteManagementSection({
   onToggleManualShare,
   onNameChange,
   onEmailChange,
-  onRoleChange,
-  onScopeTypeChange,
-  onScopeProjectIdsChange,
-  onScopeTourIdsChange,
+  onAccessChange,
   onCreateInvite,
   onRevokeInvite,
   onResendInvite,
@@ -3467,10 +3430,8 @@ function InviteManagementSection({
   loading: boolean;
   name: string;
   email: string;
-  role: WorkspaceInviteRole;
-  scopeType: 'workspace' | 'projects' | 'tours';
-  scopeProjectIds: string[];
-  scopeTourIds: string[];
+  /** Per-band levels for the person being invited. */
+  access: AccessDraft;
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
   allowAllProjects?: boolean;
@@ -3481,10 +3442,7 @@ function InviteManagementSection({
   onToggleManualShare: () => void;
   onNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
-  onRoleChange: (value: WorkspaceInviteRole) => void;
-  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
-  onScopeProjectIdsChange: (value: string[]) => void;
-  onScopeTourIdsChange: (value: string[]) => void;
+  onAccessChange: (value: AccessDraft) => void;
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
   onResendInvite: (invite: WorkspaceInviteSummary) => void;
@@ -3528,8 +3486,8 @@ function InviteManagementSection({
             </button>
           ) : null}
         </div>
-        {/* Order: name, email, role, access choices, then Create invite last. */}
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
+        {/* Order: name, email, then a level for each project, then Create invite last. */}
+        <div className="grid gap-2 sm:grid-cols-2">
           <input
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
@@ -3544,35 +3502,19 @@ function InviteManagementSection({
             placeholder="teammate@example.com"
             className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
-          <select
-            value={role}
-            onChange={(event) => onRoleChange(event.target.value as WorkspaceInviteRole)}
-            aria-label="Role"
-            className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
-          >
-            <option value="viewer">Viewer</option>
-            <option value="crew">Crew</option>
-            <option value="editor">Manager</option>
-          </select>
         </div>
-        {role === 'viewer' || role === 'crew' || role === 'editor' ? (
-          <p className="text-sm text-zinc-400">{roleLabel(role)}: {roleDescription(role)}</p>
-        ) : null}
 
-        <TeamScopeEditor
-          prefix="invite"
-          scopeType={scopeType}
-          scopeProjectIds={scopeProjectIds}
-          scopeTourIds={scopeTourIds}
-          availableProjects={availableProjects}
-          availableTours={availableTours}
-          allowAllProjects={allowAllProjects}
-          disableScopedAccess={role === 'admin'}
-          disabledReason={role === 'admin' ? 'Admins always have full workspace access.' : undefined}
-          onScopeTypeChange={onScopeTypeChange}
-          onScopeProjectIdsChange={onScopeProjectIdsChange}
-          onScopeTourIdsChange={onScopeTourIdsChange}
-        />
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-zinc-200">Access</p>
+          <AccessEditor
+            draft={access}
+            onChange={onAccessChange}
+            projects={availableProjects}
+            tours={availableTours}
+            allowAllProjects={allowAllProjects}
+            idPrefix="invite"
+          />
+        </div>
         <div className="flex justify-end">
           <button type="button" onClick={onCreateInvite} disabled={creating} className={`${primaryButtonClassName()} w-full sm:w-auto`}>
             {creating ? 'Creating…' : 'Create invite'}
@@ -3638,7 +3580,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Expires ${formatInviteDate(invite.expiresAt)}`}
+                        subtitle={`${invite.access ? summarizeBandAccess(invite.access, projectNameById) : summarizeTeamAccess(invite, { projectNameById, toursById })} · Expires ${formatInviteDate(invite.expiresAt)}`}
                         action={
                           <div className="flex flex-wrap gap-2">
                             <button type="button" onClick={() => onResendInvite(invite)} className={secondaryButtonClassName()}>Resend</button>
@@ -3670,7 +3612,7 @@ function InviteManagementSection({
                         secondary={invite.name ? invite.email : null}
                         role={invite.role}
                         status={invite.status}
-                        subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
+                        subtitle={`${invite.access ? summarizeBandAccess(invite.access, projectNameById) : summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
                       />
                     );
                   }) : null}
@@ -3685,235 +3627,57 @@ function InviteManagementSection({
   );
 }
 
-function TeamScopeEditor({
-  prefix,
-  scopeType,
-  scopeProjectIds,
-  scopeTourIds,
-  availableProjects,
-  availableTours,
-  allowAllProjects = true,
-  disableScopedAccess = false,
-  disabledReason,
-  onScopeTypeChange,
-  onScopeProjectIdsChange,
-  onScopeTourIdsChange,
-}: {
-  prefix: string;
-  /** False for Managers limited to some projects: they can't give "All projects". */
-  allowAllProjects?: boolean;
-  scopeType: 'workspace' | 'projects' | 'tours';
-  scopeProjectIds: string[];
-  scopeTourIds: string[];
-  availableProjects: ProjectSummary[];
-  availableTours: TourSummary[];
-  disableScopedAccess?: boolean;
-  disabledReason?: string;
-  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
-  onScopeProjectIdsChange: (value: string[]) => void;
-  onScopeTourIdsChange: (value: string[]) => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-      <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
-      <div className="mt-2 space-y-2">
-        {allowAllProjects ? (
-          <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-            <input type="radio" name={`${prefix}-scope`} checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
-            <span className="block font-medium">All projects</span>
-          </label>
-        ) : null}
-        <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
-          <input
-            type="radio"
-            name={`${prefix}-scope`}
-            checked={scopeType === 'projects'}
-            disabled={disableScopedAccess}
-            onChange={() => {
-              if (scopeType !== 'projects') {
-                onScopeProjectIdsChange([]);
-                onScopeTourIdsChange([]);
-              }
-              onScopeTypeChange('projects');
-            }}
-            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
-          />
-          <span className="block font-medium">Selected projects</span>
-        </label>
-        <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
-          <input
-            type="radio"
-            name={`${prefix}-scope`}
-            checked={scopeType === 'tours'}
-            disabled={disableScopedAccess}
-            onChange={() => {
-              if (scopeType !== 'tours') {
-                onScopeProjectIdsChange([]);
-                onScopeTourIdsChange([]);
-              }
-              onScopeTypeChange('tours');
-            }}
-            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20"
-          />
-          <span className="block font-medium">Selected tours</span>
-        </label>
-      </div>
-
-      {disableScopedAccess && disabledReason ? <p className="mt-3 text-sm text-zinc-500">{disabledReason}</p> : null}
-
-      <div className="mt-3 space-y-2">
-        <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
-        {availableProjects.length === 0 ? (
-          <p className="text-sm text-zinc-400">No projects available in this workspace.</p>
-        ) : (
-          availableProjects.map((project) => {
-            const checked = scopeProjectIds.includes(project.id);
-            return (
-              <label key={project.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${scopeType === 'projects' || scopeType === 'tours' ? 'border-white/10 bg-black/20 text-zinc-200' : 'border-white/5 bg-black/10 text-zinc-500'}`}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={scopeType === 'workspace'}
-                  onChange={(event) => {
-                    const next = event.target.checked ? [...scopeProjectIds, project.id] : scopeProjectIds.filter((id) => id !== project.id);
-                    if (!event.target.checked && scopeType === 'tours') {
-                      onScopeTourIdsChange(scopeTourIds.filter((id) => availableTours.some((tour) => tour.id === id && tour.projectId !== project.id)));
-                    }
-                    if (scopeType === 'workspace') onScopeTypeChange('projects');
-                    onScopeProjectIdsChange([...new Set(next)]);
-                  }}
-                  className="h-4 w-4 rounded border-white/20 bg-black/20"
-                />
-                <span>{project.name || project.slug || project.id}</span>
-              </label>
-            );
-          })
-        )}
-      </div>
-
-      {scopeType === 'tours' ? (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Tours</p>
-          {availableTours.length === 0 ? (
-            <p className="text-sm text-zinc-400">No tours available for the selected project scope yet.</p>
-          ) : (
-            availableTours.map((tour) => {
-              const checked = scopeTourIds.includes(tour.id);
-              return (
-                <label key={tour.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(event) => {
-                      const next = event.target.checked ? [...scopeTourIds, tour.id] : scopeTourIds.filter((id) => id !== tour.id);
-                      onScopeTypeChange('tours');
-                      onScopeTourIdsChange([...new Set(next)]);
-                      if (!scopeProjectIds.includes(tour.projectId)) {
-                        onScopeProjectIdsChange([...new Set([...scopeProjectIds, tour.projectId])]);
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-white/20 bg-black/20"
-                  />
-                  <span>{tour.name || tour.id}</span>
-                </label>
-              );
-            })
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
+/** "Edit access": a level for each project (or all projects) for one person. */
 function EditMemberDialog({
   open,
   member,
-  role,
-  scopeType,
-  projectIds,
-  tourIds,
+  access,
   availableProjects,
   availableTours,
   allowAllProjects = true,
-  canAssignAdmin,
   saving,
   onClose,
-  onRoleChange,
-  onScopeTypeChange,
-  onProjectIdsChange,
-  onTourIdsChange,
+  onAccessChange,
   onSave,
 }: {
   open: boolean;
   member: WorkspaceMemberDirectoryEntry | null;
-  role: EditableWorkspaceMemberRole;
-  scopeType: 'workspace' | 'projects' | 'tours';
-  projectIds: string[];
-  tourIds: string[];
+  access: AccessDraft;
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
   allowAllProjects?: boolean;
-  canAssignAdmin: boolean;
   saving: boolean;
   onClose: () => void;
-  onRoleChange: (value: EditableWorkspaceMemberRole) => void;
-  onScopeTypeChange: (value: 'workspace' | 'projects' | 'tours') => void;
-  onProjectIdsChange: (value: string[]) => void;
-  onTourIdsChange: (value: string[]) => void;
+  onAccessChange: (value: AccessDraft) => void;
   onSave: () => void;
 }) {
   if (!open || !member || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 px-4 pb-6 pt-12 sm:items-center" role="dialog" aria-modal="true" aria-label="Edit team member" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 px-4 pb-6 pt-12 sm:items-center" role="dialog" aria-modal="true" aria-label="Edit access" onClick={onClose}>
+      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Edit member</p>
-            <h3 className="mt-1 text-base font-semibold text-zinc-100">{member.name || member.email || member.userId}</h3>
-            {member.name && member.email ? <p className="mt-1 text-xs text-zinc-500">{member.email}</p> : null}
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-zinc-100">Edit access: {member.name || member.email || member.userId}</h3>
+            {member.name && member.email ? <p className="mt-1 truncate text-xs text-zinc-500">{member.email}</p> : null}
           </div>
-          <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Close</button>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
-          <label className="text-sm font-medium text-zinc-200">Role</label>
-          <select value={role} onChange={(event) => {
-            const nextRole = event.target.value as EditableWorkspaceMemberRole;
-            onRoleChange(nextRole);
-            if (nextRole === 'admin') {
-              onScopeTypeChange('workspace');
-              onProjectIdsChange([]);
-              onTourIdsChange([]);
-            }
-          }} className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40">
-            <option value="viewer">Viewer</option>
-            <option value="crew">Crew</option>
-            <option value="editor">Manager</option>
-            {canAssignAdmin && member.role === 'admin' ? <option value="admin">Admin (retired)</option> : null}
-          </select>
+          <button type="button" onClick={onClose} className="shrink-0 text-sm text-zinc-400 transition hover:text-zinc-100">Close</button>
         </div>
 
         <div className="mt-4">
-          <TeamScopeEditor
-            prefix="edit-member"
-            scopeType={scopeType}
-            scopeProjectIds={projectIds}
-            scopeTourIds={tourIds}
-            availableProjects={availableProjects}
-            availableTours={availableTours}
+          <AccessEditor
+            draft={access}
+            onChange={onAccessChange}
+            projects={availableProjects}
+            tours={availableTours}
             allowAllProjects={allowAllProjects}
-            disableScopedAccess={role === 'admin'}
-            disabledReason={role === 'admin' ? 'Admins always have full workspace access.' : undefined}
-            onScopeTypeChange={onScopeTypeChange}
-            onScopeProjectIdsChange={onProjectIdsChange}
-            onScopeTourIdsChange={onTourIdsChange}
+            idPrefix="edit-access"
           />
         </div>
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button type="button" onClick={onSave} disabled={saving} className={primaryButtonClassName()}>{saving ? 'Saving…' : 'Save changes'}</button>
           <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Cancel</button>
+          <button type="button" onClick={onSave} disabled={saving} className={primaryButtonClassName()}>{saving ? 'Saving…' : 'Save changes'}</button>
         </div>
       </div>
     </div>,
@@ -3941,7 +3705,8 @@ function TeamMembersSection({
   quickRoleMemberId: string | null;
   onQuickRoleChange: (member: WorkspaceMemberDirectoryEntry, role: AssignableRole) => void;
   onEditMember: (member: WorkspaceMemberDirectoryEntry) => void;
-  onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
+  /** fromProjectId set = remove from that band only; null = remove from the team. */
+  onRemoveMember: (member: WorkspaceMemberDirectoryEntry, fromProjectId: string | null) => void;
   contextProjectId?: string | null;
 }) {
   const [openMemberMenuId, setOpenMemberMenuId] = useState<string | null>(null);
@@ -3968,8 +3733,19 @@ function TeamMembersSection({
     };
   }, []);
 
+  // Level on the band you're looking at (levels can differ by band).
+  function roleOnContextBand(member: WorkspaceMemberDirectoryEntry) {
+    const access = member.access;
+    if (!access) return member.role;
+    if (access.allProjects) return access.role;
+    return access.entries.find((entry) => entry.projectId === contextProjectId)?.role ?? member.role;
+  }
+
   function renderMemberRoleControl(member: WorkspaceMemberDirectoryEntry) {
     if (member.role === 'owner') return null;
+    // In "All projects" the line under their name shows their levels; change
+    // them with Edit access. The quick dropdown is for the band you're on.
+    if (effectiveViewMode === 'workspace') return null;
     if (member.role === 'admin') {
       return (
         <button type="button" onClick={() => onEditMember(member)} className={secondaryButtonClassName()}>
@@ -3981,7 +3757,7 @@ function TeamMembersSection({
     return (
       <label className="flex min-w-0 flex-1 flex-col sm:min-w-[9rem] sm:max-w-[10rem] sm:flex-none">
         <select
-          value={member.role}
+          value={roleOnContextBand(member)}
           onChange={(event) => onQuickRoleChange(member, event.target.value as AssignableRole)}
           disabled={quickRoleMemberId === member.id}
           aria-label={`Change role for ${member.name || member.email || member.userId}`}
@@ -4049,8 +3825,12 @@ function TeamMembersSection({
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  showRoleBadge={!(member.source === 'member' && (member.role === 'editor' || member.role === 'crew' || member.role === 'viewer'))}
-                  subtitle={effectiveViewMode === 'workspace' ? summarizeTeamAccess(member, { projectNameById, toursById }) : null}
+                  showRoleBadge={member.role === 'owner' || member.source !== 'member'}
+                  subtitle={
+                    effectiveViewMode === 'workspace'
+                      ? (member.access ? summarizeBandAccess(member.access, projectNameById) : summarizeTeamAccess(member, { projectNameById, toursById }))
+                      : member.role !== 'owner' && member.access?.allProjects ? 'All projects' : null
+                  }
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
@@ -4076,18 +3856,18 @@ function TeamMembersSection({
                                   }}
                                   className="block w-full border-b border-white/5 px-4 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
                                 >
-                                  Edit scope
+                                  Edit access
                                 </button>
                               ) : null}
                               <button
                                 type="button"
                                 onClick={() => {
                                   setOpenMemberMenuId(null);
-                                  onRemoveMember(member);
+                                  onRemoveMember(member, effectiveViewMode === 'context' && contextProjectId && !member.access?.allProjects ? contextProjectId : null);
                                 }}
                                 className="block w-full px-4 py-3 text-left text-sm text-red-200 transition hover:bg-white/[0.06]"
                               >
-                                Remove
+                                {effectiveViewMode === 'context' && contextProjectName && !member.access?.allProjects ? `Remove from ${contextProjectName}` : 'Remove from team'}
                               </button>
                             </div>
                           ) : null}
