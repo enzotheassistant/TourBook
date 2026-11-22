@@ -6,9 +6,9 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 1: Wording
 - [x] Step 2: Admin date tabs and landing screen
 - [x] Step 3: Instant Day sheet / Guest list switch
-- [ ] Step 4: Eye icons for "Visible to crew"
-- [ ] Step 5: Compact schedule editor
-- [ ] Step 6: Team page cleanup
+- [x] Step 4: Eye icons for "Visible to crew"
+- [x] Step 5: Compact schedule editor
+- [x] Step 6: Team page cleanup
 - [ ] Step 7: Venue fills in city, province and country
 - [ ] Step 8: Bottom tab bar on phones (admin only)
 - [ ] Step 9: Managing tours (needs a database change — Phil's OK first)
@@ -26,6 +26,14 @@ Batch 1 (Steps 1–3) — live 2026-11-22, pull request #17:
 - Step 2: `/admin` redirects to `/admin/dates`; the new date form moved to `/admin/new` ("+ New date" button). `/admin?edit=…` / `?duplicate=…` links still open the editor. The right tab is highlighted from the first moment when opening a date; back arrow sits beside the title.
 - Step 3: the tab switch no longer calls the server (URL updated in the browser), and the guest list loads in the background when the date opens, so switching is instant.
 - The blue dot next to section names: shown only when a section is folded shut, and it means the section already has something filled in. Reported to Phil; left as is unless he wants it changed.
+
+Batch 2 (Steps 4–6) — on preview, pull request #18 (branch `ui-phase-5-batch2`):
+- Step 4: eye buttons (open = visible to crew, crossed-out = hidden), grey title when hidden, 2-second "Visible to crew" / "Hidden from crew" message. Screen-reader label "<Section>: visible to crew / hidden from crew".
+- Step 5: one row per schedule item (Time · Item · "…"); Delete in the "…" menu, no pop-up, Undo message kept. No reordering existed, so none to keep. The Time box is narrow on phones (7.25rem) so the Item box gets most of the width; long ranges like "5:00 - 7:00 PM" scroll inside the Time box rather than being cut off.
+- Step 6: one role control per person, owner first, project line only in "All projects" view, Invite button at the top, new invites default to This project, Create invite last, history folded away.
+- Data check (read-only): 15 "revoked" invite records belong to ~10 people who are current members and also have an accepted invite. They're older invites replaced when re-sent (Apr 30–May 3) — history, not broken data. Nothing changed.
+
+Open question before Step 8 (Phil, 2026-11-22): Crew view doesn't belong under "Account", and should Team and Projects be one section? Waiting on Phil's answer to the proposal in chat before building Step 8.
 
 ---
 
