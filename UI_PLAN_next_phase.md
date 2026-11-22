@@ -3,9 +3,9 @@
 Source: Phil's plan (saved word for word below). Work branch: `ui-phase-5`, one commit per step.
 To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → pick up from the first unticked step.
 
-- [ ] Step 1: Wording
-- [ ] Step 2: Admin date tabs and landing screen
-- [ ] Step 3: Instant Day sheet / Guest list switch
+- [x] Step 1: Wording
+- [x] Step 2: Admin date tabs and landing screen
+- [x] Step 3: Instant Day sheet / Guest list switch
 - [ ] Step 4: Eye icons for "Visible to crew"
 - [ ] Step 5: Compact schedule editor
 - [ ] Step 6: Team page cleanup
@@ -15,7 +15,17 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 
 ## Notes for Phil
 
-(Added as steps are finished.)
+Decisions with Phil before starting (2026-11-22):
+- Keep the word **Workspace** for the umbrella (Workspace → Projects → Tours → Dates). It fits a solo tour manager, a management company and a band; "Team" and "Account" clash with the Team page and the new Account tab. Only the Team page's "Full workspace" / "Current project" change (to "All projects" / "This project").
+- Bottom tab bar: try it (overrides "No bottom tab bar" from the first UI plan).
+- Schedule line delete: inside the "…" menu with **no** confirmation pop-up, plus the short "Line deleted · Undo" message.
+- Go live in batches after preview testing: Steps 1–3, 4–6, 7–8, then 9.
+
+Batch 1 (Steps 1–3) — on preview, pull request #18:
+- Step 1: sentence case across the app; "Quick import"; "Create date" / "Save changes" / "Save draft" with matching messages ("Date created", "Changes saved", "Draft saved"); "Loaded into editor" removed; shared plus icon.
+- Step 2: `/admin` redirects to `/admin/dates`; the new date form moved to `/admin/new` ("+ New date" button). `/admin?edit=…` / `?duplicate=…` links still open the editor. The right tab is highlighted from the first moment when opening a date; back arrow sits beside the title.
+- Step 3: the tab switch no longer calls the server (URL updated in the browser), and the guest list loads in the background when the date opens, so switching is instant.
+- The blue dot next to section names: shown only when a section is folded shut, and it means the section already has something filled in. Reported to Phil; left as is unless he wants it changed.
 
 ---
 
