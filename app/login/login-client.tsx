@@ -11,6 +11,7 @@ interface LoginPageClientProps {
   inviteToken?: string;
   initialMode?: "signin" | "forgot";
   linkProblem?: "expired" | "invalid";
+  accountDeleted?: boolean;
 }
 
 type AuthMode = "signin" | "signup" | "forgot";
@@ -89,13 +90,13 @@ const LINK_PROBLEM_MESSAGES = {
   invalid: "That email link didn't work. If you were resetting your password, send yourself a new link below.",
 } as const;
 
-export function LoginPageClient({ initialEmail, initialRememberEmail = true, inviteToken = "", initialMode = "signin", linkProblem }: LoginPageClientProps) {
+export function LoginPageClient({ initialEmail, initialRememberEmail = true, inviteToken = "", initialMode = "signin", linkProblem, accountDeleted = false }: LoginPageClientProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [email, setEmail] = useState(initialEmail || "");
+  const [email, setEmail] = useState(accountDeleted ? "" : initialEmail || "");
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(initialRememberEmail);
   const [error, setError] = useState(linkProblem ? LINK_PROBLEM_MESSAGES[linkProblem] : "");
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] = useState(accountDeleted ? "Your account has been deleted." : "");
   const [loading, setLoading] = useState(false);
   const routedRef = useRef(false);
   const modeRef = useRef<AuthMode>(mode);

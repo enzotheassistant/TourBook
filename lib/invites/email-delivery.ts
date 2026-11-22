@@ -264,3 +264,46 @@ export async function sendAccessAddedEmailBestEffort(input: {
     return { ok: false, provider: 'resend', mode: 'live', reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }
+
+/** A short "your account was deleted" note, sent after an account is deleted. */
+export async function sendAccountDeletedEmailBestEffort(input: { email: string }): Promise<EmailDeliveryResult> {
+  if (!input.email) return { ok: true, provider: 'none', mode: 'noop', reason: 'nothing_to_send' };
+
+  const appName = process.env.INVITE_EMAIL_APP_NAME?.trim() || 'TourBook';
+  const subject = `Your ${appName} account was deleted`;
+  const text = [
+    `Your ${appName} account (${input.email}) has been deleted, as you asked.`,
+    `You no longer have access to any band on ${appName}. Anything you added to a band's day sheets or guest lists stays with that band.`,
+    `If you didn't ask for this, let your tour manager know.`,
+  ].join('\n\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+      <p>Your ${appName} account (<strong>${escapeHtml(input.email)}</strong>) has been deleted, as you asked.</p>
+      <p>You no longer have access to any band on ${appName}. Anything you added to a band's day sheets or guest lists stays with that band.</p>
+      <p>If you didn't ask for this, let your tour manager know.</p>
+    </div>
+  `.trim();
+
+  const provider = (process.env.INVITE_EMAIL_PROVIDER || '').trim().toLowerCase();
+  if (provider !== 'resend') {
+    console.info('[account-email][noop] provider not configured', { email: input.email, subject });
+    return { ok: true, provider: 'noop-log', mode: 'noop', reason: 'provider_not_configured' };
+  }
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.INVITE_EMAIL_FROM?.trim();
+  if (!apiKey || !from) return { ok: false, provider: 'resend', mode: 'live', reason: 'missing_resend_env' };
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [input.email], subject, text, html }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      return { ok: false, provider: 'resend', mode: 'live', reason: `resend_http_${response.status}:${body.slice(0, 160)}` };
+    }
+    return { ok: true, provider: 'resend', mode: 'live' };
+  } catch (error) {
+    return { ok: false, provider: 'resend', mode: 'live', reason: error instanceof Error ? error.message : 'unknown_error' };
+  }
+}

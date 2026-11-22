@@ -1,5 +1,6 @@
 'use client';
 
+import { DeleteAccountSection, DeleteWorkspaceSection } from '@/components/delete-sections';
 import Link from 'next/link';
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -2513,6 +2514,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             canRename={isWorkspaceOwner}
             onRenamed={() => refreshContext({ silent: true })}
           />
+          {isWorkspaceOwner ? <DeleteWorkspaceSection key={`delete-${activeWorkspace.id}`} workspace={activeWorkspace} /> : null}
         </>
       ) : null}
 
@@ -2540,6 +2542,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </div>
             <LogoutButton />
           </section>
+          <DeleteAccountSection userId={user?.id} workspaces={workspaces} />
         </>
       ) : null}
 
