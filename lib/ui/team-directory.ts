@@ -121,6 +121,8 @@ export type AcceptedTeamDirectoryEntry = {
   source: 'member' | 'accepted-invite';
   memberId: string | null;
   inviteId: string | null;
+  /** Per-band levels (one level per band, or all projects). */
+  access?: WorkspaceMemberDirectoryEntry['access'];
 };
 
 const ACCEPTED_INVITE_FALLBACK_MAX_AGE_MS = 15 * 60 * 1000;
@@ -223,6 +225,7 @@ export function buildAcceptedTeamDirectory(
       source: 'accepted-invite' as const,
       memberId: null,
       inviteId: invite.id,
+      access: invite.access,
     }));
 
   return [...entries, ...acceptedInviteFallbacks];
