@@ -13,7 +13,7 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 8: Bottom tab bar on phones (admin only)
 - [ ] Step 9: Managing tours (needs a database change — Phil's OK first)
 - [x] Step 10 (added 2026-11-22): one flat project list in the picker — every project you can access, your own and invited ones. Built with the roles work (needed so the Admin option can follow the project you pick).
-- [ ] Roles batch A (agreed 2026-11-22): Viewer / Crew / Manager / Owner — on preview, pull request #20
+- [x] Roles batch A (agreed 2026-11-22): Viewer / Crew / Manager / Owner — live 2026-11-22, pull request #20
 - [ ] Roles batch B (later): a different level per project inside the same workspace
 
 ## Notes for Phil
