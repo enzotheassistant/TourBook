@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
-import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
+import { AttachmentsManager } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -537,6 +537,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [deletedLine, setDeletedLine] = useState<{ item: ShowFormValues['schedule_items'][number]; index: number } | null>(null);
   const deletedLineTimerRef = useRef<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [scheduleMenuId, setScheduleMenuId] = useState<string | null>(null);
   const flashTimerRef = useRef<number | null>(null);
   useEffect(() => () => {
     if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
@@ -2546,44 +2547,59 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
             >
               <div>
-                {/* Compact rows: "LINE n" + trash on one row, Item and Time side by side
-                    underneath (stacked on very narrow phones), thin dividers between lines. */}
-                <ul className="divide-y divide-white/10">
+                {/* One row per schedule item: narrow time box, wide item box, "…" menu
+                    (Delete lives in the menu; an Undo message appears afterwards). */}
+                <ul className="space-y-2">
                   {form.schedule_items.map((item, index) => (
-                    <li key={item.id} className="py-3 first:pt-0">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                        <button
-                          type="button"
-                          onClick={() => removeScheduleRow(item.id)}
-                          aria-label={`Delete line ${index + 1}`}
-                          className="-my-2.5 -mr-2.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1fr)_10rem] sm:grid-cols-[minmax(0,1fr)_13rem]">
-                        <input
-                          type="text"
-                          value={item.label}
-                          placeholder="Item"
-                          aria-label="Item"
-                          onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
-                          className={`${fieldClassName()} min-w-0`}
-                        />
-                        <input
-                          type="text"
-                          value={item.time}
-                          placeholder="Time"
-                          aria-label="Time"
-                          onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
-                          className={`${fieldClassName()} min-w-0 px-3 tabular-nums`}
-                        />
-                      </div>
+                    <li key={item.id} className="relative flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={item.time}
+                        placeholder="Time"
+                        aria-label={`Time, line ${index + 1}`}
+                        onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
+                        className={`${fieldClassName()} w-[7.25rem] shrink-0 px-3 tabular-nums sm:w-40`}
+                      />
+                      <input
+                        type="text"
+                        value={item.label}
+                        placeholder="Item"
+                        aria-label={`Item, line ${index + 1}`}
+                        onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
+                        className={`${fieldClassName()} min-w-0 flex-1`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setScheduleMenuId((current) => (current === item.id ? null : item.id))}
+                        aria-label={`More options for line ${index + 1}`}
+                        aria-expanded={scheduleMenuId === item.id}
+                        className="-mr-2 inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+                      >
+                        <MoreIcon />
+                      </button>
+                      {scheduleMenuId === item.id ? (
+                        <>
+                          <button type="button" aria-hidden="true" tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setScheduleMenuId(null)} />
+                          <div onKeyDown={(event) => { if (event.key === 'Escape') setScheduleMenuId(null); }} className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl">
+                            <button
+                              type="button"
+                              autoFocus
+                              onClick={() => {
+                                setScheduleMenuId(null);
+                                removeScheduleRow(item.id);
+                              }}
+                              className="block w-full px-4 py-3 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                            >
+                              Delete line
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
-                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3`}>
+                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3 inline-flex items-center gap-1.5`}>
+                  <PlusIcon />
                   Add line
                 </button>
               </div>
