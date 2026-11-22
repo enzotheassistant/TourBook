@@ -440,7 +440,7 @@ export async function listWorkspaceMembers(workspaceId: string) {
   return payload.members ?? [];
 }
 
-export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; role: 'admin' | 'editor' | 'viewer'; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
+export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; role: 'admin' | 'editor' | 'crew' | 'viewer'; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
   const payload = await request<{ member: WorkspaceMemberDirectoryEntry }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'PATCH',
     body: JSON.stringify({

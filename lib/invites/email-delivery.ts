@@ -37,8 +37,8 @@ function buildAcceptLink(input: SendInviteEmailInput) {
 }
 
 function roleLabel(role: WorkspaceInviteRole) {
-  if (role === 'admin') return 'Admin';
-  if (role === 'editor') return 'Editor';
+  if (role === 'admin' || role === 'editor') return 'Manager';
+  if (role === 'crew') return 'Crew';
   return 'Viewer';
 }
 

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCachedGuestList, updateGuestListEntry } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
+import { canAddGuests, canEditGuests, getWorkspaceRole } from '@/lib/roles';
 import { GuestListEntry } from '@/lib/types';
 import { MoreIcon } from '@/components/icons';
 
@@ -69,13 +69,15 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
   const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  const canManageGuestList = canCreateDates(workspaceRole);
+  // Crew can add names; only Managers and Owners can edit or remove them.
+  const canAddToGuestList = canAddGuests(workspaceRole);
+  const canManageGuestList = canEditGuests(workspaceRole);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const lines = parseBulkInput(value);
-    if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+    if (!canAddToGuestList) {
+      setError('You can\'t add names to this guest list. Ask your tour manager.');
       return;
     }
     if (!lines.length || saving) return;
@@ -94,7 +96,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
   async function handleDelete(entryId: string) {
     if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+      setError('Only managers can change or remove names. Ask your tour manager.');
       return;
     }
     setError('');
@@ -109,7 +111,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
   async function handleSaveEdit(entryId: string) {
     if (!canManageGuestList) {
-      setError('You have view-only access in this workspace. Ask an editor, admin, or owner to update the guest list.');
+      setError('Only managers can change or remove names. Ask your tour manager.');
       return;
     }
     const trimmed = editingValue.trim();
@@ -130,7 +132,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
     <div className="space-y-5">
       {showNote && note ? <p className="text-sm text-zinc-400">{note}</p> : null}
 
-      {canManageGuestList ? (
+      {canAddToGuestList ? (
         <form onSubmit={handleSubmit} className="space-y-3">
           <textarea
             value={value}

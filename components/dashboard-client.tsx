@@ -11,7 +11,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
 import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCachedShows } from '@/lib/data-client';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess } from '@/lib/roles';
+import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess, roleLabel } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
 import { clearPendingInviteScope, clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
 import { shouldClearInviteArtifactsOnError } from '@/lib/invites/client-state';
@@ -155,7 +155,7 @@ function InviteAcceptancePanel({
   useEffect(() => {
     if (flowState.phase === 'joining') {
       setStatus('success');
-      setMessage(`Joining ${flowState.invite.role} access… This can take a few seconds while TourBook loads your workspace.`);
+      setMessage(`Joining as ${roleLabel(flowState.invite.role)}… This can take a few seconds while TourBook loads your workspace.`);
       return;
     }
 
@@ -180,7 +180,7 @@ function InviteAcceptancePanel({
     try {
       const result = await acceptWorkspaceInvite(trimmed);
       setStatus('success');
-      setMessage(`Invite accepted. Workspace access granted as ${result.invite.role}. Loading your access…`);
+      setMessage(`Invite accepted. You've joined as ${roleLabel(result.invite.role)}. Loading your access…`);
       await trackInviteEvent({ event: 'invite.accepted', workspaceId: result.invite.workspaceId, inviteId: result.invite.id, role: result.invite.role });
       await onAccepted(result.invite);
     } catch (error) {

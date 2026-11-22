@@ -20,10 +20,10 @@ import { ensureMinimumScheduleItems } from '@/lib/normalize';
 import { Show, ShowFormValues, ShowStatus, TourDayType } from '@/lib/types';
 import { trackActivationEvent } from '@/lib/activation-telemetry';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { canAccessAdminWorkspace, canCreateArtists, canManageInvites, getFirstAdminWorkspaceId, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
+import { canAccessAdminWorkspace, canCreateArtists, canManageInvites, canManageProjects, getFirstAdminWorkspaceId, getWorkspaceRole, hasAnyAdminAccess, roleDescription, roleLabel, type AssignableRole } from '@/lib/roles';
 import { getAdminNoArtistsGuardrail } from '@/lib/activation/first-run';
 import type { IntakeRow } from '@/lib/ai/intake-types';
-import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceRole, WorkspaceSummary } from '@/lib/types/tenant';
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
@@ -630,7 +630,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [editingMemberProjectIds, editingMemberScopeType, workspaceTours]);
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
-  const canManageProjectActions = activeWorkspaceRole === 'owner' || activeWorkspaceRole === 'admin';
+  const canManageProjectActions = canManageProjects(activeWorkspaceRole);
+  // Managers limited to some projects can't invite people to "All projects".
+  const activeMembership = memberships.find((membership) => membership.workspaceId === activeWorkspaceId) ?? null;
+  const canInviteToAllProjects = canManageProjectActions || activeMembership?.scopeType === 'workspace';
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   const firstAdminWorkspaceId = useMemo(() => getFirstAdminWorkspaceId(memberships), [memberships]);
@@ -1190,7 +1193,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     }
   }
 
-  async function handleQuickRoleChange(member: WorkspaceMemberDirectoryEntry, role: 'editor' | 'viewer') {
+  async function handleQuickRoleChange(member: WorkspaceMemberDirectoryEntry, role: AssignableRole) {
     if (!activeWorkspaceId || !canManageInvitesInWorkspace) return;
     if (member.role === 'owner' || member.role === 'admin' || member.role === role) return;
 
@@ -1209,7 +1212,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         setEditingMember(updated);
         setEditingMemberRole(updated.role === 'owner' ? 'viewer' : updated.role);
       }
-      setInviteMessage(`Member role updated to ${updated.role}.`);
+      setInviteMessage(`${updated.name || updated.email || 'Member'} is now ${roleLabel(updated.role)}.`);
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to update member role.');
     } finally {
@@ -1284,6 +1287,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     if (thisProjectId && inviteRole !== 'admin' && workspaceProjects.some((project) => project.id === thisProjectId)) {
       setInviteScopeType('projects');
       setInviteProjectIds([thisProjectId]);
+    } else if (!canInviteToAllProjects && workspaceProjects[0]) {
+      setInviteScopeType('projects');
+      setInviteProjectIds([workspaceProjects[0].id]);
     } else {
       setInviteScopeType('workspace');
       setInviteProjectIds([]);
@@ -1913,6 +1919,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     scopeTourIds: inviteTourIds,
     availableProjects: workspaceProjects,
     availableTours: inviteAvailableTours,
+    allowAllProjects: canInviteToAllProjects,
     message: inviteMessage,
     creating: creatingInvite,
     lastInviteShare,
@@ -2396,7 +2403,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {/* Settings: the workspace you own or administer (renaming/switching can come later). */}
-      {isProjectsMode && canAccessAdminWorkspace(activeWorkspaceRole) && activeWorkspace ? (
+      {isProjectsMode && canManageProjectActions && activeWorkspace ? (
         <>
           <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Workspace</h3>
           <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
@@ -3184,7 +3191,7 @@ function ProjectManagementSection({
   );
 }
 
-function roleBadgeClassName(role: 'owner' | 'admin' | 'editor' | 'viewer') {
+function roleBadgeClassName(role: WorkspaceRole) {
   if (role === 'owner') return 'border-amber-400/30 bg-amber-500/10 text-amber-100';
   if (role === 'admin') return 'border-accent/30 bg-accent-soft text-accent-light';
   if (role === 'editor') return 'border-accent/30 bg-accent-soft text-accent-light';
@@ -3218,7 +3225,7 @@ function TeamDirectoryCard({
   subtitle?: string | null;
   /** Hide the role badge when the row already has a role dropdown (one role control per person). */
   showRoleBadge?: boolean;
-  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  role: WorkspaceRole;
   status?: WorkspaceInviteSummary['status'] | null;
   action?: ReactNode;
 }) {
@@ -3228,7 +3235,7 @@ function TeamDirectoryCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{title}</p>
-            {showRoleBadge ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span> : null}
+            {showRoleBadge ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${roleBadgeClassName(role)}`}>{roleLabel(role)}</span> : null}
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
           </div>
           {secondary ? <p className="mt-0.5 truncate text-xs text-zinc-500">{secondary}</p> : null}
@@ -3251,6 +3258,7 @@ function InviteManagementSection({
   scopeTourIds,
   availableProjects,
   availableTours,
+  allowAllProjects = true,
   message,
   creating,
   lastInviteShare,
@@ -3283,6 +3291,7 @@ function InviteManagementSection({
   scopeTourIds: string[];
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
+  allowAllProjects?: boolean;
   message: string;
   creating: boolean;
   lastInviteShare: { token: string; link: string } | null;
@@ -3355,22 +3364,18 @@ function InviteManagementSection({
           />
           <select
             value={role}
-            onChange={(event) => {
-              const nextRole = event.target.value as WorkspaceInviteRole;
-              onRoleChange(nextRole);
-              if (nextRole === 'admin') {
-                onScopeTypeChange('workspace');
-                onScopeProjectIdsChange([]);
-                onScopeTourIdsChange([]);
-              }
-            }}
+            onChange={(event) => onRoleChange(event.target.value as WorkspaceInviteRole)}
+            aria-label="Role"
             className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
           >
             <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
-            <option value="admin">Admin</option>
+            <option value="crew">Crew</option>
+            <option value="editor">Manager</option>
           </select>
         </div>
+        {role === 'viewer' || role === 'crew' || role === 'editor' ? (
+          <p className="text-sm text-zinc-400">{roleLabel(role)}: {roleDescription(role)}</p>
+        ) : null}
 
         <TeamScopeEditor
           prefix="invite"
@@ -3379,6 +3384,7 @@ function InviteManagementSection({
           scopeTourIds={scopeTourIds}
           availableProjects={availableProjects}
           availableTours={availableTours}
+          allowAllProjects={allowAllProjects}
           disableScopedAccess={role === 'admin'}
           disabledReason={role === 'admin' ? 'Admins always have full workspace access.' : undefined}
           onScopeTypeChange={onScopeTypeChange}
@@ -3504,6 +3510,7 @@ function TeamScopeEditor({
   scopeTourIds,
   availableProjects,
   availableTours,
+  allowAllProjects = true,
   disableScopedAccess = false,
   disabledReason,
   onScopeTypeChange,
@@ -3511,6 +3518,8 @@ function TeamScopeEditor({
   onScopeTourIdsChange,
 }: {
   prefix: string;
+  /** False for Managers limited to some projects: they can't give "All projects". */
+  allowAllProjects?: boolean;
   scopeType: 'workspace' | 'projects' | 'tours';
   scopeProjectIds: string[];
   scopeTourIds: string[];
@@ -3526,10 +3535,12 @@ function TeamScopeEditor({
     <div className="rounded-xl border border-white/10 bg-black/20 p-3">
       <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Access scope</p>
       <div className="mt-2 space-y-2">
-        <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
-          <input type="radio" name={`${prefix}-scope`} checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
-          <span className="block font-medium">All projects</span>
-        </label>
+        {allowAllProjects ? (
+          <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-200">
+            <input type="radio" name={`${prefix}-scope`} checked={scopeType === 'workspace'} onChange={() => onScopeTypeChange('workspace')} className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/20" />
+            <span className="block font-medium">All projects</span>
+          </label>
+        ) : null}
         <label className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${disableScopedAccess ? 'border-white/5 bg-black/10 text-zinc-500' : 'border-white/10 bg-black/20 text-zinc-200'}`}>
           <input
             type="radio"
@@ -3693,8 +3704,9 @@ function EditMemberDialog({
             }
           }} className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40">
             <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
-            {canAssignAdmin ? <option value="admin">Admin</option> : null}
+            <option value="crew">Crew</option>
+            <option value="editor">Manager</option>
+            {canAssignAdmin && member.role === 'admin' ? <option value="admin">Admin (retired)</option> : null}
           </select>
         </div>
 
@@ -3742,7 +3754,7 @@ function TeamMembersSection({
   projects: ProjectSummary[];
   tours: TourSummary[];
   quickRoleMemberId: string | null;
-  onQuickRoleChange: (member: WorkspaceMemberDirectoryEntry, role: 'editor' | 'viewer') => void;
+  onQuickRoleChange: (member: WorkspaceMemberDirectoryEntry, role: AssignableRole) => void;
   onEditMember: (member: WorkspaceMemberDirectoryEntry) => void;
   onRemoveMember: (member: WorkspaceMemberDirectoryEntry) => void;
   contextProjectId?: string | null;
@@ -3785,13 +3797,14 @@ function TeamMembersSection({
       <label className="flex min-w-0 flex-1 flex-col sm:min-w-[9rem] sm:max-w-[10rem] sm:flex-none">
         <select
           value={member.role}
-          onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
+          onChange={(event) => onQuickRoleChange(member, event.target.value as AssignableRole)}
           disabled={quickRoleMemberId === member.id}
           aria-label={`Change role for ${member.name || member.email || member.userId}`}
           className="h-9 w-full rounded-[10px] border border-white/10 bg-black/20 px-3 pr-8 text-sm text-zinc-100 outline-none transition focus:border-accent/40 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10"
         >
           <option value="viewer">Viewer</option>
-          <option value="editor">Editor</option>
+          <option value="crew">Crew</option>
+          <option value="editor">Manager</option>
         </select>
       </label>
     );
@@ -3851,7 +3864,7 @@ function TeamMembersSection({
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  showRoleBadge={!(member.source === 'member' && (member.role === 'editor' || member.role === 'viewer'))}
+                  showRoleBadge={!(member.source === 'member' && (member.role === 'editor' || member.role === 'crew' || member.role === 'viewer'))}
                   subtitle={effectiveViewMode === 'workspace' ? summarizeTeamAccess(member, { projectNameById, toursById }) : null}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">

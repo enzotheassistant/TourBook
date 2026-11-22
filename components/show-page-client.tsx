@@ -9,6 +9,7 @@ import { GuestListManager } from '@/components/guest-list-manager';
 import { OfflineStatus } from '@/components/offline-status';
 import { deleteShow, exportGuestListCsv, getShow, peekCachedShow } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
+import { canViewGuestList, getWorkspaceRole } from '@/lib/roles';
 import { KeyValueList, telHref } from '@/components/key-value-list';
 import { SectionCard } from '@/components/section-card';
 import { parseStoredDate } from '@/lib/date';
@@ -130,7 +131,7 @@ function getHeaderSupportMeta(show: Show) {
 
 
 export function ShowPageClient({ showId, adminMode = false }: { showId: string; adminMode?: boolean }) {
-  const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
+  const { activeWorkspaceId, memberships, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
   const viewFromUrl = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
@@ -282,7 +283,8 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const headerMetaLine = getHeaderMetaLine(show);
   const headerSupportMeta = getHeaderSupportMeta(show);
   const daySheetTitle = show.day_type === 'show' ? 'Day sheet' : 'Day details';
-  const canShowGuestList = show.day_type === 'show';
+  // Viewers (e.g. a support band) see day sheets only, never the guest list.
+  const canShowGuestList = show.day_type === 'show' && canViewGuestList(getWorkspaceRole(memberships, activeWorkspaceId));
   const hasAnyDayDetails = hasLocation(show) || Boolean(show.parking_load_info) || visibleScheduleItems.length > 0 || Boolean(show.dos_name || show.dos_phone) || hasAccommodation(show) || Boolean(show.notes);
 
   return (

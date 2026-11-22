@@ -253,14 +253,16 @@ export async function GET(request: NextRequest) {
 
     const activeProjectId = projectsForActiveWorkspace[0]?.id ?? null;
 
+    // Tours for every workspace, not just the first one, so switching to a
+    // project in another workspace (flat project list) has its tours ready.
     let tours: TourSummary[] = [];
     if (activeWorkspaceId) {
       const toursResult = await supabase
         .from('tours')
         .select('*')
-        .eq('workspace_id', activeWorkspaceId)
+        .in('workspace_id', workspaces.map((workspace) => workspace.id))
         .order('created_at', { ascending: true })
-        .limit(200);
+        .limit(500);
 
       if (toursResult.error) {
         if (!isOptionalBootstrapSchemaDriftError(toursResult.error)) throw toursResult.error;

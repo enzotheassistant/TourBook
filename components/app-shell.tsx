@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess, canManageInvites } from '@/lib/roles';
-import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
+import { canAccessAdminWorkspace, getWorkspaceRole, canManageInvites } from '@/lib/roles';
+import { buildProjectOptions, getProjectsForWorkspace } from '@/lib/ui/project-context';
 import { CalendarIcon, EyeIcon, MoreIcon, SettingsIcon, UsersIcon } from '@/components/icons';
 import { AppShellSkeleton } from '@/components/skeleton';
 
@@ -15,30 +15,48 @@ function ghostButtonClassName() {
   return 'inline-flex h-10 items-center rounded-[10px] border border-white/10 bg-transparent px-4 text-sm font-medium text-zinc-100 transition hover:border-white/20 hover:bg-white/[0.05]';
 }
 
-/** Admin header: which project you're working in. A picker when there's more than one. */
-function AdminProjectSelector() {
-  const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
-  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
+/**
+ * One flat list of projects across every workspace you belong to. Picking a
+ * project from another owner's workspace switches to it automatically.
+ * `managedOnly` limits the list to projects where you're a Manager or Owner
+ * (used on the admin side).
+ */
+function useProjectSwitcher(managedOnly: boolean) {
+  const { activeWorkspaceId, activeProjectId, projects, workspaces, memberships, setActiveWorkspaceId, setActiveProjectId } = useAppContext();
+  const options = useMemo(() => buildProjectOptions(
+    projects,
+    workspaces,
+    managedOnly ? (project) => canAccessAdminWorkspace(getWorkspaceRole(memberships, project.workspaceId)) : undefined,
+  ), [projects, workspaces, memberships, managedOnly]);
+  const scopedProjects = getProjectsForWorkspace(projects, activeWorkspaceId);
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
 
-  if (!currentProject) return null;
-  const currentName = currentProject.name || currentProject.slug || currentProject.id;
-
-  if (scopedProjects.length < 2) {
-    return <p className="truncate text-sm text-zinc-400">{currentName}</p>;
+  function selectProject(projectId: string) {
+    const target = projects.find((project) => project.id === projectId);
+    if (!target || !options.some((option) => option.value === projectId)) return;
+    if (target.workspaceId !== activeWorkspaceId) setActiveWorkspaceId(target.workspaceId);
+    if (projectId !== activeProjectId) setActiveProjectId(projectId);
   }
 
+  return { options, currentProject, selectProject };
+}
+
+/** Admin header: which project you're working in. A picker when there's more than one. */
+function AdminProjectSelector() {
+  const { options, currentProject, selectProject } = useProjectSwitcher(true);
+  if (!currentProject) return null;
+  const currentName = currentProject.name || currentProject.slug || currentProject.id;
+  if (options.length < 2) {
+    return <p className="truncate text-sm text-zinc-400">{currentName}</p>;
+  }
   return (
     <div className="flex min-w-0 flex-1">
       <PickerHeading
         title="Switch project"
         className="text-sm text-zinc-300"
-        options={scopedProjects.map((project) => ({ value: project.id, label: project.name || project.slug || project.id }))}
+        options={options.map(({ value, label }) => ({ value, label }))}
         selected={currentProject.id}
-        onSelect={(projectId) => {
-          const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
-          if (next !== activeProjectId) setActiveProjectId(next);
-        }}
+        onSelect={selectProject}
       >
         {currentName}
       </PickerHeading>
@@ -52,13 +70,11 @@ function AdminProjectSelector() {
  * with just one it's a plain title.
  */
 function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
-  const { activeWorkspaceId, activeProjectId, projects, setActiveProjectId } = useAppContext();
-  const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
-  const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
+  const { options, currentProject, selectProject } = useProjectSwitcher(false);
   const title = currentProject?.name || currentProject?.slug || fallbackTitle;
   const titleClassName = 'text-xl font-semibold tracking-tight text-zinc-50 sm:text-2xl';
 
-  if (!currentProject || !canSwitchProject(projects, activeWorkspaceId)) {
+  if (!currentProject || options.length < 2) {
     return <h1 className={`min-w-0 flex-1 truncate ${titleClassName}`}>{title}</h1>;
   }
 
@@ -68,12 +84,9 @@ function ProjectTitle({ fallbackTitle }: { fallbackTitle: string }) {
         title="Switch project"
         className={titleClassName}
         caretClassName="h-5 w-5 sm:h-6 sm:w-6"
-        options={scopedProjects.map((project) => ({ value: project.id, label: project.name || project.slug || project.id }))}
+        options={options.map(({ value, label }) => ({ value, label }))}
         selected={currentProject.id}
-        onSelect={(projectId) => {
-          const next = pickNextProjectId(activeProjectId, projectId, scopedProjects);
-          if (next !== activeProjectId) setActiveProjectId(next);
-        }}
+        onSelect={selectProject}
       >
         {title}
       </PickerHeading>
@@ -180,9 +193,10 @@ export function AppShell({
   const { activeWorkspaceId, activeProjectId, projects, memberships, user, isLoading } = useAppContext();
   
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  const showAdminLink = mode === 'admin'
-    ? true
-    : canAccessAdminWorkspace(activeWorkspaceRole) || hasAnyAdminAccess(memberships);
+  // The Admin option follows the project you're looking at: it shows only
+  // where you're a Manager or Owner. Switch to a band where you're Crew or a
+  // Viewer and it goes away.
+  const showAdminLink = mode === 'admin' ? true : canAccessAdminWorkspace(activeWorkspaceRole);
   const actionHref = mode === 'admin' ? '/' : '/admin';
   const actionLabel = mode === 'admin' ? 'Crew view' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
@@ -194,7 +208,7 @@ export function AppShell({
   // (projects, workspace, your account / log out).
   const adminNavItems = [
     { href: '/admin/dates', label: 'Dates', icon: <CalendarIcon />, active: pathname === '/admin/dates' || pathname === '/admin/drafts' || pathname === '/admin/new' || pathname === '/admin' },
-    // Team is for owners and admins only (they're the ones who can invite people).
+    // Team is for Managers and Owners (they're the ones who can invite people).
     ...(canManageInvites(activeWorkspaceRole) ? [{ href: '/admin/team', label: 'Team', icon: <UsersIcon />, active: pathname === '/admin/team' }] : []),
     { href: '/admin/settings', label: 'Settings', icon: <SettingsIcon />, active: pathname === '/admin/settings' || pathname === '/admin/projects' },
   ];
