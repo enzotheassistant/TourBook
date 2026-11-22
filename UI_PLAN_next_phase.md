@@ -11,10 +11,10 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 6: Team page cleanup
 - [x] Step 7: Venue fills in city, province and country
 - [x] Step 8: Bottom tab bar on phones (admin only)
-- [x] Step 9: Managing tours — on preview, pull request #21 (database change approved by Phil 2026-11-22: archived marker on tours, applied)
+- [x] Step 9: Managing tours — live 2026-11-22 via pull request #22 (database change approved by Phil 2026-11-22: archived marker on tours, applied)
 - [x] Step 10 (added 2026-11-22): one flat project list in the picker — every project you can access, your own and invited ones. Built with the roles work (needed so the Admin option can follow the project you pick).
 - [x] Roles batch A (agreed 2026-11-22): Viewer / Crew / Manager / Owner — live 2026-11-22, pull request #20
-- [x] Roles batch B: a different level on each band — on preview, pull request #22 (includes Step 9, #21)
+- [x] Roles batch B: a different level on each band, plus editing waiting invites — live 2026-11-22, pull request #22 (includes Step 9)
 
 ## Notes for Phil
 
