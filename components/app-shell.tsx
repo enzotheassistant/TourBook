@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
+import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess, canManageInvites } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
 import { CalendarIcon, EyeIcon, MoreIcon, SettingsIcon, UsersIcon } from '@/components/icons';
 import { AppShellSkeleton } from '@/components/skeleton';
@@ -194,7 +194,8 @@ export function AppShell({
   // (projects, workspace, your account / log out).
   const adminNavItems = [
     { href: '/admin/dates', label: 'Dates', icon: <CalendarIcon />, active: pathname === '/admin/dates' || pathname === '/admin/drafts' || pathname === '/admin/new' || pathname === '/admin' },
-    ...(canAccessAdminWorkspace(activeWorkspaceRole) ? [{ href: '/admin/team', label: 'Team', icon: <UsersIcon />, active: pathname === '/admin/team' }] : []),
+    // Team is for owners and admins only (they're the ones who can invite people).
+    ...(canManageInvites(activeWorkspaceRole) ? [{ href: '/admin/team', label: 'Team', icon: <UsersIcon />, active: pathname === '/admin/team' }] : []),
     { href: '/admin/settings', label: 'Settings', icon: <SettingsIcon />, active: pathname === '/admin/settings' || pathname === '/admin/projects' },
   ];
   const adminEditorOpen = pathname === '/admin/new' || pathname === '/admin';
