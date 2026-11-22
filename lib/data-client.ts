@@ -487,3 +487,14 @@ export async function deleteTour(input: { workspaceId: string; tourId: string })
   const params = new URLSearchParams({ workspaceId: input.workspaceId });
   return request<{ ok: boolean }>(`/api/tours/${encodeURIComponent(input.tourId)}?${params.toString()}`, { method: 'DELETE' });
 }
+
+/**
+ * Change a waiting invite's access. With sendEmail (default), they get an
+ * "invite updated" email with a fresh link; the old link stops working.
+ */
+export async function updateWorkspaceInviteAccess(input: { workspaceId: string; inviteId: string; access: AccessPayload; sendEmail: boolean }) {
+  return request<{ invite: WorkspaceInviteSummary; acceptToken: string | null }>(
+    `/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites/${encodeURIComponent(input.inviteId)}`,
+    { method: 'PATCH', body: JSON.stringify({ access: input.access, sendEmail: input.sendEmail }) },
+  );
+}

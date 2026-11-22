@@ -581,7 +581,7 @@ export async function acceptWorkspaceInvitePrivileged(input: {
   }
 
   if (!inviteRow) {
-    throw new ApiError(404, 'Invite token is invalid.');
+    throw new ApiError(404, "This invite link isn't valid anymore. If you got a newer invite email from TourBook, use the link in that one.");
   }
 
   const inviteId = String(inviteRow.id);
@@ -686,4 +686,89 @@ export async function getInviteBandsForEmail(workspaceId: string, invite: Worksp
     name: names[index] ?? '',
     role: entry.role as WorkspaceInviteRole,
   }));
+}
+
+/**
+ * Change a waiting invite's bands and levels (before the person accepts).
+ * With `sendEmail`, the invite gets a fresh link (the old link stops working)
+ * so an "invite updated" email can go out; without it, the original link keeps
+ * working and simply gives the new access.
+ */
+export async function updateWorkspaceInviteAccessScoped(
+  supabaseInput: SupabaseClient,
+  userId: string,
+  input: { workspaceId: string; inviteId: string; access: unknown; sendEmail: boolean },
+): Promise<{ invite: WorkspaceInviteSummary; token: string | null }> {
+  const scoped = requireScopedDataClient(supabaseInput);
+  const workspaceId = String(input.workspaceId ?? '').trim();
+  const inviteId = String(input.inviteId ?? '').trim();
+  if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
+  if (!inviteId) throw new ApiError(400, 'inviteId is required.');
+
+  const manager = await requireInviteManagerAccess(scoped, userId, workspaceId);
+  const db = manager.client;
+
+  const { data: existing, error: existingError } = await db
+    .from('workspace_invites')
+    .select(INVITE_COLUMNS)
+    .eq('id', inviteId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+  if (existingError) throw new ApiError(500, existingError.message);
+  if (!existing) throw new ApiError(404, 'Invite not found.');
+
+  const current = (await readManyInviteBandAccess(db, [existing as any])).get(inviteId);
+  if (!inviteWithinManagerScope(manager, current)) {
+    throw new ApiError(404, 'Invite not found.');
+  }
+
+  const summary = mapInviteRow(existing);
+  if (summary.status !== 'pending') {
+    throw new ApiError(409, summary.status === 'expired'
+      ? 'This invite has expired. Revoke it and send a new one.'
+      : 'Only invites that are still waiting can be changed.');
+  }
+
+  const next = await validateAccessInWorkspace(db, workspaceId, desiredInviteAccess({ access: input.access }, new Map()));
+  if (!manager.fullControl) {
+    const allowed = next.allProjects
+      ? manager.access.bandAccess.allProjects && ['owner', 'admin', 'editor'].includes(manager.access.bandAccess.role)
+      : next.entries.every((entry) => canGrantBandEntry(manager.access.bandAccess, entry));
+    if (!allowed) throw new ApiError(403, 'You can only invite people to projects you manage.');
+  }
+
+  const stored = toStoredAccess(next);
+  const update: Record<string, unknown> = {
+    role: stored.role,
+    scope_type: stored.scopeType,
+    updated_at: new Date().toISOString(),
+  };
+  let token: string | null = null;
+  if (input.sendEmail) {
+    token = generateInviteToken();
+    update.token_hash = hashInviteToken(token);
+    update.expires_at = buildInviteExpiry();
+  }
+
+  // Replace the per-band records, then the invite itself.
+  const { error: clearProjects } = await db.from('workspace_invite_projects').delete().eq('invite_id', inviteId);
+  if (clearProjects && !isMissingRelationError(clearProjects)) throw new ApiError(500, clearProjects.message);
+  const { error: clearTours } = await db.from('workspace_invite_tours').delete().eq('invite_id', inviteId);
+  if (clearTours && !isMissingRelationError(clearTours)) throw new ApiError(500, clearTours.message);
+  await writeInviteBandRows(db, workspaceId, inviteId, next);
+
+  const { data, error } = await db
+    .from('workspace_invites')
+    .update(update)
+    .eq('id', inviteId)
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'pending')
+    .select(INVITE_COLUMNS)
+    .maybeSingle();
+  if (error) throw new ApiError(500, error.message);
+  if (!data) throw new ApiError(409, 'This invite was just accepted or revoked. Refresh and try again.');
+
+  const projectIds = next.allProjects ? [] : next.entries.map((entry) => entry.projectId);
+  const tourIds = next.allProjects ? [] : [...new Set(next.entries.flatMap((entry) => entry.tourIds))];
+  return { invite: mapInviteRow(data, projectIds, tourIds, next), token };
 }

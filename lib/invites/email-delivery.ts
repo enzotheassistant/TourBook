@@ -9,6 +9,8 @@ type SendInviteEmailInput = {
   scopeProjectNames?: string[];
   /** Per-band levels, e.g. [{ name: 'Texas King', role: 'crew' }]. Preferred over scopeProjectNames. */
   bands?: Array<{ name: string; role: WorkspaceInviteRole }>;
+  /** True when this replaces an earlier invite (their access was changed). */
+  updated?: boolean;
   inviterName?: string | null;
   requestOrigin?: string | null;
 };
@@ -80,10 +82,15 @@ function renderInviteEmail(input: SendInviteEmailInput) {
       ? (projectNames.length ? projectNames.join(', ') : 'selected tours')
       : (workspaceName || 'your workspace');
 
-  const subject = `${inviterName} invited you to ${subjectTarget} on ${appName}`;
+  const subject = input.updated
+    ? `Your invite to ${subjectTarget} on ${appName} was updated`
+    : `${inviterName} invited you to ${subjectTarget} on ${appName}`;
+  const intro = input.updated
+    ? `Your ${appName} invite was updated. Use this link, not the one in the earlier email.`
+    : `You were invited to join ${appName}.`;
   const accessLines = bands.length ? [`Access: ${scopeLabel}`] : [`Scope: ${scopeLabel}`, `Role: ${role}`];
   const text = [
-    `You were invited to join ${appName}.`,
+    intro,
     ...accessLines,
     `Accept invite: ${acceptLink}`,
     `Invite expires: ${new Date(input.invite.expiresAt).toISOString()}`,
@@ -93,7 +100,7 @@ function renderInviteEmail(input: SendInviteEmailInput) {
 
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
-      <p>You were invited to join <strong>${appName}</strong>.</p>
+      <p>${input.updated ? escapeHtml(intro) : `You were invited to join <strong>${appName}</strong>.`}</p>
       ${bands.length
         ? `<p><strong>Access:</strong> ${escapeHtml(scopeLabel)}</p>`
         : `<p><strong>Scope:</strong> ${escapeHtml(scopeLabel)}</p><p><strong>Role:</strong> ${role}</p>`}

@@ -1,5 +1,6 @@
 const NON_ACTIONABLE_INVITE_ERROR_PATTERNS = [
   'invite token is invalid',
+  "invite link isn't valid anymore",
   'invite has been revoked',
   'invite has expired',
   'invite email does not match your authenticated account',

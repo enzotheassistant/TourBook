@@ -12,7 +12,7 @@ import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upl
 import { useAppContext } from '@/hooks/use-app-context';
 import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, deleteTour, listProjectTours, setTourArchived, type TourWithUsage, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, updateWorkspaceInviteAccess, deleteArtist, deleteShow, deleteTour, listProjectTours, setTourArchived, type TourWithUsage, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, todayIsoDate, yearFromDate } from '@/lib/date';
 import { buildTourOptions } from '@/lib/tour-options';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
@@ -545,6 +545,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [editingMember, setEditingMember] = useState<WorkspaceMemberDirectoryEntry | null>(null);
   // Per-band access in "Edit access".
   const [editingAccess, setEditingAccess] = useState<AccessDraft>(() => draftForProject(null));
+  // Editing a waiting (not yet accepted) invite.
+  const [editingInvite, setEditingInvite] = useState<WorkspaceInviteSummary | null>(null);
+  const [editingInviteAccess, setEditingInviteAccess] = useState<AccessDraft>(() => draftForProject(null));
+  const [sendInviteUpdateEmail, setSendInviteUpdateEmail] = useState(true);
+  const [savingInviteEdit, setSavingInviteEdit] = useState(false);
   const [savingMemberEdit, setSavingMemberEdit] = useState(false);
   const [quickRoleMemberId, setQuickRoleMemberId] = useState<string | null>(null);
   const [invites, setInvites] = useState<WorkspaceInviteSummary[]>([]);
@@ -1068,6 +1073,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setInviteMessage(accessProblem);
       return;
     }
+    // Already has a waiting invite: edit that one instead of sending a second.
+    const waiting = findWaitingInvite(invites, inviteEmail);
+    if (waiting) {
+      setInviteMessage(`${waiting.email} already has an invite waiting. Use "Edit that invite" to change it.`);
+      return;
+    }
 
     setCreatingInvite(true);
     setInviteMessage('');
@@ -1124,6 +1135,45 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       window.dispatchEvent(new Event('tourbook:invites-updated'));
     } catch (error) {
       setInviteMessage(error instanceof Error ? error.message : 'Unable to resend invite.');
+    }
+  }
+
+  function handleStartEditInvite(invite: WorkspaceInviteSummary) {
+    setEditingInvite(invite);
+    setEditingInviteAccess(draftFromAccess(invite.access));
+    setSendInviteUpdateEmail(true);
+    setInviteMessage('');
+  }
+
+  function closeInviteEditor() {
+    setEditingInvite(null);
+    setEditingInviteAccess(draftForProject(null));
+    setSavingInviteEdit(false);
+  }
+
+  async function handleSaveInviteEdit() {
+    if (!activeWorkspaceId || !editingInvite || !canManageInvitesInWorkspace) return;
+    const accessProblem = draftProblem(editingInviteAccess, teamProjectNameById);
+    if (accessProblem) {
+      setInviteMessage(accessProblem);
+      return;
+    }
+    setSavingInviteEdit(true);
+    try {
+      const label = editingInvite.name || editingInvite.email;
+      const result = await updateWorkspaceInviteAccess({
+        workspaceId: activeWorkspaceId,
+        inviteId: editingInvite.id,
+        access: draftToAccessPayload(editingInviteAccess),
+        sendEmail: sendInviteUpdateEmail,
+      });
+      setInvites((current) => current.map((item) => (item.id === result.invite.id ? result.invite : item)));
+      setInviteMessage(result.acceptToken ? `Invite updated. ${label} has been sent a new email.` : `Invite updated for ${label}. No email sent.`);
+      closeInviteEditor();
+      window.dispatchEvent(new Event('tourbook:invites-updated'));
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : 'Unable to update invite.');
+      setSavingInviteEdit(false);
     }
   }
 
@@ -1940,6 +1990,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     onCreateInvite: () => void handleCreateInvite(),
     onRevokeInvite: (invite: WorkspaceInviteSummary) => void handleRevokeInvite(invite),
     onResendInvite: (invite: WorkspaceInviteSummary) => void handleResendInvite(invite),
+    onEditInvite: (invite: WorkspaceInviteSummary) => handleStartEditInvite(invite),
     onCopyValue: (value: string, successMessage: string) => void copyToClipboard(value, successMessage),
   };
   const openingFromEditLink = initialEditTab !== null && editLinkActive && !isEditing;
@@ -2051,6 +2102,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onCreateInvite={() => void handleCreateInvite()}
             onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
             onResendInvite={(invite) => void handleResendInvite(invite)}
+            onEditInvite={(invite) => handleStartEditInvite(invite)}
             onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
           />
         ) : null}
@@ -2103,7 +2155,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     <div className="space-y-3">
       <EditMemberDialog
         open={Boolean(editingMember)}
-        member={editingMember}
+        heading={editingMember ? (editingMember.name || editingMember.email || editingMember.userId) : null}
+        subheading={editingMember?.name && editingMember.email ? editingMember.email : null}
         access={editingAccess}
         availableProjects={teamProjects}
         availableTours={teamTours}
@@ -2112,6 +2165,38 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         onClose={closeMemberEditor}
         onAccessChange={setEditingAccess}
         onSave={() => void handleSaveMemberEdit()}
+      />
+      {/* Same panel for a waiting invite, plus "send an updated email". */}
+      <EditMemberDialog
+        open={Boolean(editingInvite)}
+        heading={editingInvite ? (editingInvite.name || editingInvite.email) : null}
+        subheading={editingInvite ? `${editingInvite.name ? `${editingInvite.email} · ` : ''}Invite not accepted yet` : null}
+        access={editingInviteAccess}
+        availableProjects={teamProjects}
+        availableTours={teamTours}
+        allowAllProjects={canInviteToAllProjects}
+        saving={savingInviteEdit}
+        onClose={closeInviteEditor}
+        onAccessChange={setEditingInviteAccess}
+        onSave={() => void handleSaveInviteEdit()}
+        extra={
+          <label className="flex items-start gap-3 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={sendInviteUpdateEmail}
+              onChange={(event) => setSendInviteUpdateEmail(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-black/20"
+            />
+            <span>
+              Send them an updated email
+              <span className="block text-xs text-zinc-500">
+                {sendInviteUpdateEmail
+                  ? 'They get a new email with a fresh link. The link in the earlier email stops working.'
+                  : 'No email. The link they already have still works and gives the new access.'}
+              </span>
+            </span>
+          </label>
+        }
       />
       <ConfirmDialog
         open={confirmState.open}
@@ -3398,6 +3483,13 @@ function TeamDirectoryCard({
   );
 }
 
+/** A still-waiting (pending, not expired) invite for this email, if any. */
+function findWaitingInvite(invites: WorkspaceInviteSummary[], email: string) {
+  const wanted = email.trim().toLowerCase();
+  if (!wanted) return null;
+  return invites.find((invite) => invite.status === 'pending' && invite.email.trim().toLowerCase() === wanted) ?? null;
+}
+
 function InviteManagementSection({
   invites,
   loading,
@@ -3418,6 +3510,7 @@ function InviteManagementSection({
   onCreateInvite,
   onRevokeInvite,
   onResendInvite,
+  onEditInvite,
   onCopyValue,
   contextProjectId,
   part = 'all',
@@ -3446,6 +3539,8 @@ function InviteManagementSection({
   onCreateInvite: () => void;
   onRevokeInvite: (invite: WorkspaceInviteSummary) => void;
   onResendInvite: (invite: WorkspaceInviteSummary) => void;
+  /** Change a waiting invite's access. */
+  onEditInvite?: (invite: WorkspaceInviteSummary) => void;
   onCopyValue: (value: string, successMessage: string) => void;
   contextProjectId?: string | null;
 }) {
@@ -3458,6 +3553,7 @@ function InviteManagementSection({
     history: allInviteGroups.history.slice(0, 12),
   };
   const recentInvites = [...inviteGroups.pending, ...inviteGroups.history];
+  const waitingInvite = findWaitingInvite(invites, email);
   const projectNameById = useMemo(() => new Map(availableProjects.map((project) => [project.id, project.name || project.slug || project.id])), [availableProjects]);
   const toursById = useMemo(() => new Map(availableTours.map((tour) => [tour.id, { id: tour.id, name: tour.name || tour.id, projectId: tour.projectId }])), [availableTours]);
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
@@ -3503,6 +3599,17 @@ function InviteManagementSection({
             className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
           />
         </div>
+
+        {waitingInvite ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            <p className="min-w-0">{waitingInvite.email} already has an invite waiting.</p>
+            {onEditInvite ? (
+              <button type="button" onClick={() => onEditInvite(waitingInvite)} className={secondaryButtonClassName()}>
+                Edit that invite
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-zinc-200">Access</p>
@@ -3583,6 +3690,9 @@ function InviteManagementSection({
                         subtitle={`${invite.access ? summarizeBandAccess(invite.access, projectNameById) : summarizeTeamAccess(invite, { projectNameById, toursById })} · Expires ${formatInviteDate(invite.expiresAt)}`}
                         action={
                           <div className="flex flex-wrap gap-2">
+                            {onEditInvite ? (
+                              <button type="button" onClick={() => onEditInvite(invite)} className={secondaryButtonClassName()}>Edit access</button>
+                            ) : null}
                             <button type="button" onClick={() => onResendInvite(invite)} className={secondaryButtonClassName()}>Resend</button>
                             <button type="button" onClick={() => onRevokeInvite(invite)} className={dangerButtonClassName()}>Revoke</button>
                           </div>
@@ -3627,10 +3737,12 @@ function InviteManagementSection({
   );
 }
 
-/** "Edit access": a level for each project (or all projects) for one person. */
+/** "Edit access": a level for each project (or all projects) for one person or waiting invite. */
 function EditMemberDialog({
   open,
-  member,
+  heading,
+  subheading = null,
+  extra = null,
   access,
   availableProjects,
   availableTours,
@@ -3641,7 +3753,11 @@ function EditMemberDialog({
   onSave,
 }: {
   open: boolean;
-  member: WorkspaceMemberDirectoryEntry | null;
+  /** Name (or email) of the person; null keeps the dialog closed. */
+  heading: string | null;
+  subheading?: string | null;
+  /** Extra controls under the list (e.g. "Send them an updated email"). */
+  extra?: ReactNode;
   access: AccessDraft;
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
@@ -3651,15 +3767,15 @@ function EditMemberDialog({
   onAccessChange: (value: AccessDraft) => void;
   onSave: () => void;
 }) {
-  if (!open || !member || typeof document === 'undefined') return null;
+  if (!open || !heading || typeof document === 'undefined') return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 px-4 pb-6 pt-12 sm:items-center" role="dialog" aria-modal="true" aria-label="Edit access" onClick={onClose}>
       <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-zinc-100">Edit access: {member.name || member.email || member.userId}</h3>
-            {member.name && member.email ? <p className="mt-1 truncate text-xs text-zinc-500">{member.email}</p> : null}
+            <h3 className="truncate text-base font-semibold text-zinc-100">Edit access: {heading}</h3>
+            {subheading ? <p className="mt-1 truncate text-xs text-zinc-500">{subheading}</p> : null}
           </div>
           <button type="button" onClick={onClose} className="shrink-0 text-sm text-zinc-400 transition hover:text-zinc-100">Close</button>
         </div>
@@ -3674,6 +3790,8 @@ function EditMemberDialog({
             idPrefix="edit-access"
           />
         </div>
+
+        {extra ? <div className="mt-4">{extra}</div> : null}
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButtonClassName()}>Cancel</button>
