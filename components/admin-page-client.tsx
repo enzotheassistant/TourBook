@@ -12,7 +12,7 @@ import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upl
 import { useAppContext } from '@/hooks/use-app-context';
 import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, updateWorkspaceInviteAccess, deleteArtist, deleteShow, deleteTour, listProjectTours, setTourArchived, type TourWithUsage, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
+import { createArtist, createWorkspace, createWorkspaceInvite, renameWorkspace, updateWorkspaceInviteAccess, deleteArtist, deleteShow, deleteTour, listProjectTours, setTourArchived, type TourWithUsage, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
 import { formatShowDate, isPastShow, isValidStoredDate, todayIsoDate, yearFromDate } from '@/lib/date';
 import { buildTourOptions } from '@/lib/tour-options';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
@@ -625,7 +625,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
+  // Owns at least one workspace (if not, Settings offers to start one).
+  const ownsAWorkspace = memberships.some((membership) => membership.role === 'owner');
   const canManageProjectActions = canManageProjects(activeWorkspaceRole);
+  // Bands in this workspace where you're a Manager (for tidying tours in Settings).
+  const managedSettingsProjects = useMemo(
+    () => workspaceProjects.filter((project) => canAccessAdminWorkspace(getProjectRole(memberships, activeWorkspaceId, project.id))),
+    [workspaceProjects, memberships, activeWorkspaceId],
+  );
   const canManageInvitesInWorkspace = canManageInvites(activeProjectRole);
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   // The first band (in any workspace) where this person is a Manager or Owner.
@@ -2484,14 +2491,41 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         />
       ) : null}
 
-      {/* Settings: the workspace you own or administer (renaming/switching can come later). */}
+      {/* Managers: the bands they manage, to tidy up tours (no create/rename/delete). */}
+      {!canManageProjectActions && isProjectsMode && activeWorkspaceId && managedSettingsProjects.length ? (
+        <>
+          <h3 className="px-1 text-sm font-medium text-zinc-400">Projects</h3>
+          <ManagedProjectToursSection
+            projects={managedSettingsProjects}
+            workspaceId={activeWorkspaceId}
+            onToursChanged={() => void refreshContext({ silent: true })}
+          />
+        </>
+      ) : null}
+
+      {/* Settings: the workspace you own (Rename is for the owner). */}
       {isProjectsMode && canManageProjectActions && activeWorkspace ? (
         <>
           <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Workspace</h3>
-          <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-            <p className="text-base font-medium text-zinc-100">{activeWorkspace.name || activeWorkspace.slug}</p>
-            <p className="mt-1 text-sm text-zinc-500">Holds your projects and the people you invite.</p>
-          </section>
+          <WorkspaceCard
+            key={activeWorkspace.id}
+            workspace={activeWorkspace}
+            canRename={isWorkspaceOwner}
+            onRenamed={() => refreshContext({ silent: true })}
+          />
+        </>
+      ) : null}
+
+      {/* Don't own a workspace yet (e.g. a tour manager invited by someone else)? Start one. */}
+      {isProjectsMode && !ownsAWorkspace ? (
+        <>
+          <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Your own workspace</h3>
+          <StartWorkspaceCard
+            onCreated={async (workspaceId) => {
+              await refreshContext();
+              setActiveWorkspaceId(workspaceId);
+            }}
+          />
         </>
       ) : null}
 
@@ -2993,33 +3027,48 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   );
 }
 
+/**
+ * Someone with no admin access anywhere (crew or viewer only) who opened the
+ * admin side: offer to start their own workspace.
+ */
 function WorkspaceSelfServeAccessPanel({
-  workspaces,
-  activeWorkspaceId,
-  onSelectWorkspace,
   onCreated,
 }: {
-  workspaces: WorkspaceSummary[];
-  activeWorkspaceId: string | null;
-  onSelectWorkspace: (workspaceId: string | null) => void;
+  workspaces?: WorkspaceSummary[];
+  activeWorkspaceId?: string | null;
+  onSelectWorkspace?: (workspaceId: string | null) => void;
   onCreated: (workspaceId: string) => Promise<void>;
 }) {
+  return (
+    <div className="space-y-3">
+      <StartWorkspaceCard onCreated={onCreated} />
+      <div className="px-1">
+        <Link href="/" className="text-sm text-zinc-400 transition hover:text-zinc-100">Back to crew view</Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Start your own workspace (for bands you run yourself). Access you were
+ * invited to elsewhere doesn't change; your own bands just join your list.
+ */
+function StartWorkspaceCard({ onCreated }: { onCreated: (workspaceId: string) => Promise<void> }) {
   const [workspaceName, setWorkspaceName] = useState('');
   const [creating, setCreating] = useState(false);
-  const [message, setMessage] = useState('You currently have crew/view-only access in this workspace. Create your own workspace anytime without affecting your invited access elsewhere.');
+  const [message, setMessage] = useState('');
 
   async function handleCreateWorkspace() {
     const cleanName = workspaceName.trim();
     if (!cleanName) {
-      setMessage('Enter a workspace name to continue.');
+      setMessage('Enter a name for your workspace.');
       return;
     }
-
     setCreating(true);
+    setMessage('');
     try {
       const workspace = await createWorkspace({ name: cleanName, slug: onboardingWorkspaceSlug(cleanName) || null });
       setWorkspaceName('');
-      setMessage('Workspace created. You now have your own admin workspace.');
       await onCreated(workspace.id);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create workspace.');
@@ -3029,52 +3078,116 @@ function WorkspaceSelfServeAccessPanel({
   }
 
   return (
-    <div className="space-y-3">
-      <ActivationEmptyState
-        title="Crew access only in this workspace."
-        body="This workspace is available to you as invited crew/viewer access, so admin setup and management tools stay hidden here."
-        actions={[{ label: 'Crew view', href: '/', tone: 'ghost', ctaId: 'go_crew_view' }]}
-        telemetry={{ stateType: 'admin.viewer_guardrail' }}
-      />
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <h3 className="text-base font-medium text-zinc-100">Start your own workspace</h3>
+      <p className="mt-1 text-sm text-zinc-400">For bands you run yourself. You&apos;ll be the owner. Your access to other bands stays the same.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <input
+          value={workspaceName}
+          onChange={(event) => setWorkspaceName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void handleCreateWorkspace();
+          }}
+          placeholder="Workspace name, like your name or company"
+          aria-label="Workspace name"
+          className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
+        />
+        <button type="button" onClick={() => void handleCreateWorkspace()} disabled={creating} className={primaryButtonClassName()}>
+          {creating ? 'Creating…' : 'Create workspace'}
+        </button>
+      </div>
+      {message ? <p className="mt-2 text-sm text-red-200">{message}</p> : null}
+    </section>
+  );
+}
 
-      <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Your workspaces</p>
-            <h2 className="mt-1 text-base font-semibold text-zinc-100">Switch context or create your own</h2>
-          </div>
+/** Settings → Workspace: its name, and Rename for the owner. */
+function WorkspaceCard({ workspace, canRename, onRenamed }: { workspace: WorkspaceSummary; canRename: boolean; onRenamed: () => Promise<void> | void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(workspace.name || '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
 
-          {workspaces.length > 0 ? (
-            <label className="grid gap-2 text-sm text-zinc-300">
-              <span className="text-xs uppercase tracking-[0.14em] text-zinc-500">Current workspace</span>
-              <select
-                value={activeWorkspaceId ?? ''}
-                onChange={(event) => onSelectWorkspace(event.target.value || null)}
-                className="h-11 rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
-              >
-                {workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || workspace.id}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+  async function save() {
+    const clean = name.trim();
+    if (!clean) {
+      setMessage('Enter a workspace name.');
+      return;
+    }
+    if (clean === workspace.name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      await renameWorkspace({ workspaceId: workspace.id, name: clean });
+      await onRenamed();
+      setEditing(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to rename workspace.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <input
-              value={workspaceName}
-              onChange={(event) => setWorkspaceName(event.target.value)}
-              placeholder="New workspace name"
-              className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-accent/40"
-            />
-            <button type="button" onClick={() => void handleCreateWorkspace()} disabled={creating || !workspaceName.trim()} className={primaryButtonClassName()}>
-              {creating ? 'Creating…' : 'Create my workspace'}
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      {editing ? (
+        <div className="space-y-2">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void save();
+              if (event.key === 'Escape') {
+                setName(workspace.name || '');
+                setEditing(false);
+              }
+            }}
+            autoFocus
+            aria-label="Workspace name"
+            className="h-11 w-full rounded-[10px] border border-white/10 bg-black/20 px-4 text-sm text-zinc-100 outline-none focus:border-accent/40"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setName(workspace.name || '');
+                setEditing(false);
+                setMessage('');
+              }}
+              className={secondaryButtonClassName()}
+            >
+              Cancel
+            </button>
+            <button type="button" onClick={() => void save()} disabled={saving} className={primaryButtonClassName()}>
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-
-          <p className="text-sm text-zinc-300">{message}</p>
         </div>
-      </section>
-    </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-base font-medium text-zinc-100">{workspace.name || workspace.slug}</p>
+            <p className="mt-1 text-sm text-zinc-500">Holds your projects and the people you invite.</p>
+          </div>
+          {canRename ? (
+            <button
+              type="button"
+              onClick={() => {
+                setName(workspace.name || '');
+                setEditing(true);
+              }}
+              className={`${secondaryButtonClassName()} shrink-0`}
+            >
+              Rename
+            </button>
+          ) : null}
+        </div>
+      )}
+      {message ? <p className="mt-2 text-sm text-red-200">{message}</p> : null}
+    </section>
   );
 }
 
@@ -3217,6 +3330,37 @@ function ProjectToursPanel({ workspaceId, projectId, onChanged }: { workspaceId:
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Settings → Projects for Managers: tap a band to see and tidy its tours. */
+function ManagedProjectToursSection({ projects, workspaceId, onToursChanged }: { projects: ProjectSummary[]; workspaceId: string; onToursChanged?: () => void }) {
+  const [openProjectId, setOpenProjectId] = useState<string | null>(projects.length === 1 ? projects[0].id : null);
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-2 sm:p-3">
+      <div className="divide-y divide-white/[0.06]">
+        {projects.map((project) => {
+          const open = openProjectId === project.id;
+          return (
+            <div key={project.id} className="py-1">
+              <button
+                type="button"
+                onClick={() => setOpenProjectId((current) => (current === project.id ? null : project.id))}
+                aria-expanded={open}
+                className="flex min-h-10 w-full items-center gap-2 rounded-[10px] px-2 text-left transition hover:bg-white/[0.04]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</span>
+                  <span className="block text-xs text-zinc-400">{open ? 'Hide tours' : 'Show tours'}</span>
+                </span>
+                <ChevronDownIcon className={`h-4 w-4 shrink-0 text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
+              </button>
+              {open ? <ProjectToursPanel workspaceId={workspaceId} projectId={project.id} onChanged={onToursChanged} /> : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

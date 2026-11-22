@@ -46,6 +46,12 @@ How workspaces and projects work (agreed with Phil, 2026-11-22):
 - You only manage what you own: Settings → Projects lists projects in workspaces you own or administer. Projects you were invited to just appear in your project list to use.
 - Proposed Step 10: the project picker shows one flat list of every project you can access (no grouping; only show the owner's workspace name next to two projects with the same name). Picking one switches to it automatically, so nobody has to "switch workspaces".
 
+Follow-ups (2026-11-22, live, pull request #23):
+- Idea for later (Phil): if TourBook ever charges, being invited stays free; starting your own workspace is what's paid. Billing would sit in Settings → Workspace.
+- Managers see their bands in Settings → Projects and can archive/restore/delete tours (no create/rename/delete of bands).
+- Settings → Workspace: Rename for the owner.
+- "Start your own workspace" for anyone who doesn't own one: in Settings (Managers) and in the crew view's "…" menu (Crew/Viewers). Access elsewhere is unchanged; their own bands join their project list.
+
 Per-band levels notes (2026-11-22, agreed with Phil):
 - Each person has a level per band (Viewer / Crew / Manager), optionally limited to some tours of that band, or one level for All projects (including future ones).
 - Team page stays compact: in the band view, a dropdown per person changes their level on that band only; in All projects, one short summary line ("Crew on Texas King · Manager on Test Band", or "Manager on 1 project · Viewer on 3" when there are many).
