@@ -10,9 +10,30 @@ import type { WorkspaceMemberSummary, WorkspaceRole } from '@/lib/types/tenant';
 //   Manager — admin side (dates, tours, guest list) + invite people
 //   Owner   — everything, incl. create/rename/delete projects
 
+/** The person's highest level in a workspace (their level everywhere for "all projects"). */
 export function getWorkspaceRole(memberships: WorkspaceMemberSummary[], workspaceId: string | null | undefined): WorkspaceRole | null {
   if (!workspaceId) return null;
   return memberships.find((membership) => membership.workspaceId === workspaceId)?.role ?? null;
+}
+
+/**
+ * The person's level on one band. Levels can differ by band (Crew on one,
+ * Manager on another), so anything tied to the band you're looking at — the
+ * Admin option, the guest list, editing dates — should use this.
+ */
+export function getProjectRole(
+  memberships: WorkspaceMemberSummary[],
+  workspaceId: string | null | undefined,
+  projectId: string | null | undefined,
+): WorkspaceRole | null {
+  if (!workspaceId) return null;
+  const membership = memberships.find((item) => item.workspaceId === workspaceId);
+  if (!membership) return null;
+  if (membership.scopeType === 'workspace') return membership.role;
+  if (!projectId) return null;
+  if (membership.projectRoles) return membership.projectRoles[projectId] ?? null;
+  // Older data without per-band levels: one level for every band they have.
+  return membership.projectIds.includes(projectId) ? membership.role : null;
 }
 
 function isManagerOrAbove(role: WorkspaceRole | null | undefined) {

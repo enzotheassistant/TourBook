@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { addGuestListEntries, deleteGuestListEntry, listGuestListEntries, peekCachedGuestList, updateGuestListEntry } from '@/lib/data-client';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canAddGuests, canEditGuests, getWorkspaceRole } from '@/lib/roles';
+import { canAddGuests, canEditGuests, getProjectRole } from '@/lib/roles';
 import { GuestListEntry } from '@/lib/types';
 import { MoreIcon } from '@/components/icons';
 
@@ -19,7 +19,7 @@ function DotsIcon() {
 }
 
 export function GuestListManager({ showId, note, showNote }: { showId: string; note: string; showNote: boolean }) {
-  const { activeWorkspaceId, isLoading, memberships } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading, memberships } = useAppContext();
   const [value, setValue] = useState('');
   const [entries, setEntries] = useState<GuestListEntry[]>([]);
   const [saving, setSaving] = useState(false);
@@ -68,7 +68,8 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }, []);
 
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
-  const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  // Level on this band (levels can differ by band).
+  const workspaceRole = useMemo(() => getProjectRole(memberships, activeWorkspaceId, activeProjectId), [memberships, activeWorkspaceId, activeProjectId]);
   // Crew can add names and fix/remove the ones they added. Managers and
   // Owners can change any name. (Who added a name is never shown.)
   const canAddToGuestList = canAddGuests(workspaceRole);

@@ -11,10 +11,10 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 6: Team page cleanup
 - [x] Step 7: Venue fills in city, province and country
 - [x] Step 8: Bottom tab bar on phones (admin only)
-- [ ] Step 9: Managing tours (needs a database change — Phil's OK first)
+- [x] Step 9: Managing tours — live 2026-11-22 via pull request #22 (database change approved by Phil 2026-11-22: archived marker on tours, applied)
 - [x] Step 10 (added 2026-11-22): one flat project list in the picker — every project you can access, your own and invited ones. Built with the roles work (needed so the Admin option can follow the project you pick).
 - [x] Roles batch A (agreed 2026-11-22): Viewer / Crew / Manager / Owner — live 2026-11-22, pull request #20
-- [ ] Roles batch B (later): a different level per project inside the same workspace
+- [x] Roles batch B: a different level on each band, plus editing waiting invites — live 2026-11-22, pull request #22 (includes Step 9)
 
 ## Notes for Phil
 
@@ -45,6 +45,24 @@ How workspaces and projects work (agreed with Phil, 2026-11-22):
 - Invites give access to projects (this project, several, or all projects in the inviter's workspace). Technically, accepting makes you a limited member of the inviter's workspace.
 - You only manage what you own: Settings → Projects lists projects in workspaces you own or administer. Projects you were invited to just appear in your project list to use.
 - Proposed Step 10: the project picker shows one flat list of every project you can access (no grouping; only show the owner's workspace name next to two projects with the same name). Picking one switches to it automatically, so nobody has to "switch workspaces".
+
+Per-band levels notes (2026-11-22, agreed with Phil):
+- Each person has a level per band (Viewer / Crew / Manager), optionally limited to some tours of that band, or one level for All projects (including future ones).
+- Team page stays compact: in the band view, a dropdown per person changes their level on that band only; in All projects, one short summary line ("Crew on Texas King · Manager on Test Band", or "Manager on 1 project · Viewer on 3" when there are many).
+- "Edit scope" renamed **Edit access** (Team → "…" next to a person). It shows the per-band list; it lives in Team, not Settings, because Managers use it too.
+- The invite form uses the same list. People only see/get emailed about the bands they're given; bands set to "No access" never appear for them.
+- Giving an existing member a new band needs no new invite: it appears in their project picker, and the Admin option shows on bands where they're Manager. They get a plain "You've been added to [band] as [level]" email (no link to accept). Nothing is sent on removal.
+- Managers only see and change the bands they manage; a person's other bands are kept as they are. "Remove" in the band view takes someone off that band only; in All projects it removes them from the team.
+- Accepting a second invite combines with existing access and never lowers anything.
+- One waiting invite per email per workspace (common practice: Slack, GitHub). Typing an email that already has one shows "already has an invite waiting" with **Edit that invite**.
+- Waiting invites have **Edit access** (like GitHub's "edit invitation"). "Send them an updated email" is on by default: they get an "invite updated" email with a fresh link and the old link stops working (only a scrambled copy of each link is kept, so the same link can't be re-sent). Untick it to change access quietly: their existing link still works and gives the new access. Old links explain to use the newer email.
+- Database (approved, applied): level stored per band on members and invites, filled from current levels; all rules use the band's level. Before/after snapshot of what each of the 12 people could see and change was identical. Also closed an old gap where a Manager of one band could change another band's dates in the same workspace at the database level.
+
+Step 9 notes (2026-11-22):
+- Tour names still live on each date (that's the label everyone sees). The tours list now has an "archived" marker, and every tour name used on dates has a tour record (backfilled).
+- Fixed: saving a date with a new tour name was supposed to add it to the tours list but silently failed (it asked the database for columns that don't exist).
+- Tour dropdown: current tours (upcoming dates, or none yet) first; finished tours under "Past tours"; archived hidden unless the date already uses it. Saving a date into an archived tour brings it back.
+- Settings → Projects: tap a project to show its tours. Archive / Restore; Delete only when no dates use it and nobody's access is tied to just that tour. Owner-only for now (Settings → Projects is Owner-only).
 
 Roles (agreed with Phil, 2026-11-22):
 - **Viewer** (e.g. support band): day sheets, schedules, attachments. **No guest list** — the tab is hidden.

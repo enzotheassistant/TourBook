@@ -6,7 +6,7 @@ import { AttachmentTilePreview } from '@/components/attachments-manager';
 import { attachmentDisplayName, compareAttachmentsByName } from '@/lib/attachments/display-name';
 import { SectionCard } from '@/components/section-card';
 import { listAttachments } from '@/lib/data-client';
-import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
+import { canCreateDates, getProjectRole } from '@/lib/roles';
 import { useAppContext } from '@/hooks/use-app-context';
 import type { DateAttachment } from '@/lib/types/date-record';
 
@@ -17,14 +17,14 @@ import type { DateAttachment } from '@/lib/types/date-record';
  * Renders nothing when the date has no attachments.
  */
 export function AttachmentsSection({ dateId, adminMode = false }: { dateId: string; adminMode?: boolean }) {
-  const { activeWorkspaceId, isLoading, memberships } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading, memberships } = useAppContext();
   const [attachments, setAttachments] = useState<DateAttachment[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [openAttachment, setOpenAttachment] = useState<DateAttachment | null>(null);
   // Download is an admin tool: only shown on the admin day sheet, and only to
   // admins/editors. Crew View never shows it, even to an admin previewing it.
   const canDownload = useMemo(
-    () => adminMode && canCreateDates(getWorkspaceRole(memberships, activeWorkspaceId)),
+    () => adminMode && canCreateDates(getProjectRole(memberships, activeWorkspaceId, activeProjectId)),
     [adminMode, memberships, activeWorkspaceId],
   );
 

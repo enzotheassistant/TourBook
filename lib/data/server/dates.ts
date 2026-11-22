@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, isSchemaDriftError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour } from '@/lib/data/server/shared';
+import { ensureProjectAccess, ensureTourInScope, ensureTourAccess, isMissingRelationError, isSchemaDriftError, requireWorkspaceAccess, ApiError, requireScopedDataClient, canAccessProject, canAccessTour, requireProjectRole, roleForAccessProject } from '@/lib/data/server/shared';
 import type { DateFormValues, DateRecord, DateScheduleItem, DateStatus, DateVisibility } from '@/lib/types/date-record';
 import type { WorkspaceRole } from '@/lib/types/tenant';
 import { upsertTourByName } from '@/lib/data/server/tours';
@@ -324,7 +324,8 @@ async function assertDateReadable(supabase: SupabaseClient, userId: string, work
   }
 
   const status = normalizeStatus(data.status);
-  if ((membership.role === 'viewer' || membership.role === 'crew') && status !== 'published') {
+  const projectRole = roleForAccessProject(membership, projectId);
+  if ((projectRole === 'viewer' || projectRole === 'crew') && status !== 'published') {
     throw new ApiError(404, 'Date not found.');
   }
 
@@ -333,7 +334,7 @@ async function assertDateReadable(supabase: SupabaseClient, userId: string, work
     throw new ApiError(404, 'Date not found.');
   }
 
-  return { row: data, role: membership.role, access: membership };
+  return { row: data, role: projectRole ?? membership.role, access: membership };
 }
 
 export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
@@ -360,12 +361,19 @@ export async function listDatesScoped(supabaseInput: SupabaseClient, input: {
     await ensureTourAccess(supabase, input.userId, input.workspaceId, input.projectId, input.tourId, ['owner', 'admin', 'editor', 'crew', 'viewer']);
     const previous = buildQuery;
     buildQuery = (selectClause: string) => previous(selectClause).eq('tour_id', input.tourId as string);
-  } else if (membership.scopeType === 'tours') {
-    const previous = buildQuery;
-    buildQuery = (selectClause: string) => previous(selectClause).in('tour_id', membership.tourIds);
+  } else {
+    // A band limited to some tours: only those tours' dates.
+    const entry = membership.bandAccess.allProjects
+      ? null
+      : membership.bandAccess.entries.find((item) => item.projectId === input.projectId);
+    if (entry && entry.tourIds.length) {
+      const previous = buildQuery;
+      buildQuery = (selectClause: string) => previous(selectClause).in('tour_id', entry.tourIds);
+    }
   }
 
-  if (membership.role === 'viewer' || membership.role === 'crew' || !input.includeDrafts) {
+  const projectRole = roleForAccessProject(membership, input.projectId);
+  if (projectRole === 'viewer' || projectRole === 'crew' || !input.includeDrafts) {
     const previous = buildQuery;
     buildQuery = (selectClause: string) => previous(selectClause).eq('status', 'published');
   }
@@ -447,7 +455,7 @@ export async function createDateScoped(supabaseInput: SupabaseClient, userId: st
   }
 
   await ensureTourInScope(supabase, workspaceId, projectId, resolvedValues.tour_id);
-  if (access.scopeType === 'tours' && !resolvedValues.tour_id) {
+  if (!resolvedValues.tour_id && !canAccessTour(access, projectId, null)) {
     throw new ApiError(403, 'Tour-scoped members can only create dates inside an assigned tour.');
   }
   if (resolvedValues.tour_id) {
@@ -498,7 +506,7 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
 
   const effectiveTourId = resolvedTourId;
   await ensureTourInScope(supabase, workspaceId, projectId, effectiveTourId);
-  if (access.scopeType === 'tours' && !effectiveTourId) {
+  if (!effectiveTourId && !canAccessTour(access, projectId, null)) {
     throw new ApiError(403, 'Tour-scoped members can only update dates inside an assigned tour.');
   }
   if (effectiveTourId) {
@@ -542,8 +550,9 @@ export async function updateDateScoped(supabaseInput: SupabaseClient, userId: st
 
 export async function deleteDateScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(supabase, userId, workspaceId, ['owner', 'admin', 'editor']);
-  await getDateScoped(supabase, userId, workspaceId, dateId);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
+  const existing = await getDateScoped(supabase, userId, workspaceId, dateId);
+  requireProjectRole(access, String(existing.project_id), ['owner', 'admin', 'editor']);
   const { error } = await supabase.from('dates').delete().eq('id', dateId).eq('workspace_id', workspaceId);
   if (error) {
     if (isMissingRelationError(error)) {

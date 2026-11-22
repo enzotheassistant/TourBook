@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
+import { ApiError, isMissingRelationError, requireProjectRole, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
 import { getDateScoped } from '@/lib/data/server/dates';
 import type { DateAttachment } from '@/lib/types/date-record';
@@ -76,8 +76,10 @@ function normalizeDisplayName(raw: unknown): string | null {
   return cleaned || null;
 }
 
-async function requireAttachmentWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
-  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
+/** Managing attachments needs Manager (or Owner) on the date's band. */
+async function requireAttachmentWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string, projectId: string) {
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
+  requireProjectRole(access, projectId, GUEST_LIST_WRITE_ROLES);
 }
 
 export async function listAttachmentsScoped(
@@ -160,9 +162,8 @@ export async function createAttachmentUploadTicketScoped(
   input: AttachmentUploadInput & { withThumbnail?: unknown },
 ) {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireAttachmentWriteAccess(supabase, userId, workspaceId);
-  await getDateScoped(supabase, userId, workspaceId, dateId);
-
+  const ticketDate = await getDateScoped(supabase, userId, workspaceId, dateId);
+  await requireAttachmentWriteAccess(supabase, userId, workspaceId, String(ticketDate.project_id));
   const { fileName } = validateAttachmentInput(input);
   const attachmentId = randomUUID();
   const paths = buildStoragePaths(workspaceId, dateId, attachmentId, fileName);
@@ -202,8 +203,8 @@ export async function finalizeAttachmentUploadScoped(
   input: AttachmentUploadInput & { attachmentId: unknown; thumbnailUploaded?: unknown; displayName?: unknown },
 ): Promise<DateAttachment> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireAttachmentWriteAccess(supabase, userId, workspaceId);
   const dateRecord = await getDateScoped(supabase, userId, workspaceId, dateId);
+  await requireAttachmentWriteAccess(supabase, userId, workspaceId, String(dateRecord.project_id));
 
   const attachmentId = typeof input.attachmentId === 'string' ? input.attachmentId : '';
   if (!UUID_PATTERN.test(attachmentId)) {
@@ -295,8 +296,8 @@ export async function renameAttachmentScoped(
   displayName: unknown,
 ): Promise<DateAttachment> {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireAttachmentWriteAccess(supabase, userId, workspaceId);
-  await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
+  const renameRow = await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
+  await requireAttachmentWriteAccess(supabase, userId, workspaceId, String(renameRow.project_id));
 
   const { data, error } = await supabase
     .from('date_attachments')
@@ -323,8 +324,8 @@ export async function deleteAttachmentScoped(
   attachmentId: string,
 ) {
   const supabase = requireScopedDataClient(supabaseInput);
-  await requireAttachmentWriteAccess(supabase, userId, workspaceId);
   const row = await getAttachmentRowScoped(supabase, userId, workspaceId, attachmentId);
+  await requireAttachmentWriteAccess(supabase, userId, workspaceId, String(row.project_id));
 
   // Remove the files before the record: Storage only lets you delete a file
   // you're allowed to read, and read access is tied to this record existing.

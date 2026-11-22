@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/data/server/shared';
-import { resendWorkspaceInviteScoped, getProjectNamesForInviteScope } from '@/lib/data/server/invites';
+import { resendWorkspaceInviteScoped, getInviteBandsForEmail } from '@/lib/data/server/invites';
 import { sendInviteEmailBestEffort } from '@/lib/invites/email-delivery';
 
 export async function POST(
@@ -26,17 +26,14 @@ export async function POST(
       .eq('id', workspaceId)
       .maybeSingle();
 
-    const scopeProjectNames =
-      invite.scopeType === 'projects'
-        ? await getProjectNamesForInviteScope(workspaceId, invite.projectIds)
-        : [];
+    const bands = await getInviteBandsForEmail(workspaceId, invite);
 
     const origin = request.nextUrl?.origin || request.headers.get('origin') || null;
     const emailDelivery = await sendInviteEmailBestEffort({
       invite,
       acceptToken: token,
       workspaceName: workspace?.name ? String(workspace.name) : null,
-      scopeProjectNames,
+      bands,
       requestOrigin: origin,
     });
 

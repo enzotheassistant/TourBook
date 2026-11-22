@@ -11,7 +11,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { isPastShow, yearFromDate } from '@/lib/date';
 import { acceptWorkspaceInvite, createArtist, createWorkspace, listShows, peekCachedShows } from '@/lib/data-client';
 import { trackInviteEvent } from '@/lib/invite-telemetry';
-import { getWorkspaceRole, canCreateDates, hasAnyAdminAccess, roleLabel } from '@/lib/roles';
+import { getProjectRole, getWorkspaceRole, canCreateDates, hasAnyAdminAccess, roleLabel } from '@/lib/roles';
 import { getCrewNoArtistsState, getCrewNoUpcomingDatesState } from '@/lib/activation/first-run';
 import { clearPendingInviteScope, clearPendingInviteToken, readPendingInviteToken, writePendingInviteScope, writePendingInviteToken } from '@/lib/app-context-storage';
 import { shouldClearInviteArtifactsOnError } from '@/lib/invites/client-state';
@@ -532,7 +532,7 @@ export function DashboardClient() {
   const filteredPastShows = useMemo(() => pastShows.filter((show) => (pastTour === 'All' || normalizeTourName(show.tour_name) === pastTour) && [show.city, show.region, show.country, show.venue_name, show.tour_name, show.label, show.day_type, show.date].join(' ').toLowerCase().includes(pastSearch.trim().toLowerCase())), [pastShows, pastTour, pastSearch]);
 
   const activeWorkspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  const canCreateDateInWorkspace = canCreateDates(activeWorkspaceRole);
+  const canCreateDateInWorkspace = canCreateDates(getProjectRole(memberships, activeWorkspaceId, activeProjectId));
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   const activeCollection = tab === 'past' ? filteredPastShows : filteredUpcomingShows;
   const totalCollection = tab === 'past' ? pastShows : upcomingShows;

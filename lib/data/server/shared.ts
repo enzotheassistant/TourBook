@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import type { WorkspaceRole } from '@/lib/types/tenant';
-import { canAccessProjectByScope, canAccessTourByScope } from '@/lib/data/server/project-scope-utils';
+import { buildBandAccess, canReachDate, roleForProject, type BandAccess } from '@/lib/access/band-access';
 
 export class ApiError extends Error {
   status: number;
@@ -17,11 +17,30 @@ export type WorkspaceAccessScopeType = 'workspace' | 'projects' | 'tours';
 export type WorkspaceAccess = {
   workspaceId: string;
   userId: string;
+  /** The person's highest level across their bands (their level everywhere for "all projects"). */
   role: WorkspaceRole;
   scopeType: WorkspaceAccessScopeType;
+  /** Every band they can open (whole band or only some tours). */
   projectIds: string[];
+  /** Tours they have when a band is limited to some tours. */
   tourIds: string[];
+  /** Per-band levels. Use roleForAccessProject() rather than `role` for anything tied to a band. */
+  bandAccess: BandAccess;
 };
+
+/** The person's level on one band, or null if they can't open it. */
+export function roleForAccessProject(access: WorkspaceAccess, projectId: string | null | undefined): WorkspaceRole | null {
+  return roleForProject(access.bandAccess, projectId) as WorkspaceRole | null;
+}
+
+/** Throws 403 unless the person's level on this band is one of `allowedRoles`. */
+export function requireProjectRole(access: WorkspaceAccess, projectId: string, allowedRoles: readonly WorkspaceRole[]) {
+  const role = roleForAccessProject(access, projectId);
+  if (!role || !allowedRoles.includes(role)) {
+    throw new ApiError(403, 'You do not have permission to perform this action.');
+  }
+  return role;
+}
 
 export function isMissingRelationError(error: unknown) {
   if (!error || typeof error !== 'object') return false;
@@ -95,47 +114,38 @@ export async function requireWorkspaceAccess(
   }
 
   const scopeType = normalizeScopeType(data.scope_type);
-  let projectIds: string[] = [];
-  let tourIds: string[] = [];
+  let projectGrants: Array<{ projectId: string; role: string | null }> = [];
+  let tourGrants: Array<{ projectId: string; tourId: string; role: string | null }> = [];
 
-  if (scopeType === 'projects') {
-    const { data: grants, error: grantsError } = await supabase
-      .from('workspace_member_projects')
-      .select('project_id')
-      .eq('workspace_member_id', String(data.id));
+  // Anyone not on "all projects" can have whole-band access on some bands and
+  // only-some-tours on others, each with its own level.
+  if (scopeType !== 'workspace') {
+    const [projectResult, tourResult] = await Promise.all([
+      supabase.from('workspace_member_projects').select('project_id, role').eq('workspace_member_id', String(data.id)),
+      supabase.from('workspace_member_tours').select('project_id, tour_id, role').eq('workspace_member_id', String(data.id)),
+    ]);
 
-    if (grantsError) {
-      if (isMissingRelationError(grantsError)) {
+    if (projectResult.error) {
+      if (isMissingRelationError(projectResult.error)) {
         throw new ApiError(409, 'Workspace membership scope schema is not ready yet.');
       }
-      throw new ApiError(500, grantsError.message);
+      throw new ApiError(500, projectResult.error.message);
+    }
+    if (tourResult.error && !isMissingRelationError(tourResult.error)) {
+      throw new ApiError(500, tourResult.error.message);
     }
 
-    projectIds = [...new Set((grants ?? []).map((row: any) => String(row.project_id)))].filter(Boolean);
-    if (!projectIds.length) {
+    projectGrants = (projectResult.data ?? []).map((row: any) => ({ projectId: String(row.project_id), role: row.role ? String(row.role) : null }));
+    tourGrants = (tourResult.data ?? []).map((row: any) => ({ projectId: String(row.project_id), tourId: String(row.tour_id), role: row.role ? String(row.role) : null }));
+
+    if (!projectGrants.length && !tourGrants.length) {
       throw new ApiError(403, 'You do not have access to any projects in this workspace.');
     }
   }
 
-  if (scopeType === 'tours') {
-    const { data: grants, error: grantsError } = await supabase
-      .from('workspace_member_tours')
-      .select('project_id, tour_id')
-      .eq('workspace_member_id', String(data.id));
-
-    if (grantsError) {
-      if (isMissingRelationError(grantsError)) {
-        throw new ApiError(409, 'Workspace tour scope schema is not ready yet.');
-      }
-      throw new ApiError(500, grantsError.message);
-    }
-
-    projectIds = [...new Set((grants ?? []).map((row: any) => String(row.project_id)))].filter(Boolean);
-    tourIds = [...new Set((grants ?? []).map((row: any) => String(row.tour_id)))].filter(Boolean);
-    if (!tourIds.length) {
-      throw new ApiError(403, 'You do not have access to any tours in this workspace.');
-    }
-  }
+  const bandAccess = buildBandAccess({ scopeType, memberRole: role, projectGrants, tourGrants });
+  const projectIds = bandAccess.allProjects ? [] : bandAccess.entries.map((entry) => entry.projectId);
+  const tourIds = bandAccess.allProjects ? [] : [...new Set(bandAccess.entries.flatMap((entry) => entry.tourIds))];
 
   return {
     workspaceId: String(data.workspace_id),
@@ -144,16 +154,16 @@ export async function requireWorkspaceAccess(
     scopeType,
     projectIds,
     tourIds,
+    bandAccess,
   };
 }
 
 export function canAccessProject(access: WorkspaceAccess, projectId: string) {
-  return canAccessProjectByScope(access.scopeType, access.projectIds, projectId);
+  return !!projectId && roleForProject(access.bandAccess, projectId) !== null;
 }
 
 export function canAccessTour(access: WorkspaceAccess, projectId: string, tourId: string | null | undefined) {
-  return canAccessProjectByScope(access.scopeType, access.projectIds, projectId)
-    && canAccessTourByScope(access.scopeType, access.projectIds, access.tourIds, projectId, tourId);
+  return !!projectId && canReachDate(access.bandAccess, projectId, tourId);
 }
 
 export async function ensureProjectInWorkspace(supabase: SupabaseClient, workspaceId: string, projectId: string) {
@@ -187,12 +197,15 @@ export async function ensureProjectAccess(
   projectId: string,
   allowedRoles?: WorkspaceRole[],
 ) {
-  const access = await requireWorkspaceAccess(supabase, userId, workspaceId, allowedRoles);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
   await ensureProjectInWorkspace(supabase, workspaceId, projectId);
 
   if (!canAccessProject(access, projectId)) {
     throw new ApiError(403, 'You do not have access to this project.');
   }
+
+  // Levels are per band: check the level on THIS band.
+  if (allowedRoles) requireProjectRole(access, projectId, allowedRoles);
 
   return access;
 }

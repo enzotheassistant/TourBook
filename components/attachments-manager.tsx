@@ -7,7 +7,7 @@ import { deleteAttachment, getAttachmentDownloadHref, listAttachments, renameAtt
 import { attachmentDisplayName, compareAttachmentsByName, stripFileExtension } from '@/lib/attachments/display-name';
 import { useAppContext } from '@/hooks/use-app-context';
 import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
-import { canCreateDates, getWorkspaceRole } from '@/lib/roles';
+import { canCreateDates, getProjectRole } from '@/lib/roles';
 import type { DateAttachment } from '@/lib/types/date-record';
 import { SkeletonBlock } from '@/components/skeleton';
 
@@ -237,7 +237,7 @@ function ManagedAttachmentTile({
 }
 
 export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; onCountChange?: (count: number) => void }) {
-  const { activeWorkspaceId, isLoading, memberships } = useAppContext();
+  const { activeWorkspaceId, activeProjectId, isLoading, memberships } = useAppContext();
   const [attachments, setAttachments] = useState<DateAttachment[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -247,7 +247,8 @@ export function AttachmentsManager({ dateId, onCountChange }: { dateId: string; 
   const [openAttachment, setOpenAttachment] = useState<DateAttachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
+  // Level on this band (levels can differ by band).
+  const workspaceRole = useMemo(() => getProjectRole(memberships, activeWorkspaceId, activeProjectId), [memberships, activeWorkspaceId, activeProjectId]);
   const canManage = canCreateDates(workspaceRole);
 
   useEffect(() => {

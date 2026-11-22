@@ -6,7 +6,7 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import type { DateAttachment } from '@/lib/types/date-record';
 import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
-import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -407,10 +407,17 @@ export async function listWorkspaceInvites(workspaceId: string) {
   return payload.invites ?? [];
 }
 
-export async function createWorkspaceInvite(input: { workspaceId: string; name?: string | null; email: string; role: WorkspaceInviteRole; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
+/** Per-band access sent to the server: one level per band (tourIds empty = whole band), or all projects. */
+export type AccessPayload =
+  | { allProjects: true; role: 'viewer' | 'crew' | 'editor' }
+  | { allProjects: false; entries: Array<{ projectId: string; role: string; tourIds: string[] }> };
+
+export async function createWorkspaceInvite(input: { workspaceId: string; name?: string | null; email: string; access?: AccessPayload; role?: WorkspaceInviteRole; scopeType?: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
   return request<{ invite: WorkspaceInviteSummary; acceptToken: string; emailDelivery?: { attempted?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites`, {
     method: 'POST',
-    body: JSON.stringify({ name: input.name ?? null, email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [], tourIds: input.tourIds ?? [] }),
+    body: JSON.stringify(input.access
+      ? { name: input.name ?? null, email: input.email, access: input.access }
+      : { name: input.name ?? null, email: input.email, role: input.role, scopeType: input.scopeType, projectIds: input.projectIds ?? [], tourIds: input.tourIds ?? [] }),
   });
 }
 
@@ -440,15 +447,14 @@ export async function listWorkspaceMembers(workspaceId: string) {
   return payload.members ?? [];
 }
 
-export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; role: 'admin' | 'editor' | 'crew' | 'viewer'; scopeType: 'workspace' | 'projects' | 'tours'; projectIds?: string[]; tourIds?: string[] }) {
-  const payload = await request<{ member: WorkspaceMemberDirectoryEntry }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
+/**
+ * Change someone's access. Send `access` (per band). The result has
+ * `removed: true` when they no longer have any band left (off the team).
+ */
+export async function updateWorkspaceMember(input: { workspaceId: string; memberId: string; access: AccessPayload | null }) {
+  const payload = await request<{ member: WorkspaceMemberDirectoryEntry & { removed?: boolean } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      role: input.role,
-      scopeType: input.scopeType,
-      projectIds: input.projectIds ?? [],
-      tourIds: input.tourIds ?? [],
-    }),
+    body: JSON.stringify({ access: input.access ?? { allProjects: false, entries: [] } }),
   });
   return payload.member;
 }
@@ -457,4 +463,38 @@ export async function removeWorkspaceMember(input: { workspaceId: string; member
   return request<{ ok: boolean }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'DELETE',
   });
+}
+
+export type TourWithUsage = TourSummary & { dateCount: number; lastDate: string | null };
+
+/** Tours for one project, with how many dates use each (for Settings → Projects). */
+export async function listProjectTours(input: { workspaceId: string; projectId: string }) {
+  const params = new URLSearchParams({ workspaceId: input.workspaceId, projectId: input.projectId });
+  return request<TourWithUsage[]>(`/api/tours?${params.toString()}`);
+}
+
+/** Archive (hide from the Tour dropdown) or restore a tour. Dates keep their tour name. */
+export async function setTourArchived(input: { workspaceId: string; tourId: string; archived: boolean }) {
+  const payload = await request<{ tour: TourSummary }>(`/api/tours/${encodeURIComponent(input.tourId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ workspaceId: input.workspaceId, archived: input.archived }),
+  });
+  return payload.tour;
+}
+
+/** Delete a tour that has no dates (typos, test tours). */
+export async function deleteTour(input: { workspaceId: string; tourId: string }) {
+  const params = new URLSearchParams({ workspaceId: input.workspaceId });
+  return request<{ ok: boolean }>(`/api/tours/${encodeURIComponent(input.tourId)}?${params.toString()}`, { method: 'DELETE' });
+}
+
+/**
+ * Change a waiting invite's access. With sendEmail (default), they get an
+ * "invite updated" email with a fresh link; the old link stops working.
+ */
+export async function updateWorkspaceInviteAccess(input: { workspaceId: string; inviteId: string; access: AccessPayload; sendEmail: boolean }) {
+  return request<{ invite: WorkspaceInviteSummary; acceptToken: string | null }>(
+    `/api/workspaces/${encodeURIComponent(input.workspaceId)}/invites/${encodeURIComponent(input.inviteId)}`,
+    { method: 'PATCH', body: JSON.stringify({ access: input.access, sendEmail: input.sendEmail }) },
+  );
 }
