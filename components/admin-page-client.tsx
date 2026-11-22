@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ActivationEmptyState } from '@/components/activation-empty-state';
 import { AddressAutocompleteField } from '@/components/address-autocomplete-field';
-import { AttachmentsManager, TrashIcon } from '@/components/attachments-manager';
+import { AttachmentsManager } from '@/components/attachments-manager';
 import { PendingAttachmentsPicker, getPendingDisplayName } from '@/components/pending-attachments-picker';
 import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upload-dropzone';
 import { useAppContext } from '@/hooks/use-app-context';
@@ -27,7 +27,7 @@ import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteS
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
-import { ChevronIcon, MoreIcon, PlusIcon } from '@/components/icons';
+import { ChevronIcon, EyeIcon, EyeOffIcon, MoreIcon, PlusIcon } from '@/components/icons';
 import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
 
 function slugify(value: string) {
@@ -536,6 +536,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   // Last deleted schedule line, kept for a few seconds so it can be undone.
   const [deletedLine, setDeletedLine] = useState<{ item: ShowFormValues['schedule_items'][number]; index: number } | null>(null);
   const deletedLineTimerRef = useRef<number | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [scheduleMenuId, setScheduleMenuId] = useState<string | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+  }, []);
   useEffect(() => () => {
     if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
   }, []);
@@ -551,6 +557,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
   const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
+  const [inviteFormOpen, setInviteFormOpen] = useState(false);
   const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberDirectoryEntry[]>([]);
   const [editingMember, setEditingMember] = useState<WorkspaceMemberDirectoryEntry | null>(null);
@@ -770,6 +777,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     contextInvitePrefillRef.current = contextProjectId;
     setInviteScopeType('projects');
     setInviteProjectIds([contextProjectId]);
+    setInviteFormOpen(true);
     setInviteMessage('Project context loaded. Review scope and create invite when ready.');
   }, [contextProjectId, isTeamMode, workspaceProjects]);
 
@@ -1090,9 +1098,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteName('');
       setInviteEmail('');
-      setInviteProjectIds([]);
       setInviteTourIds([]);
-      setInviteScopeType('workspace');
+      applyThisProjectInviteScope();
       setInviteMessage('An email invite has been sent to your recipient(s).');
       window.dispatchEvent(new Event('tourbook:invites-updated'));
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
@@ -1267,9 +1274,36 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     updateForm((current) => ({ ...current, [key]: value }));
   }
 
+  // New invites default to "This project" (the project you're working in);
+  // admins always get the whole workspace.
+  function applyThisProjectInviteScope() {
+    const thisProjectId = contextProjectId || activeProjectId;
+    if (thisProjectId && inviteRole !== 'admin' && workspaceProjects.some((project) => project.id === thisProjectId)) {
+      setInviteScopeType('projects');
+      setInviteProjectIds([thisProjectId]);
+    } else {
+      setInviteScopeType('workspace');
+      setInviteProjectIds([]);
+    }
+  }
+
+  function openInviteForm() {
+    setInviteTourIds([]);
+    applyThisProjectInviteScope();
+    setInviteFormOpen(true);
+  }
+
   function updateVisibility(key: VisibilityKey, value: boolean) {
     setVisibilityModes((current) => ({ ...current, [key]: 'manual' }));
     setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
+    showFlash(value ? 'Visible to crew' : 'Hidden from crew');
+  }
+
+  // Short message at the bottom of the screen (about 2 seconds).
+  function showFlash(text: string) {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    setFlash(text);
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), 2000);
   }
 
   function resetForm(nextMessage = 'Ready to create') {
@@ -1865,6 +1899,34 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   const isEditingDraft = isEditing && form.status === 'draft';
+  const inviteSectionProps = {
+    invites,
+    loading: invitesLoading,
+    name: inviteName,
+    email: inviteEmail,
+    role: inviteRole,
+    scopeType: inviteScopeType,
+    scopeProjectIds: inviteProjectIds,
+    scopeTourIds: inviteTourIds,
+    availableProjects: workspaceProjects,
+    availableTours: inviteAvailableTours,
+    message: inviteMessage,
+    creating: creatingInvite,
+    lastInviteShare,
+    showManualShare: showManualInviteShare,
+    onToggleManualShare: () => setShowManualInviteShare((current) => !current),
+    onNameChange: setInviteName,
+    onEmailChange: setInviteEmail,
+    onRoleChange: setInviteRole,
+    onScopeTypeChange: setInviteScopeType,
+    onScopeProjectIdsChange: setInviteProjectIds,
+    onScopeTourIdsChange: setInviteTourIds,
+    contextProjectId: contextProjectId || activeProjectId,
+    onCreateInvite: () => void handleCreateInvite(),
+    onRevokeInvite: (invite: WorkspaceInviteSummary) => void handleRevokeInvite(invite),
+    onResendInvite: (invite: WorkspaceInviteSummary) => void handleResendInvite(invite),
+    onCopyValue: (value: string, successMessage: string) => void copyToClipboard(value, successMessage),
+  };
   const openingFromEditLink = initialEditTab !== null && editLinkActive && !isEditing;
   const datesTabActive = mode === 'dates' || (isEditing && form.status !== 'draft') || (openingFromEditLink && initialEditTab === 'dates');
   const draftsTabActive = mode === 'drafts' || isEditingDraft || (openingFromEditLink && initialEditTab === 'drafts');
@@ -2333,6 +2395,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
+        <div className="space-y-3">
+          {/* Team page header: Invite opens the invite form here at the top. */}
+          <div className="flex min-h-10 items-center justify-between gap-3 px-1">
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Team</h2>
+            {!inviteFormOpen ? (
+              <button
+                type="button"
+                onClick={openInviteForm}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent-soft px-3 text-sm font-medium text-accent-light transition hover:border-accent/55"
+              >
+                <PlusIcon />
+                Invite
+              </button>
+            ) : null}
+          </div>
+          {inviteFormOpen ? <InviteManagementSection {...inviteSectionProps} part="form" onCloseForm={() => setInviteFormOpen(false)} /> : null}
+        </div>
+      ) : null}
+
+      {isTeamMode && canManageInvitesInWorkspace ? (
         <TeamMembersSection
           key={contextProjectId || activeProjectId || 'workspace-members'}
           members={members}
@@ -2349,34 +2431,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
-        <InviteManagementSection
-          invites={invites}
-          loading={invitesLoading}
-          name={inviteName}
-          email={inviteEmail}
-          role={inviteRole}
-          scopeType={inviteScopeType}
-          scopeProjectIds={inviteProjectIds}
-          scopeTourIds={inviteTourIds}
-          availableProjects={workspaceProjects}
-          availableTours={inviteAvailableTours}
-          message={inviteMessage}
-          creating={creatingInvite}
-          lastInviteShare={lastInviteShare}
-          showManualShare={showManualInviteShare}
-          onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
-          onNameChange={setInviteName}
-          onEmailChange={setInviteEmail}
-          onRoleChange={setInviteRole}
-          onScopeTypeChange={setInviteScopeType}
-          onScopeProjectIdsChange={setInviteProjectIds}
-          onScopeTourIdsChange={setInviteTourIds}
-          contextProjectId={contextProjectId || activeProjectId}
-          onCreateInvite={() => void handleCreateInvite()}
-          onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
-            onResendInvite={(invite) => void handleResendInvite(invite)}
-          onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
-        />
+        <InviteManagementSection {...inviteSectionProps} part="directory" />
       ) : null}
 
       {mode === 'new' ? (
@@ -2533,44 +2588,65 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
             >
               <div>
-                {/* Compact rows: "LINE n" + trash on one row, Item and Time side by side
-                    underneath (stacked on very narrow phones), thin dividers between lines. */}
-                <ul className="divide-y divide-white/10">
+                {/* One row per schedule item: Item on the left, Time on the right, "…" menu.
+                    The Time box sizes itself to what's typed, so short times stay small and
+                    the item gets the room. If a long time (e.g. "5:00 - 7:00 PM") would make
+                    the row cramped, the time drops to its own line under the item instead of
+                    being squeezed or scrolling. Delete lives in the "…" menu (Undo afterwards). */}
+                <ul className="space-y-2">
                   {form.schedule_items.map((item, index) => (
-                    <li key={item.id} className="py-3 first:pt-0">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Line {index + 1}</p>
-                        <button
-                          type="button"
-                          onClick={() => removeScheduleRow(item.id)}
-                          aria-label={`Delete line ${index + 1}`}
-                          className="-my-2.5 -mr-2.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-[minmax(0,1fr)_10rem] sm:grid-cols-[minmax(0,1fr)_13rem]">
+                    <li key={item.id} className="relative flex items-start gap-2">
+                      <div className="flex min-w-0 flex-1 flex-wrap gap-2">
                         <input
                           type="text"
                           value={item.label}
                           placeholder="Item"
-                          aria-label="Item"
+                          aria-label={`Item, line ${index + 1}`}
                           onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
-                          className={`${fieldClassName()} min-w-0`}
+                          className={`${fieldClassName()} min-w-[8.5rem] flex-1`}
                         />
                         <input
                           type="text"
                           value={item.time}
                           placeholder="Time"
-                          aria-label="Time"
+                          aria-label={`Time, line ${index + 1}`}
                           onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
-                          className={`${fieldClassName()} min-w-0 px-3 tabular-nums`}
+                          style={{ width: `calc(${Math.max(item.time.length, 7)}ch + 2.25rem)` }}
+                          className={`${fieldClassName()} max-w-full shrink-0 px-3 tabular-nums`}
                         />
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setScheduleMenuId((current) => (current === item.id ? null : item.id))}
+                        aria-label={`More options for line ${index + 1}`}
+                        aria-expanded={scheduleMenuId === item.id}
+                        className="-mr-2 mt-0.5 inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+                      >
+                        <MoreIcon />
+                      </button>
+                      {scheduleMenuId === item.id ? (
+                        <>
+                          <button type="button" aria-hidden="true" tabIndex={-1} className="fixed inset-0 z-30 cursor-default" onClick={() => setScheduleMenuId(null)} />
+                          <div onKeyDown={(event) => { if (event.key === 'Escape') setScheduleMenuId(null); }} className="absolute right-0 top-full z-40 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-2xl">
+                            <button
+                              type="button"
+                              autoFocus
+                              onClick={() => {
+                                setScheduleMenuId(null);
+                                removeScheduleRow(item.id);
+                              }}
+                              className="block w-full px-4 py-3 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+                            >
+                              Delete line
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
-                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3`}>
+                <button type="button" onClick={addScheduleRow} className={`${secondaryButtonClassName()} mt-3 inline-flex items-center gap-1.5`}>
+                  <PlusIcon />
                   Add line
                 </button>
               </div>
@@ -2698,6 +2774,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             )}
           </div>
         </div>
+
+        {flash && !deletedLine ? (
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4">
+            <div role="status" aria-live="polite" className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 shadow-2xl shadow-black/60">
+              {flash}
+            </div>
+          </div>
+        ) : null}
 
         {deletedLine ? (
           <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4">
@@ -3097,12 +3181,15 @@ function TeamDirectoryCard({
   role,
   status,
   action,
+  showRoleBadge = true,
 }: {
   title: string;
   /** Small grey line under the name (the email, when a name exists). */
   secondary?: string | null;
-  /** What they can access, e.g. "Texas King" or "All projects". */
-  subtitle: string;
+  /** What they can access, e.g. "Texas King" or "All projects". Omit to hide. */
+  subtitle?: string | null;
+  /** Hide the role badge when the row already has a role dropdown (one role control per person). */
+  showRoleBadge?: boolean;
   role: 'owner' | 'admin' | 'editor' | 'viewer';
   status?: WorkspaceInviteSummary['status'] | null;
   action?: ReactNode;
@@ -3113,11 +3200,11 @@ function TeamDirectoryCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{title}</p>
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span>
+            {showRoleBadge ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span> : null}
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
           </div>
           {secondary ? <p className="mt-0.5 truncate text-xs text-zinc-500">{secondary}</p> : null}
-          <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p>
+          {subtitle ? <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p> : null}
         </div>
         {action ? <div className="w-full sm:w-auto sm:shrink-0">{action}</div> : null}
       </div>
@@ -3152,7 +3239,12 @@ function InviteManagementSection({
   onResendInvite,
   onCopyValue,
   contextProjectId,
+  part = 'all',
+  onCloseForm,
 }: {
+  /** 'form' = just the invite form (opened from the Invite button), 'directory' = just the invite lists. */
+  part?: 'all' | 'form' | 'directory';
+  onCloseForm?: () => void;
   invites: WorkspaceInviteSummary[];
   loading: boolean;
   name: string;
@@ -3194,7 +3286,7 @@ function InviteManagementSection({
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
-
+  const [showHistory, setShowHistory] = useState(false);
   const visiblePendingInvites = useMemo(
     () => effectiveViewMode === 'workspace' || !contextProjectId ? inviteGroups.pending : inviteGroups.pending.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
     [contextProjectId, effectiveViewMode, inviteGroups.pending, toursById],
@@ -3207,12 +3299,18 @@ function InviteManagementSection({
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
-          <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
+        {part !== 'directory' ? (
+        <>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-100">Invite someone</h2>
+          {onCloseForm ? (
+            <button type="button" onClick={onCloseForm} className="text-sm text-zinc-400 transition hover:text-zinc-100">
+              Close
+            </button>
+          ) : null}
         </div>
-
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto]">
+        {/* Order: name, email, role, access choices, then Create invite last. */}
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
           <input
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
@@ -3244,9 +3342,6 @@ function InviteManagementSection({
             <option value="editor">Editor</option>
             <option value="admin">Admin</option>
           </select>
-          <button type="button" onClick={onCreateInvite} disabled={creating} className={primaryButtonClassName()}>
-            {creating ? 'Creating…' : 'Create invite'}
-          </button>
         </div>
 
         <TeamScopeEditor
@@ -3262,7 +3357,11 @@ function InviteManagementSection({
           onScopeProjectIdsChange={onScopeProjectIdsChange}
           onScopeTourIdsChange={onScopeTourIdsChange}
         />
-
+        <div className="flex justify-end">
+          <button type="button" onClick={onCreateInvite} disabled={creating} className={`${primaryButtonClassName()} w-full sm:w-auto`}>
+            {creating ? 'Creating…' : 'Create invite'}
+          </button>
+        </div>
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
         {lastInviteShare ? (
@@ -3283,10 +3382,13 @@ function InviteManagementSection({
           </div>
         ) : null}
 
-        <div className="border-t border-white/10 pt-4">
+        </>
+        ) : null}
+        {part !== 'form' ? (
+        <div className={part === 'all' ? 'border-t border-white/10 pt-4' : ''}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
+              <h2 className="text-base font-semibold text-zinc-100">Invites</h2>
             </div>
             <div className="text-xs text-zinc-500">{visiblePendingInvites.length} pending · {visibleHistoryInvites.length} recent</div>
           </div>
@@ -3334,8 +3436,17 @@ function InviteManagementSection({
               </div>
               {visibleHistoryInvites.length > 0 ? (
                 <div>
-                  <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
-                  {visibleHistoryInvites.map((invite) => {
+                  {/* Invite history is folded away by default. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory((current) => !current)}
+                    aria-expanded={showHistory}
+                    className="inline-flex min-h-10 items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"
+                  >
+                    <ChevronIcon open={showHistory} className="h-4 w-4" />
+                    {showHistory ? 'Hide invite history' : `Show invite history (${visibleHistoryInvites.length})`}
+                  </button>
+                  {showHistory ? visibleHistoryInvites.map((invite) => {
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3346,12 +3457,13 @@ function InviteManagementSection({
                         subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
                       />
                     );
-                  })}
+                  }) : null}
                 </div>
               ) : null}
             </div>
           )}
         </div>
+        ) : null}
       </div>
     </section>
   );
@@ -3642,8 +3754,7 @@ function TeamMembersSection({
     }
 
     return (
-      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[10rem] sm:max-w-[11rem] sm:flex-none">
-        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">Role</span>
+      <label className="flex min-w-0 flex-1 flex-col sm:min-w-[9rem] sm:max-w-[10rem] sm:flex-none">
         <select
           value={member.role}
           onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
@@ -3665,11 +3776,15 @@ function TeamMembersSection({
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
   const acceptedEntries = useMemo(() => buildAcceptedTeamDirectory(members, invites), [members, invites]);
+  // Owner first, then people in this project, then by name (or email).
   const sortedMembers = [...acceptedEntries].sort((a, b) => {
+    const aOwner = a.role === 'owner' ? 1 : 0;
+    const bOwner = b.role === 'owner' ? 1 : 0;
+    if (aOwner !== bOwner) return bOwner - aOwner;
     const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
     const bInContext = matchesProjectContext(b, contextProjectId, toursById) ? 1 : 0;
     if (aInContext !== bInContext) return bInContext - aInContext;
-    return (a.email || a.userId).localeCompare(b.email || b.userId);
+    return (a.name || a.email || a.userId).localeCompare(b.name || b.email || b.userId, undefined, { sensitivity: 'base' });
   });
   const visibleMembers = effectiveViewMode === 'workspace' || !contextProjectId
     ? sortedMembers
@@ -3708,7 +3823,8 @@ function TeamMembersSection({
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  subtitle={summarizeTeamAccess(member, { projectNameById, toursById })}
+                  showRoleBadge={!(member.source === 'member' && (member.role === 'editor' || member.role === 'viewer'))}
+                  subtitle={effectiveViewMode === 'workspace' ? summarizeTeamAccess(member, { projectNameById, toursById }) : null}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
@@ -3787,12 +3903,12 @@ function CollapsibleSection({
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => onExpandedChange(!expanded)} className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>
-          <h2 className="truncate text-base font-semibold">{title}</h2>
+        <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <h2 className={`truncate text-base font-semibold transition-colors ${hiddenFromCrew ? 'text-zinc-500' : ''}`}>{title}</h2>
           {!expanded && hasContent ? <span className="h-2.5 w-2.5 rounded-full bg-accent-light" /> : null}
         </button>
         <div className="flex items-center gap-1">
-          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`Show ${title} to crew`} /> : null}
+          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`${title}: ${visibilityState ? 'visible to crew' : 'hidden from crew'}`} /> : null}
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
@@ -4097,25 +4213,19 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
 }
 
 /**
- * Sliding on/off switch for "can crew see this section?". The visible switch is
- * small, but the button around it is 44×44px so it's easy to hit with a thumb.
+ * Eye button for "can crew see this section?": open eye = visible to crew,
+ * crossed-out eye = hidden. 44×44px tap area.
  */
 function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: (value: boolean) => void; label: string }) {
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={enabled}
       aria-label={label}
+      aria-pressed={enabled}
       onClick={() => onToggle(!enabled)}
-      className="group -my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus:outline-none"
+      className={`-my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${enabled ? 'text-accent-light' : 'text-zinc-500 hover:text-zinc-300'}`}
     >
-      <span
-        aria-hidden="true"
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 group-focus-visible:ring-2 group-focus-visible:ring-accent/60 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950 ${enabled ? 'bg-accent' : 'bg-zinc-700'}`}
-      >
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-      </span>
+      {enabled ? <EyeIcon /> : <EyeOffIcon />}
     </button>
   );
 }
