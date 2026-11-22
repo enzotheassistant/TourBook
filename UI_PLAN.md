@@ -1,5 +1,7 @@
 # UI Plan — Progress
 
+> All four phases below are done and live. The next phase lives in **UI_PLAN_next_phase.md**.
+
 Work branch: `ui-plan` (each item is its own commit). Phase 1 went live 2026-11-21 (pull request #5). Phase 2 went live 2026-11-21 (pull request #6). Phase 3 went live 2026-11-21 (pull request #9). Phase 4 approved by Phil and went live 2026-11-21 (pull request #10). All phases done; back-burner items below are not started. To resume in a new session: "Continue the UI plan in UI_PLAN.md" → pick up from the first unticked item below.
 
 - [x] 1.1 Day sheet section order
