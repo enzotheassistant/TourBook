@@ -21,7 +21,7 @@ Decisions with Phil before starting (2026-11-22):
 - Schedule line delete: inside the "…" menu with **no** confirmation pop-up, plus the short "Line deleted · Undo" message.
 - Go live in batches after preview testing: Steps 1–3, 4–6, 7–8, then 9.
 
-Batch 1 (Steps 1–3) — on preview, pull request #18:
+Batch 1 (Steps 1–3) — live 2026-11-22, pull request #17:
 - Step 1: sentence case across the app; "Quick import"; "Create date" / "Save changes" / "Save draft" with matching messages ("Date created", "Changes saved", "Draft saved"); "Loaded into editor" removed; shared plus icon.
 - Step 2: `/admin` redirects to `/admin/dates`; the new date form moved to `/admin/new` ("+ New date" button). `/admin?edit=…` / `?duplicate=…` links still open the editor. The right tab is highlighted from the first moment when opening a date; back arrow sits beside the title.
 - Step 3: the tab switch no longer calls the server (URL updated in the browser), and the guest list loads in the background when the date opens, so switching is instant.
