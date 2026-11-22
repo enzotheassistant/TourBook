@@ -54,7 +54,8 @@ Per-band levels notes (2026-11-22, agreed with Phil):
 - Giving an existing member a new band needs no new invite: it appears in their project picker, and the Admin option shows on bands where they're Manager. They get a plain "You've been added to [band] as [level]" email (no link to accept). Nothing is sent on removal.
 - Managers only see and change the bands they manage; a person's other bands are kept as they are. "Remove" in the band view takes someone off that band only; in All projects it removes them from the team.
 - Accepting a second invite combines with existing access and never lowers anything.
-- One pending invite per email per workspace (resend or revoke the old one first).
+- One waiting invite per email per workspace (common practice: Slack, GitHub). Typing an email that already has one shows "already has an invite waiting" with **Edit that invite**.
+- Waiting invites have **Edit access** (like GitHub's "edit invitation"). "Send them an updated email" is on by default: they get an "invite updated" email with a fresh link and the old link stops working (only a scrambled copy of each link is kept, so the same link can't be re-sent). Untick it to change access quietly: their existing link still works and gives the new access. Old links explain to use the newer email.
 - Database (approved, applied): level stored per band on members and invites, filled from current levels; all rules use the band's level. Before/after snapshot of what each of the 12 people could see and change was identical. Also closed an old gap where a Manager of one band could change another band's dates in the same workspace at the database level.
 
 Step 9 notes (2026-11-22):
