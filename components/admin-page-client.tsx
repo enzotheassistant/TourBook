@@ -557,6 +557,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [inviteRole, setInviteRole] = useState<WorkspaceInviteRole>('viewer');
   const [inviteScopeType, setInviteScopeType] = useState<'workspace' | 'projects' | 'tours'>('workspace');
   const [inviteProjectIds, setInviteProjectIds] = useState<string[]>([]);
+  const [inviteFormOpen, setInviteFormOpen] = useState(false);
   const [inviteTourIds, setInviteTourIds] = useState<string[]>([]);
   const [members, setMembers] = useState<WorkspaceMemberDirectoryEntry[]>([]);
   const [editingMember, setEditingMember] = useState<WorkspaceMemberDirectoryEntry | null>(null);
@@ -776,6 +777,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     contextInvitePrefillRef.current = contextProjectId;
     setInviteScopeType('projects');
     setInviteProjectIds([contextProjectId]);
+    setInviteFormOpen(true);
     setInviteMessage('Project context loaded. Review scope and create invite when ready.');
   }, [contextProjectId, isTeamMode, workspaceProjects]);
 
@@ -1096,9 +1098,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       setLastInviteShare({ token: created.acceptToken, link: inviteLink });
       setInviteName('');
       setInviteEmail('');
-      setInviteProjectIds([]);
       setInviteTourIds([]);
-      setInviteScopeType('workspace');
+      applyThisProjectInviteScope();
       setInviteMessage('An email invite has been sent to your recipient(s).');
       window.dispatchEvent(new Event('tourbook:invites-updated'));
       await trackInviteEvent({ event: 'invite.created', workspaceId: created.invite.workspaceId, inviteId: created.invite.id, role: created.invite.role });
@@ -1271,6 +1272,25 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       return;
     }
     updateForm((current) => ({ ...current, [key]: value }));
+  }
+
+  // New invites default to "This project" (the project you're working in);
+  // admins always get the whole workspace.
+  function applyThisProjectInviteScope() {
+    const thisProjectId = contextProjectId || activeProjectId;
+    if (thisProjectId && inviteRole !== 'admin' && workspaceProjects.some((project) => project.id === thisProjectId)) {
+      setInviteScopeType('projects');
+      setInviteProjectIds([thisProjectId]);
+    } else {
+      setInviteScopeType('workspace');
+      setInviteProjectIds([]);
+    }
+  }
+
+  function openInviteForm() {
+    setInviteTourIds([]);
+    applyThisProjectInviteScope();
+    setInviteFormOpen(true);
   }
 
   function updateVisibility(key: VisibilityKey, value: boolean) {
@@ -1879,6 +1899,34 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   const isEditingDraft = isEditing && form.status === 'draft';
+  const inviteSectionProps = {
+    invites,
+    loading: invitesLoading,
+    name: inviteName,
+    email: inviteEmail,
+    role: inviteRole,
+    scopeType: inviteScopeType,
+    scopeProjectIds: inviteProjectIds,
+    scopeTourIds: inviteTourIds,
+    availableProjects: workspaceProjects,
+    availableTours: inviteAvailableTours,
+    message: inviteMessage,
+    creating: creatingInvite,
+    lastInviteShare,
+    showManualShare: showManualInviteShare,
+    onToggleManualShare: () => setShowManualInviteShare((current) => !current),
+    onNameChange: setInviteName,
+    onEmailChange: setInviteEmail,
+    onRoleChange: setInviteRole,
+    onScopeTypeChange: setInviteScopeType,
+    onScopeProjectIdsChange: setInviteProjectIds,
+    onScopeTourIdsChange: setInviteTourIds,
+    contextProjectId: contextProjectId || activeProjectId,
+    onCreateInvite: () => void handleCreateInvite(),
+    onRevokeInvite: (invite: WorkspaceInviteSummary) => void handleRevokeInvite(invite),
+    onResendInvite: (invite: WorkspaceInviteSummary) => void handleResendInvite(invite),
+    onCopyValue: (value: string, successMessage: string) => void copyToClipboard(value, successMessage),
+  };
   const openingFromEditLink = initialEditTab !== null && editLinkActive && !isEditing;
   const datesTabActive = mode === 'dates' || (isEditing && form.status !== 'draft') || (openingFromEditLink && initialEditTab === 'dates');
   const draftsTabActive = mode === 'drafts' || isEditingDraft || (openingFromEditLink && initialEditTab === 'drafts');
@@ -2347,6 +2395,26 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
+        <div className="space-y-3">
+          {/* Team page header: Invite opens the invite form here at the top. */}
+          <div className="flex min-h-10 items-center justify-between gap-3 px-1">
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Team</h2>
+            {!inviteFormOpen ? (
+              <button
+                type="button"
+                onClick={openInviteForm}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent-soft px-3 text-sm font-medium text-accent-light transition hover:border-accent/55"
+              >
+                <PlusIcon />
+                Invite
+              </button>
+            ) : null}
+          </div>
+          {inviteFormOpen ? <InviteManagementSection {...inviteSectionProps} part="form" onCloseForm={() => setInviteFormOpen(false)} /> : null}
+        </div>
+      ) : null}
+
+      {isTeamMode && canManageInvitesInWorkspace ? (
         <TeamMembersSection
           key={contextProjectId || activeProjectId || 'workspace-members'}
           members={members}
@@ -2363,34 +2431,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
-        <InviteManagementSection
-          invites={invites}
-          loading={invitesLoading}
-          name={inviteName}
-          email={inviteEmail}
-          role={inviteRole}
-          scopeType={inviteScopeType}
-          scopeProjectIds={inviteProjectIds}
-          scopeTourIds={inviteTourIds}
-          availableProjects={workspaceProjects}
-          availableTours={inviteAvailableTours}
-          message={inviteMessage}
-          creating={creatingInvite}
-          lastInviteShare={lastInviteShare}
-          showManualShare={showManualInviteShare}
-          onToggleManualShare={() => setShowManualInviteShare((current) => !current)}
-          onNameChange={setInviteName}
-          onEmailChange={setInviteEmail}
-          onRoleChange={setInviteRole}
-          onScopeTypeChange={setInviteScopeType}
-          onScopeProjectIdsChange={setInviteProjectIds}
-          onScopeTourIdsChange={setInviteTourIds}
-          contextProjectId={contextProjectId || activeProjectId}
-          onCreateInvite={() => void handleCreateInvite()}
-          onRevokeInvite={(invite) => void handleRevokeInvite(invite)}
-            onResendInvite={(invite) => void handleResendInvite(invite)}
-          onCopyValue={(value, successMessage) => void copyToClipboard(value, successMessage)}
-        />
+        <InviteManagementSection {...inviteSectionProps} part="directory" />
       ) : null}
 
       {mode === 'new' ? (
@@ -3134,12 +3175,15 @@ function TeamDirectoryCard({
   role,
   status,
   action,
+  showRoleBadge = true,
 }: {
   title: string;
   /** Small grey line under the name (the email, when a name exists). */
   secondary?: string | null;
-  /** What they can access, e.g. "Texas King" or "All projects". */
-  subtitle: string;
+  /** What they can access, e.g. "Texas King" or "All projects". Omit to hide. */
+  subtitle?: string | null;
+  /** Hide the role badge when the row already has a role dropdown (one role control per person). */
+  showRoleBadge?: boolean;
   role: 'owner' | 'admin' | 'editor' | 'viewer';
   status?: WorkspaceInviteSummary['status'] | null;
   action?: ReactNode;
@@ -3150,11 +3194,11 @@ function TeamDirectoryCard({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{title}</p>
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span>
+            {showRoleBadge ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${roleBadgeClassName(role)}`}>{role}</span> : null}
             {status ? <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${inviteStatusBadgeClassName(status)}`}>{status}</span> : null}
           </div>
           {secondary ? <p className="mt-0.5 truncate text-xs text-zinc-500">{secondary}</p> : null}
-          <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p>
+          {subtitle ? <p className="mt-1 truncate text-sm text-zinc-300">{subtitle}</p> : null}
         </div>
         {action ? <div className="w-full sm:w-auto sm:shrink-0">{action}</div> : null}
       </div>
@@ -3189,7 +3233,12 @@ function InviteManagementSection({
   onResendInvite,
   onCopyValue,
   contextProjectId,
+  part = 'all',
+  onCloseForm,
 }: {
+  /** 'form' = just the invite form (opened from the Invite button), 'directory' = just the invite lists. */
+  part?: 'all' | 'form' | 'directory';
+  onCloseForm?: () => void;
   invites: WorkspaceInviteSummary[];
   loading: boolean;
   name: string;
@@ -3231,7 +3280,7 @@ function InviteManagementSection({
   const contextProjectName = contextProjectId ? (projectNameById.get(contextProjectId) ?? null) : null;
   const [viewMode, setViewMode] = useState<'context' | 'workspace'>(contextProjectName ? 'context' : 'workspace');
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
-
+  const [showHistory, setShowHistory] = useState(false);
   const visiblePendingInvites = useMemo(
     () => effectiveViewMode === 'workspace' || !contextProjectId ? inviteGroups.pending : inviteGroups.pending.filter((invite) => matchesProjectContext(invite, contextProjectId, toursById)),
     [contextProjectId, effectiveViewMode, inviteGroups.pending, toursById],
@@ -3244,12 +3293,18 @@ function InviteManagementSection({
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="space-y-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Workspace invites</p>
-          <h2 className="mt-1 text-base font-semibold text-zinc-100">Invite team members</h2>
+        {part !== 'directory' ? (
+        <>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-100">Invite someone</h2>
+          {onCloseForm ? (
+            <button type="button" onClick={onCloseForm} className="text-sm text-zinc-400 transition hover:text-zinc-100">
+              Close
+            </button>
+          ) : null}
         </div>
-
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto]">
+        {/* Order: name, email, role, access choices, then Create invite last. */}
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
           <input
             value={name}
             onChange={(event) => onNameChange(event.target.value)}
@@ -3281,9 +3336,6 @@ function InviteManagementSection({
             <option value="editor">Editor</option>
             <option value="admin">Admin</option>
           </select>
-          <button type="button" onClick={onCreateInvite} disabled={creating} className={primaryButtonClassName()}>
-            {creating ? 'Creating…' : 'Create invite'}
-          </button>
         </div>
 
         <TeamScopeEditor
@@ -3299,7 +3351,11 @@ function InviteManagementSection({
           onScopeProjectIdsChange={onScopeProjectIdsChange}
           onScopeTourIdsChange={onScopeTourIdsChange}
         />
-
+        <div className="flex justify-end">
+          <button type="button" onClick={onCreateInvite} disabled={creating} className={`${primaryButtonClassName()} w-full sm:w-auto`}>
+            {creating ? 'Creating…' : 'Create invite'}
+          </button>
+        </div>
         {message ? <p className="text-sm text-zinc-300">{message}</p> : null}
 
         {lastInviteShare ? (
@@ -3320,10 +3376,13 @@ function InviteManagementSection({
           </div>
         ) : null}
 
-        <div className="border-t border-white/10 pt-4">
+        </>
+        ) : null}
+        {part !== 'form' ? (
+        <div className={part === 'all' ? 'border-t border-white/10 pt-4' : ''}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Invite directory</p>
+              <h2 className="text-base font-semibold text-zinc-100">Invites</h2>
             </div>
             <div className="text-xs text-zinc-500">{visiblePendingInvites.length} pending · {visibleHistoryInvites.length} recent</div>
           </div>
@@ -3371,8 +3430,17 @@ function InviteManagementSection({
               </div>
               {visibleHistoryInvites.length > 0 ? (
                 <div>
-                  <p className="pb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Recent invite activity</p>
-                  {visibleHistoryInvites.map((invite) => {
+                  {/* Invite history is folded away by default. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory((current) => !current)}
+                    aria-expanded={showHistory}
+                    className="inline-flex min-h-10 items-center gap-1.5 text-sm text-zinc-400 transition hover:text-zinc-100"
+                  >
+                    <ChevronIcon open={showHistory} className="h-4 w-4" />
+                    {showHistory ? 'Hide invite history' : `Show invite history (${visibleHistoryInvites.length})`}
+                  </button>
+                  {showHistory ? visibleHistoryInvites.map((invite) => {
                     return (
                       <TeamDirectoryCard
                         key={invite.id}
@@ -3383,12 +3451,13 @@ function InviteManagementSection({
                         subtitle={`${summarizeTeamAccess(invite, { projectNameById, toursById })} · Updated ${formatInviteDate(invite.updatedAt)}`}
                       />
                     );
-                  })}
+                  }) : null}
                 </div>
               ) : null}
             </div>
           )}
         </div>
+        ) : null}
       </div>
     </section>
   );
@@ -3679,8 +3748,7 @@ function TeamMembersSection({
     }
 
     return (
-      <label className="flex min-w-0 flex-1 flex-col gap-1 sm:min-w-[10rem] sm:max-w-[11rem] sm:flex-none">
-        <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-500">Role</span>
+      <label className="flex min-w-0 flex-1 flex-col sm:min-w-[9rem] sm:max-w-[10rem] sm:flex-none">
         <select
           value={member.role}
           onChange={(event) => onQuickRoleChange(member, event.target.value as 'viewer' | 'editor')}
@@ -3702,11 +3770,15 @@ function TeamMembersSection({
   const effectiveViewMode = contextProjectName ? viewMode : 'workspace';
 
   const acceptedEntries = useMemo(() => buildAcceptedTeamDirectory(members, invites), [members, invites]);
+  // Owner first, then people in this project, then by name (or email).
   const sortedMembers = [...acceptedEntries].sort((a, b) => {
+    const aOwner = a.role === 'owner' ? 1 : 0;
+    const bOwner = b.role === 'owner' ? 1 : 0;
+    if (aOwner !== bOwner) return bOwner - aOwner;
     const aInContext = matchesProjectContext(a, contextProjectId, toursById) ? 1 : 0;
     const bInContext = matchesProjectContext(b, contextProjectId, toursById) ? 1 : 0;
     if (aInContext !== bInContext) return bInContext - aInContext;
-    return (a.email || a.userId).localeCompare(b.email || b.userId);
+    return (a.name || a.email || a.userId).localeCompare(b.name || b.email || b.userId, undefined, { sensitivity: 'base' });
   });
   const visibleMembers = effectiveViewMode === 'workspace' || !contextProjectId
     ? sortedMembers
@@ -3745,7 +3817,8 @@ function TeamMembersSection({
                   title={member.name || member.email || member.userId}
                   secondary={member.name && member.email ? member.email : null}
                   role={member.role}
-                  subtitle={summarizeTeamAccess(member, { projectNameById, toursById })}
+                  showRoleBadge={!(member.source === 'member' && (member.role === 'editor' || member.role === 'viewer'))}
+                  subtitle={effectiveViewMode === 'workspace' ? summarizeTeamAccess(member, { projectNameById, toursById }) : null}
                   action={member.source === 'member' && member.role !== 'owner' ? (
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
                       <div className="flex w-full items-end justify-between gap-2 sm:w-auto sm:justify-end">
