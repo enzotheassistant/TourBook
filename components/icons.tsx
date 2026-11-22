@@ -54,3 +54,35 @@ export function EyeOffIcon({ className = 'h-5 w-5' }: { className?: string }) {
     </svg>
   );
 }
+
+/** Dates tab. */
+export function CalendarIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`${className} shrink-0`}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M3.5 9.5H20.5M8 3V6.5M16 3V6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Team tab. */
+export function UsersIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`${className} shrink-0`}>
+      <circle cx="9" cy="8.5" r="3.25" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M3 19.5C3.6 16.4 6 14.5 9 14.5C12 14.5 14.4 16.4 15 19.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M15.5 5.6C16.9 5.9 18 7.1 18 8.6C18 10.1 16.9 11.3 15.5 11.6M17.5 14.8C19.4 15.4 20.6 17.1 21 19.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Settings tab. */
+export function SettingsIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`${className} shrink-0`}>
+      <path d="M4 7H13M17 7H20M4 17H7M11 17H20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="15" cy="7" r="2.25" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="9" cy="17" r="2.25" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}

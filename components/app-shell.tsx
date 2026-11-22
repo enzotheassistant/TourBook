@@ -6,9 +6,9 @@ import { usePathname } from 'next/navigation';
 import { LogoutButton } from '@/components/logout-button';
 import { PickerHeading } from '@/components/picker-menu';
 import { useAppContext } from '@/hooks/use-app-context';
-import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess } from '@/lib/roles';
+import { canAccessAdminWorkspace, getWorkspaceRole, hasAnyAdminAccess, canManageInvites } from '@/lib/roles';
 import { canSwitchProject, getProjectsForWorkspace, pickNextProjectId } from '@/lib/ui/project-context';
-import { MoreIcon } from '@/components/icons';
+import { CalendarIcon, EyeIcon, MoreIcon, SettingsIcon, UsersIcon } from '@/components/icons';
 import { AppShellSkeleton } from '@/components/skeleton';
 
 function ghostButtonClassName() {
@@ -190,6 +190,16 @@ export function AppShell({
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
   const displayTitle = mode === 'crew' ? (currentProject?.name || currentProject?.slug || title) : title;
   const shouldShowSubtitle = mode === 'admin' ? showSubtitle : false;
+  // Admin sections: Dates (with Drafts inside), Team (people and access), Settings
+  // (projects, workspace, your account / log out).
+  const adminNavItems = [
+    { href: '/admin/dates', label: 'Dates', icon: <CalendarIcon />, active: pathname === '/admin/dates' || pathname === '/admin/drafts' || pathname === '/admin/new' || pathname === '/admin' },
+    // Team is for owners and admins only (they're the ones who can invite people).
+    ...(canManageInvites(activeWorkspaceRole) ? [{ href: '/admin/team', label: 'Team', icon: <UsersIcon />, active: pathname === '/admin/team' }] : []),
+    { href: '/admin/settings', label: 'Settings', icon: <SettingsIcon />, active: pathname === '/admin/settings' || pathname === '/admin/projects' },
+  ];
+  const adminEditorOpen = pathname === '/admin/new' || pathname === '/admin';
+  const showAdminBottomBar = mode === 'admin' && !adminEditorOpen;
   const headerRef = useRef<HTMLElement | null>(null);
   const isReady = Boolean(user) && !isLoading;
 
@@ -259,21 +269,26 @@ export function AppShell({
                 {shouldShowSubtitle ? <p className="mt-1 text-xs text-zinc-500 sm:text-sm">{subtitle}</p> : null}
                 <AdminProjectSelector />
               </div>
-              <div className="flex shrink-0 items-center gap-2 self-start sm:hidden">
-                <HeaderActionMenu
-                  actionHref={actionHref}
-                  actionLabel={actionLabel}
-                  extraItems={canAccessAdminWorkspace(activeWorkspaceRole) ? [
-                    { href: '/admin/team', label: 'Team', active: pathname === '/admin/team' },
-                    { href: '/admin/projects', label: 'Projects', active: pathname === '/admin/projects' },
-                  ] : []}
-                />
-              </div>
-              <div className="hidden shrink-0 items-center gap-2 self-start sm:flex">
-                <Link href={actionHref} className={ghostButtonClassName()}>
-                  {actionLabel}
+              <div className="flex shrink-0 items-center gap-2 self-start">
+                {/* Desktop: the main sections sit in the header. Phones use the bottom bar. */}
+                <nav aria-label="Admin sections" className="hidden items-center gap-1 sm:flex">
+                  {adminNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={item.active ? 'page' : undefined}
+                      className={`inline-flex min-h-10 items-center gap-1.5 rounded-[10px] px-3 text-sm transition ${item.active ? 'bg-accent-soft font-medium text-accent-light' : 'text-zinc-300 hover:bg-white/[0.05] hover:text-zinc-100'}`}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
+                  ))}
+                </nav>
+                {/* Crew view: a quick switch to see exactly what the crew sees. */}
+                <Link href="/" className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-white/10 px-3 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05] sm:ml-2">
+                  <EyeIcon className="h-[18px] w-[18px]" />
+                  Crew view
                 </Link>
-                <LogoutButton />
               </div>
             </div>
           )}
@@ -283,7 +298,27 @@ export function AppShell({
         </div>
       </header>
 
-      <main className={`mx-auto flex w-full max-w-5xl flex-col ${mode === 'admin' ? 'gap-3 py-3 pb-[max(calc(env(safe-area-inset-bottom)+0.75rem),0.75rem)]' : 'gap-4 py-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)]'} px-4 sm:px-6`}>{children}</main>
+      <main className={`mx-auto flex w-full max-w-5xl flex-col ${mode === 'admin' ? `gap-3 py-3 ${showAdminBottomBar ? 'pb-[calc(env(safe-area-inset-bottom)+5.5rem)] sm:pb-3' : 'pb-[max(calc(env(safe-area-inset-bottom)+0.75rem),0.75rem)]'}` : 'gap-4 py-4 pb-[max(calc(env(safe-area-inset-bottom)+1rem),1rem)]'} px-4 sm:px-6`}>{children}</main>
+
+      {/* Phones (admin only): bottom tab bar. Hidden while a date is open in the
+          editor so the Save / Create bar has the bottom of the screen. */}
+      {showAdminBottomBar ? (
+        <nav aria-label="Admin sections" className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-zinc-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+          <div className="mx-auto flex max-w-5xl">
+            {adminNavItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={item.active ? 'page' : undefined}
+                className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition ${item.active ? 'text-accent-light' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

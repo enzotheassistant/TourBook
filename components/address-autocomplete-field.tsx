@@ -37,8 +37,10 @@ export function AddressAutocompleteField({
   mapsUrl,
   city = '',
   region = '',
+  country = '',
   onAddressChange,
   onMapsUrlChange,
+  onCityDetected,
   onRegionDetected,
   onCountryDetected,
 }: {
@@ -47,6 +49,9 @@ export function AddressAutocompleteField({
   mapsUrl: string;
   city?: string;
   region?: string;
+  country?: string;
+  /** Picking a suggestion fills city / province-state / country — only into boxes that are still empty. */
+  onCityDetected?: (value: string) => void;
   onAddressChange: (value: string) => void;
   onMapsUrlChange: (value: string) => void;
   onRegionDetected?: (value: string) => void;
@@ -131,8 +136,10 @@ export function AddressAutocompleteField({
   function selectSuggestion(suggestion: AddressSuggestion) {
     onAddressChange(suggestion.address);
     onMapsUrlChange(suggestion.maps_url);
+    // Only fill boxes that are empty — never overwrite something the user typed.
+    if (suggestion.city && onCityDetected && !city.trim()) onCityDetected(suggestion.city);
     if (suggestion.region && onRegionDetected && !region.trim()) onRegionDetected(suggestion.region);
-    if (suggestion.country && onCountryDetected) onCountryDetected(suggestion.country.toUpperCase());
+    if (suggestion.country && onCountryDetected && !country.trim()) onCountryDetected(suggestion.country.toUpperCase());
     rememberSelection(suggestion);
     setSuggestions([]);
     setOpen(false);
