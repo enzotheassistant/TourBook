@@ -27,7 +27,7 @@ import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteS
 import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus, summarizeTeamAccess } from '@/lib/ui/team-directory';
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
-import { ChevronIcon, MoreIcon, PlusIcon } from '@/components/icons';
+import { ChevronIcon, EyeIcon, EyeOffIcon, MoreIcon, PlusIcon } from '@/components/icons';
 import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
 
 function slugify(value: string) {
@@ -536,6 +536,11 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   // Last deleted schedule line, kept for a few seconds so it can be undone.
   const [deletedLine, setDeletedLine] = useState<{ item: ShowFormValues['schedule_items'][number]; index: number } | null>(null);
   const deletedLineTimerRef = useRef<number | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+  }, []);
   useEffect(() => () => {
     if (deletedLineTimerRef.current) window.clearTimeout(deletedLineTimerRef.current);
   }, []);
@@ -1270,6 +1275,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   function updateVisibility(key: VisibilityKey, value: boolean) {
     setVisibilityModes((current) => ({ ...current, [key]: 'manual' }));
     setForm((current) => ({ ...current, visibility: { ...current.visibility, [key]: value } }));
+    showFlash(value ? 'Visible to crew' : 'Hidden from crew');
+  }
+
+  // Short message at the bottom of the screen (about 2 seconds).
+  function showFlash(text: string) {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    setFlash(text);
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), 2000);
   }
 
   function resetForm(nextMessage = 'Ready to create') {
@@ -2699,6 +2712,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </div>
         </div>
 
+        {flash && !deletedLine ? (
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4">
+            <div role="status" aria-live="polite" className="rounded-full border border-white/10 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 shadow-2xl shadow-black/60">
+              {flash}
+            </div>
+          </div>
+        ) : null}
+
         {deletedLine ? (
           <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 flex justify-center px-4">
             <div role="status" aria-live="polite" className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900 py-1 pl-4 pr-1 text-sm text-zinc-200 shadow-2xl shadow-black/60">
@@ -3787,12 +3808,12 @@ function CollapsibleSection({
   return (
     <section className={bubbleClassName()}>
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => onExpandedChange(!expanded)} className={`flex min-w-0 flex-1 items-center gap-2 text-left transition-opacity ${hiddenFromCrew ? 'opacity-70' : ''}`}>
-          <h2 className="truncate text-base font-semibold">{title}</h2>
+        <button type="button" onClick={() => onExpandedChange(!expanded)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <h2 className={`truncate text-base font-semibold transition-colors ${hiddenFromCrew ? 'text-zinc-500' : ''}`}>{title}</h2>
           {!expanded && hasContent ? <span className="h-2.5 w-2.5 rounded-full bg-accent-light" /> : null}
         </button>
         <div className="flex items-center gap-1">
-          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`Show ${title} to crew`} /> : null}
+          {typeof visibilityState === 'boolean' && onVisibilityToggle ? <Toggle enabled={visibilityState} onToggle={onVisibilityToggle} label={`${title}: ${visibilityState ? 'visible to crew' : 'hidden from crew'}`} /> : null}
           <button
             type="button"
             onClick={() => onExpandedChange(!expanded)}
@@ -4097,25 +4118,19 @@ function MenuButton({ label, onClick, destructive = false }: { label: string; on
 }
 
 /**
- * Sliding on/off switch for "can crew see this section?". The visible switch is
- * small, but the button around it is 44×44px so it's easy to hit with a thumb.
+ * Eye button for "can crew see this section?": open eye = visible to crew,
+ * crossed-out eye = hidden. 44×44px tap area.
  */
 function Toggle({ enabled, onToggle, label }: { enabled: boolean; onToggle: (value: boolean) => void; label: string }) {
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={enabled}
       aria-label={label}
+      aria-pressed={enabled}
       onClick={() => onToggle(!enabled)}
-      className="group -my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus:outline-none"
+      className={`-my-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${enabled ? 'text-accent-light' : 'text-zinc-500 hover:text-zinc-300'}`}
     >
-      <span
-        aria-hidden="true"
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 group-focus-visible:ring-2 group-focus-visible:ring-accent/60 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950 ${enabled ? 'bg-accent' : 'bg-zinc-700'}`}
-      >
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-      </span>
+      {enabled ? <EyeIcon /> : <EyeOffIcon />}
     </button>
   );
 }
