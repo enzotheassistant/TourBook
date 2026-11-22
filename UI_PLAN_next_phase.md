@@ -48,11 +48,12 @@ How workspaces and projects work (agreed with Phil, 2026-11-22):
 
 Roles (agreed with Phil, 2026-11-22):
 - **Viewer** (e.g. support band): day sheets, schedules, attachments. **No guest list** — the tab is hidden.
-- **Crew** (band members, crew): everything a Viewer sees, plus **add guest list names**. Can't edit or remove names (only Managers can). Phil said no visible "added by" notes; whether a hidden one is OK (so Crew could fix their own names) is still to confirm.
+- **Crew** (band members, crew): everything a Viewer sees, plus **add guest list names, and fix or remove the names they added** (typos, plus-ones). A hidden "added by" record makes this work — never shown on screen (Phil: OK as long as nobody sees who added a name). Names from before have no record, so only Managers can change those.
 - **Manager** (tour manager): the admin side (dates, tours, drafts, guest list, Quick import, delete dates) plus **invite and manage people** — only for the projects/tours they have, and never above Manager.
 - **Owner**: everything, plus create/rename/delete projects and workspace settings.
 - No separate workspace-wide Admin level (Phil: skip it). The one test account with 'admin' keeps working and shows as Manager.
 - Stored values unchanged except the new 'crew': on screen 'editor' = Manager.
+- Managers inviting to a specific tour only see tours in the bands they manage (database, server and form all check; tested with a rolled-back trial).
 - The **Admin option follows the project you're looking at**: it shows only where you're a Manager or Owner.
 - People moves (Phil's picks): all six Texas King "Editors" → **Crew** (christianmilesmusic4, drummer.mel47, jordanmacmusic, joshtrymusic, kaylin.cohen100, truffleimages). The four Viewers stay Viewers and lose the guest list.
 - Database order: part 1 (additive) applied 2026-11-22 → app update → part 3 (Viewers lose guest list; project create/rename Owner-only) → move the six to Crew.
