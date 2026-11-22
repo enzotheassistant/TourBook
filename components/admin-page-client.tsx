@@ -29,6 +29,7 @@ import { buildAcceptedTeamDirectory, matchesProjectContext, splitInvitesByStatus
 import { getRelevantSectionsForDayType, isSectionRelevantForDayType, sanitizeShowFormForDayType, type TourDaySectionKey } from '@/lib/tour-day';
 import { ChevronIcon, EyeIcon, EyeOffIcon, MoreIcon, PlusIcon } from '@/components/icons';
 import { ListSkeleton, SkeletonBlock } from '@/components/skeleton';
+import { LogoutButton } from '@/components/logout-button';
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -510,8 +511,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setActiveProjectId,
     memberships,
     refreshContext,
+    user,
   } = useAppContext();
   const router = useRouter();
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   const searchParams = useSearchParams();
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
@@ -923,7 +926,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [activeWorkspaceId, contextLoading, mode, searchParams]);
 
   useEffect(() => {
-    const routes = ['/admin/new', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/projects'];
+    const routes = ['/admin/new', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/settings'];
     routes.forEach((route) => router.prefetch(route));
     if (returnToUrl.startsWith('/')) router.prefetch(returnToUrl);
   }, [returnToUrl, router]);
@@ -2300,8 +2303,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </div>
         </div>
       ) : null}
+      {/* Dates screens only: Dates | Drafts, plus "+ New date". Team and Settings
+          are reached from the header (desktop) or the bottom bar (phones). */}
+      {!isTeamMode && !isProjectsMode ? (
       <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Operations</span>
         <button
           type="button"
           onClick={async () => {
@@ -2339,20 +2344,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           Drafts
         </button>
 
-        {canAccessAdminWorkspace(activeWorkspaceRole) ? (
-          <>
-            <span className="mx-1 hidden h-5 w-px bg-white/10 sm:inline" aria-hidden="true" />
-            <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Workspace</span>
-            {/* Phones: Team and Projects live in the header's … menu instead. */}
-            <Link href="/admin/team" className={`${adminTabClassName(isTeamMode)} max-sm:hidden`}>
-              Team
-            </Link>
-            <Link href="/admin/projects" className={`${adminTabClassName(isProjectsMode)} max-sm:hidden`}>
-              Projects
-            </Link>
-          </>
-        ) : null}
-
         {/* "+ New date" is a button (not a tab) at the end of the row. */}
         <button
           type="button"
@@ -2377,7 +2368,17 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           New date
         </button>
       </div>
+      ) : null}
 
+      {isProjectsMode ? (
+        <div className="flex min-h-10 items-center px-1">
+          <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Settings</h2>
+        </div>
+      ) : null}
+
+      {canManageProjectActions && isProjectsMode ? (
+        <h3 className="px-1 pt-1 text-sm font-medium text-zinc-400">Projects</h3>
+      ) : null}
       {canManageProjectActions && isProjectsMode ? (
         <ProjectManagementSection
           projects={workspaceProjects}
@@ -2392,6 +2393,31 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           canDeleteArtist={isWorkspaceOwner}
           onDeleteArtist={(project) => void handleDeleteArtist(project)}
         />
+      ) : null}
+
+      {/* Settings: the workspace you own or administer (renaming/switching can come later). */}
+      {isProjectsMode && canAccessAdminWorkspace(activeWorkspaceRole) && activeWorkspace ? (
+        <>
+          <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Workspace</h3>
+          <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+            <p className="text-base font-medium text-zinc-100">{activeWorkspace.name || activeWorkspace.slug}</p>
+            <p className="mt-1 text-sm text-zinc-500">Holds your projects and the people you invite.</p>
+          </section>
+        </>
+      ) : null}
+
+      {/* Settings: your account. Log out lives here. */}
+      {isProjectsMode ? (
+        <>
+          <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Your account</h3>
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+            <div className="min-w-0">
+              <p className="text-sm text-zinc-500">Signed in as</p>
+              <p className="truncate text-base text-zinc-100">{user?.email ?? '—'}</p>
+            </div>
+            <LogoutButton />
+          </section>
+        </>
       ) : null}
 
       {isTeamMode && canManageInvitesInWorkspace ? (
@@ -3042,7 +3068,6 @@ function ProjectManagementSection({
         </div>
 
         <div>
-          <p className="mb-1 text-xs uppercase tracking-[0.14em] text-zinc-500">Projects</p>
           {projects.length === 0 ? (
             <p className="text-sm text-zinc-400">No projects yet. Create your first project above.</p>
           ) : (
