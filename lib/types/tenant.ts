@@ -47,6 +47,8 @@ export type TourSummary = {
   status: string;
   startDate: string | null;
   endDate: string | null;
+  /** Set when the tour is archived (hidden from the Tour dropdown). */
+  archivedAt?: string | null;
 };
 
 export type ViewerUser = {

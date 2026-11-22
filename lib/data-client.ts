@@ -6,7 +6,7 @@ import { getBrowserSupabaseClient } from '@/lib/supabase/client';
 import { GuestListEntry, Show, ShowFormValues } from '@/lib/types';
 import type { DateAttachment } from '@/lib/types/date-record';
 import { readCachedGuestList, readCachedItinerary, readCachedShow, writeCachedGuestList, writeCachedItinerary, writeCachedShow } from '@/lib/offline-cache';
-import type { ProjectSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
+import type { ProjectSummary, TourSummary, WorkspaceInviteRole, WorkspaceInviteSummary, WorkspaceMemberDirectoryEntry, WorkspaceSummary } from '@/lib/types/tenant';
 
 type ScopeInput = {
   workspaceId?: string | null;
@@ -457,4 +457,27 @@ export async function removeWorkspaceMember(input: { workspaceId: string; member
   return request<{ ok: boolean }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}/members/${encodeURIComponent(input.memberId)}`, {
     method: 'DELETE',
   });
+}
+
+export type TourWithUsage = TourSummary & { dateCount: number; lastDate: string | null };
+
+/** Tours for one project, with how many dates use each (for Settings → Projects). */
+export async function listProjectTours(input: { workspaceId: string; projectId: string }) {
+  const params = new URLSearchParams({ workspaceId: input.workspaceId, projectId: input.projectId });
+  return request<TourWithUsage[]>(`/api/tours?${params.toString()}`);
+}
+
+/** Archive (hide from the Tour dropdown) or restore a tour. Dates keep their tour name. */
+export async function setTourArchived(input: { workspaceId: string; tourId: string; archived: boolean }) {
+  const payload = await request<{ tour: TourSummary }>(`/api/tours/${encodeURIComponent(input.tourId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ workspaceId: input.workspaceId, archived: input.archived }),
+  });
+  return payload.tour;
+}
+
+/** Delete a tour that has no dates (typos, test tours). */
+export async function deleteTour(input: { workspaceId: string; tourId: string }) {
+  const params = new URLSearchParams({ workspaceId: input.workspaceId });
+  return request<{ ok: boolean }>(`/api/tours/${encodeURIComponent(input.tourId)}?${params.toString()}`, { method: 'DELETE' });
 }

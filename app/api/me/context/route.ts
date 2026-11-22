@@ -278,6 +278,7 @@ export async function GET(request: NextRequest) {
           status: String(row.status ?? ''),
           startDate: row.start_date ? String(row.start_date) : null,
           endDate: row.end_date ? String(row.end_date) : null,
+          archivedAt: row.archived_at ? String(row.archived_at) : null,
         }));
       }
     }

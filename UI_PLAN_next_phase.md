@@ -11,7 +11,7 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 6: Team page cleanup
 - [x] Step 7: Venue fills in city, province and country
 - [x] Step 8: Bottom tab bar on phones (admin only)
-- [ ] Step 9: Managing tours (needs a database change — Phil's OK first)
+- [x] Step 9: Managing tours — on preview, pull request #21 (database change approved by Phil 2026-11-22: archived marker on tours, applied)
 - [x] Step 10 (added 2026-11-22): one flat project list in the picker — every project you can access, your own and invited ones. Built with the roles work (needed so the Admin option can follow the project you pick).
 - [x] Roles batch A (agreed 2026-11-22): Viewer / Crew / Manager / Owner — live 2026-11-22, pull request #20
 - [ ] Roles batch B (later): a different level per project inside the same workspace
@@ -45,6 +45,12 @@ How workspaces and projects work (agreed with Phil, 2026-11-22):
 - Invites give access to projects (this project, several, or all projects in the inviter's workspace). Technically, accepting makes you a limited member of the inviter's workspace.
 - You only manage what you own: Settings → Projects lists projects in workspaces you own or administer. Projects you were invited to just appear in your project list to use.
 - Proposed Step 10: the project picker shows one flat list of every project you can access (no grouping; only show the owner's workspace name next to two projects with the same name). Picking one switches to it automatically, so nobody has to "switch workspaces".
+
+Step 9 notes (2026-11-22):
+- Tour names still live on each date (that's the label everyone sees). The tours list now has an "archived" marker, and every tour name used on dates has a tour record (backfilled).
+- Fixed: saving a date with a new tour name was supposed to add it to the tours list but silently failed (it asked the database for columns that don't exist).
+- Tour dropdown: current tours (upcoming dates, or none yet) first; finished tours under "Past tours"; archived hidden unless the date already uses it. Saving a date into an archived tour brings it back.
+- Settings → Projects: tap a project to show its tours. Archive / Restore; Delete only when no dates use it and nobody's access is tied to just that tour. Owner-only for now (Settings → Projects is Owner-only).
 
 Roles (agreed with Phil, 2026-11-22):
 - **Viewer** (e.g. support band): day sheets, schedules, attachments. **No guest list** — the tab is hidden.

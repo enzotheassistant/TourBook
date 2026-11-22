@@ -57,6 +57,15 @@ export function formatDateBlock(date: string) {
   };
 }
 
+/** Today's date in the device's own time zone, as YYYY-MM-DD. */
+export function todayIsoDate() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = `${today.getMonth() + 1}`.padStart(2, '0');
+  const dd = `${today.getDate()}`.padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function isToday(date: string) {
   if (!isValidStoredDate(date)) return false;
 

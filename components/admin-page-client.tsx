@@ -12,8 +12,9 @@ import { UploadDropzoneContent, uploadDropzoneClassName } from '@/components/upl
 import { useAppContext } from '@/hooks/use-app-context';
 import { FIELD_CLASS_NAME } from '@/lib/ui/field-styles';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
-import { formatShowDate, isPastShow, isValidStoredDate, yearFromDate } from '@/lib/date';
+import { createArtist, createWorkspace, createWorkspaceInvite, deleteArtist, deleteShow, deleteTour, listProjectTours, setTourArchived, type TourWithUsage, exportGuestListCsv, getShow, listShows, listWorkspaceInvites, listWorkspaceMembers, removeWorkspaceMember, renameArtist, resendWorkspaceInvite, revokeWorkspaceInvite, updateWorkspaceMember, uploadAttachment, upsertShow } from '@/lib/data-client';
+import { formatShowDate, isPastShow, isValidStoredDate, todayIsoDate, yearFromDate } from '@/lib/date';
+import { buildTourOptions } from '@/lib/tour-options';
 import { createEmptyScheduleItems, emptyShowForm } from '@/lib/defaults';
 import { mapDateRecordToShow } from '@/lib/adapters/date-show';
 import { ensureMinimumScheduleItems } from '@/lib/normalize';
@@ -850,7 +851,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const pastTours = useMemo(() => ['All', 'Hide drafts', ...sortTourNamesForPast(pastShows)], [pastShows]);
   const filteredUpcomingShows = useMemo(() => filterShows(upcomingShows, upcomingSearch, upcomingTour), [upcomingSearch, upcomingTour, upcomingShows]);
   const filteredPastShows = useMemo(() => filterShows(pastShows, pastSearch, pastTour), [pastSearch, pastTour, pastShows]);
-  const availableTours = useMemo(() => Array.from(new Set(shows.map((show) => show.tour_name.trim()).filter(Boolean))).sort(), [shows]);
+  // Tour dropdown: current tours first, finished ones under "Past tours",
+  // archived ones hidden (unless this date already uses it).
+  const tourOptionGroups = useMemo(() => buildTourOptions({
+    dates: shows.map((show) => ({ date: show.date, tourName: show.tour_name })),
+    tours: tours.filter((tour) => tour.projectId === activeProjectId),
+    today: todayIsoDate(),
+    currentValue: form.tour_name,
+  }), [shows, tours, activeProjectId, form.tour_name]);
   const draftTours = useMemo(() => ['All', ...Array.from(new Set(draftShows.map((show) => show.tour_name.trim()).filter(Boolean))).sort()], [draftShows]);
 
   const filteredDraftShows = useMemo(() => filterShows(draftShows, draftSearch, draftTour), [draftSearch, draftTour, draftShows]);
@@ -2084,6 +2092,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
             canDeleteArtist={isWorkspaceOwner}
             onDeleteArtist={(project) => void handleDeleteArtist(project)}
+            workspaceId={activeWorkspaceId}
+            onToursChanged={() => void refreshContext({ silent: true })}
           />
         ) : null}
 
@@ -2415,6 +2425,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onRenameArtist={(projectId, name) => handleRenameArtist(projectId, name)}
           canDeleteArtist={isWorkspaceOwner}
           onDeleteArtist={(project) => void handleDeleteArtist(project)}
+            workspaceId={activeWorkspaceId}
+            onToursChanged={() => void refreshContext({ silent: true })}
         />
       ) : null}
 
@@ -2584,7 +2596,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                     </>
                   )}
                 </div>
-                <InlineTourInput key={form.id || 'new'} value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={availableTours} labelWidthClassName="w-[72px]" />
+                <InlineTourInput key={form.id || 'new'} value={form.tour_name} onChange={(value) => updateField('tour_name', value)} options={tourOptionGroups.current} pastOptions={tourOptionGroups.past} labelWidthClassName="w-[72px]" />
               </div>
             </CollapsibleSection>
 
@@ -3019,6 +3031,141 @@ function formatInviteDate(value: string) {
   return new Intl.DateTimeFormat('en-CA', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
+/**
+ * Settings → Projects → a project's tours. Archive hides a tour from the Tour
+ * dropdown (its dates keep their tour name). Delete is only for tours with no
+ * dates, like typos and test tours.
+ */
+function ProjectToursPanel({ workspaceId, projectId, onChanged }: { workspaceId: string; projectId: string; onChanged?: () => void }) {
+  const [tours, setTours] = useState<TourWithUsage[] | null>(null);
+  const [error, setError] = useState('');
+  const [busyTourId, setBusyTourId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setError('');
+      setTours(await listProjectTours({ workspaceId, projectId }));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Couldn\'t load tours.');
+      setTours([]);
+    }
+  }, [workspaceId, projectId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!confirmDeleteId) return;
+    const timer = window.setTimeout(() => setConfirmDeleteId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirmDeleteId]);
+
+  async function handleArchive(tour: TourWithUsage, archived: boolean) {
+    setBusyTourId(tour.id);
+    setError('');
+    try {
+      await setTourArchived({ workspaceId, tourId: tour.id, archived });
+      await load();
+      onChanged?.();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Couldn\'t update the tour.');
+    } finally {
+      setBusyTourId(null);
+    }
+  }
+
+  async function handleDelete(tour: TourWithUsage) {
+    if (confirmDeleteId !== tour.id) {
+      setConfirmDeleteId(tour.id);
+      return;
+    }
+    setConfirmDeleteId(null);
+    setBusyTourId(tour.id);
+    setError('');
+    try {
+      await deleteTour({ workspaceId, tourId: tour.id });
+      await load();
+      onChanged?.();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Couldn\'t delete the tour.');
+    } finally {
+      setBusyTourId(null);
+    }
+  }
+
+  if (tours === null) {
+    return <p className="pb-1 pl-3 text-sm text-zinc-500">Loading tours…</p>;
+  }
+
+  const active = tours.filter((tour) => !tour.archivedAt);
+  const archived = tours.filter((tour) => tour.archivedAt);
+
+  function describe(tour: TourWithUsage) {
+    if (!tour.dateCount) return 'No dates yet';
+    const count = `${tour.dateCount} ${tour.dateCount === 1 ? 'date' : 'dates'}`;
+    return tour.lastDate ? `${count} · last ${formatShowDate(tour.lastDate)}` : count;
+  }
+
+  function renderTour(tour: TourWithUsage) {
+    const busy = busyTourId === tour.id;
+    return (
+      <li key={tour.id} className="flex items-center justify-between gap-3 py-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm text-zinc-100">{tour.name}</p>
+          <p className="text-xs text-zinc-500">{describe(tour)}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleArchive(tour, !tour.archivedAt)}
+            className="inline-flex min-h-9 items-center rounded-[10px] px-3 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100 disabled:opacity-50"
+          >
+            {tour.archivedAt ? 'Restore' : 'Archive'}
+          </button>
+          {tour.dateCount === 0 ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleDelete(tour)}
+              className="inline-flex min-h-9 items-center rounded-[10px] px-3 text-sm text-red-200 transition hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {confirmDeleteId === tour.id ? 'Tap to delete' : 'Delete'}
+            </button>
+          ) : null}
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <div className="ml-3 border-l border-white/[0.08] pb-1 pl-3">
+      {error ? <p className="py-1 text-sm text-red-200">{error}</p> : null}
+      {active.length === 0 && archived.length === 0 ? (
+        <p className="py-1 text-sm text-zinc-500">No tours yet. A tour is created when you type a new one in the Tour box on a date.</p>
+      ) : null}
+      {active.length ? <ul className="divide-y divide-white/[0.06]">{active.map(renderTour)}</ul> : null}
+      {archived.length ? (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowArchived((current) => !current)}
+            aria-expanded={showArchived}
+            className="inline-flex min-h-9 items-center gap-1 text-sm text-zinc-400 transition hover:text-zinc-200"
+          >
+            Archived ({archived.length})
+            <ChevronDownIcon className={`h-4 w-4 transition ${showArchived ? 'rotate-180' : ''}`} />
+          </button>
+          {showArchived ? <ul className="divide-y divide-white/[0.06]">{archived.map(renderTour)}</ul> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ProjectManagementSection({
   projects,
   activeProjectId,
@@ -3026,25 +3173,33 @@ function ProjectManagementSection({
   creatingArtist,
   renamingArtist,
   onNewArtistNameChange,
-  onSelectProject,
   onCreateArtist,
   onRenameArtist,
   canDeleteArtist,
   onDeleteArtist,
+  workspaceId,
+  onToursChanged,
 }: {
   projects: ProjectSummary[];
   activeProjectId: string | null;
+  /** For loading each project's tours when it's tapped. */
+  workspaceId?: string | null;
+  /** Called after a tour is archived, restored or deleted. */
+  onToursChanged?: () => void;
   newArtistName: string;
   creatingArtist: boolean;
   renamingArtist: boolean;
   onNewArtistNameChange: (value: string) => void;
-  onSelectProject: (projectId: string | null) => void;
+  /** No longer used here (tapping a project shows its tours); kept so callers don't change. */
+  onSelectProject?: (projectId: string | null) => void;
   onCreateArtist: () => void;
   onRenameArtist: (projectId: string, name: string) => Promise<void>;
   canDeleteArtist: boolean;
   onDeleteArtist: (project: ProjectSummary) => void;
 }) {
   const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
+  // Tapping a project shows its tours underneath.
+  const [toursProjectId, setToursProjectId] = useState<string | null>(null);
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const menuRootRef = useRef<HTMLDivElement | null>(null);
@@ -3100,9 +3255,17 @@ function ProjectManagementSection({
                 return (
                   <div key={project.id} className="py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <button type="button" onClick={() => onSelectProject(project.id)} className="min-h-10 min-w-0 flex-1 text-left">
-                        <p className="truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</p>
-                        {isActive ? <p className="text-xs text-zinc-400">Currently selected</p> : null}
+                      <button
+                        type="button"
+                        onClick={() => setToursProjectId((current) => (current === project.id ? null : project.id))}
+                        aria-expanded={toursProjectId === project.id}
+                        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</span>
+                          <span className="block text-xs text-zinc-400">{toursProjectId === project.id ? 'Hide tours' : 'Show tours'}{isActive ? ' · Currently selected' : ''}</span>
+                        </span>
+                        <ChevronDownIcon className={`h-4 w-4 shrink-0 text-zinc-500 transition ${toursProjectId === project.id ? 'rotate-180' : ''}`} />
                       </button>
                       <div className="relative">
                         <button
@@ -3149,6 +3312,9 @@ function ProjectManagementSection({
                         ) : null}
                       </div>
                     </div>
+                    {toursProjectId === project.id && workspaceId ? (
+                      <ProjectToursPanel workspaceId={workspaceId} projectId={project.id} onChanged={onToursChanged} />
+                    ) : null}
                   </div>
                 );
               })}
@@ -4567,9 +4733,9 @@ function SelectField({
 }
 
 
-function InlineTourInput({ value, onChange, options, labelWidthClassName }: { value: string; onChange: (value: string) => void; options: string[]; labelWidthClassName?: string }) {
+function InlineTourInput({ value, onChange, options, pastOptions = [], labelWidthClassName }: { value: string; onChange: (value: string) => void; options: string[]; pastOptions?: string[]; labelWidthClassName?: string }) {
   const [forceCreatingNew, setForceCreatingNew] = useState(false);
-  const inferredCreatingNew = !options.includes(value) && value.trim().length > 0;
+  const inferredCreatingNew = !options.includes(value) && !pastOptions.includes(value) && value.trim().length > 0;
   const creatingNew = forceCreatingNew || inferredCreatingNew;
   const selectedValue = creatingNew ? '__new__' : value;
 
@@ -4599,6 +4765,15 @@ function InlineTourInput({ value, onChange, options, labelWidthClassName }: { va
               </option>
             ))}
             <option value="__new__">Create new tour…</option>
+            {pastOptions.length ? (
+              <optgroup label="Past tours">
+                {pastOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </select>
           <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-zinc-400">
             <ChevronDownIcon />
