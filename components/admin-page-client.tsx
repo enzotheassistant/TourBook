@@ -625,7 +625,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   );
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
+  // Owns at least one workspace (if not, Settings offers to start one).
+  const ownsAWorkspace = memberships.some((membership) => membership.role === 'owner');
   const canManageProjectActions = canManageProjects(activeWorkspaceRole);
+  // Bands in this workspace where you're a Manager (for tidying tours in Settings).
+  const managedSettingsProjects = useMemo(
+    () => workspaceProjects.filter((project) => canAccessAdminWorkspace(getProjectRole(memberships, activeWorkspaceId, project.id))),
+    [workspaceProjects, memberships, activeWorkspaceId],
+  );
   const canManageInvitesInWorkspace = canManageInvites(activeProjectRole);
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   // The first band (in any workspace) where this person is a Manager or Owner.
@@ -2484,14 +2491,41 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         />
       ) : null}
 
-      {/* Settings: the workspace you own or administer (renaming/switching can come later). */}
+      {/* Managers: the bands they manage, to tidy up tours (no create/rename/delete). */}
+      {!canManageProjectActions && isProjectsMode && activeWorkspaceId && managedSettingsProjects.length ? (
+        <>
+          <h3 className="px-1 text-sm font-medium text-zinc-400">Projects</h3>
+          <ManagedProjectToursSection
+            projects={managedSettingsProjects}
+            workspaceId={activeWorkspaceId}
+            onToursChanged={() => void refreshContext({ silent: true })}
+          />
+        </>
+      ) : null}
+
+      {/* Settings: the workspace you own (Rename is for the owner). */}
       {isProjectsMode && canManageProjectActions && activeWorkspace ? (
         <>
           <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Workspace</h3>
-          <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-            <p className="text-base font-medium text-zinc-100">{activeWorkspace.name || activeWorkspace.slug}</p>
-            <p className="mt-1 text-sm text-zinc-500">Holds your projects and the people you invite.</p>
-          </section>
+          <WorkspaceCard
+            key={activeWorkspace.id}
+            workspace={activeWorkspace}
+            canRename={isWorkspaceOwner}
+            onRenamed={() => refreshContext({ silent: true })}
+          />
+        </>
+      ) : null}
+
+      {/* Don't own a workspace yet (e.g. a tour manager invited by someone else)? Start one. */}
+      {isProjectsMode && !ownsAWorkspace ? (
+        <>
+          <h3 className="px-1 pt-2 text-sm font-medium text-zinc-400">Your own workspace</h3>
+          <StartWorkspaceCard
+            onCreated={async (workspaceId) => {
+              await refreshContext();
+              setActiveWorkspaceId(workspaceId);
+            }}
+          />
         </>
       ) : null}
 
@@ -3217,6 +3251,37 @@ function ProjectToursPanel({ workspaceId, projectId, onChanged }: { workspaceId:
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Settings → Projects for Managers: tap a band to see and tidy its tours. */
+function ManagedProjectToursSection({ projects, workspaceId, onToursChanged }: { projects: ProjectSummary[]; workspaceId: string; onToursChanged?: () => void }) {
+  const [openProjectId, setOpenProjectId] = useState<string | null>(projects.length === 1 ? projects[0].id : null);
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.045] p-2 sm:p-3">
+      <div className="divide-y divide-white/[0.06]">
+        {projects.map((project) => {
+          const open = openProjectId === project.id;
+          return (
+            <div key={project.id} className="py-1">
+              <button
+                type="button"
+                onClick={() => setOpenProjectId((current) => (current === project.id ? null : project.id))}
+                aria-expanded={open}
+                className="flex min-h-10 w-full items-center gap-2 rounded-[10px] px-2 text-left transition hover:bg-white/[0.04]"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-zinc-100">{project.name || project.slug || project.id}</span>
+                  <span className="block text-xs text-zinc-400">{open ? 'Hide tours' : 'Show tours'}</span>
+                </span>
+                <ChevronDownIcon className={`h-4 w-4 shrink-0 text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
+              </button>
+              {open ? <ProjectToursPanel workspaceId={workspaceId} projectId={project.id} onChanged={onToursChanged} /> : null}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
