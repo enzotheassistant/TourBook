@@ -276,6 +276,10 @@ function getAdminListSubLabel(show: Show): string | null {
   return show.venue_name || null;
 }
 
+function initialEditTabFromParams(mode: string, params: { get(name: string): string | null }) {
+  return mode === 'new' && Boolean(params.get('edit'));
+}
+
 function getDayTypeBadge(dayType: TourDayType) {
   if (dayType === 'travel') return 'Travel day';
   if (dayType === 'off') return 'Off day';
@@ -512,6 +516,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const datesTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const isDraftsMode = mode === 'drafts';
   const isTeamMode = mode === 'team';
+  // Opening a date to edit (?edit=…): remember which list it came from so the
+  // right tab (Dates or Drafts) is highlighted from the first moment, before
+  // the date has finished loading.
+  const [initialEditTab] = useState<'dates' | 'drafts' | null>(() =>
+    mode === 'new' && searchParams.get('edit') ? (searchParams.get('returnTo') === '/admin/drafts' ? 'drafts' : 'dates') : null,
+  );
+  const [editLinkActive, setEditLinkActive] = useState(() => initialEditTabFromParams(mode, searchParams));
   const isProjectsMode = mode === 'projects';
   const statusMessage = searchParams.get('message');
   const contextProjectId = searchParams.get('contextProjectId');
@@ -560,7 +571,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   const [draftSearch, setDraftSearch] = useState('');
   const [draftTour, setDraftTour] = useState('All');
   const [returnToUrl, setReturnToUrl] = useState('/admin/dates');
-  const [returnLabel, setReturnLabel] = useState('Existing dates');
+  const [returnLabel, setReturnLabel] = useState('Dates');
   const [editorBootstrapLoading, setEditorBootstrapLoading] = useState(false);
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; description: string; confirmLabel?: string; tone?: 'default' | 'danger' }>({ open: false, title: '', description: '' });
   const [importOpen, setImportOpen] = useState(false);
@@ -888,7 +899,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
         handledLoadRef.current = nextAction;
         if (typeof window !== 'undefined') {
-          window.history.replaceState({}, '', '/admin');
+          window.history.replaceState({}, '', '/admin/new');
         }
       } catch {
         if (!active) return;
@@ -904,7 +915,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }, [activeWorkspaceId, contextLoading, mode, searchParams]);
 
   useEffect(() => {
-    const routes = ['/admin', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/projects'];
+    const routes = ['/admin/new', '/admin/dates', '/admin/drafts', '/admin/team', '/admin/projects'];
     routes.forEach((route) => router.prefetch(route));
     if (returnToUrl.startsWith('/')) router.prefetch(returnToUrl);
   }, [returnToUrl, router]);
@@ -919,14 +930,14 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
 
     if (returnTo && returnTo !== 'dates' && (editId || duplicateId)) {
       setReturnToUrl(returnTo);
-      setReturnLabel(returnTo === '/admin/drafts' ? 'Drafts' : 'Existing dates');
+      setReturnLabel(returnTo === '/admin/drafts' ? 'Drafts' : 'Dates');
     } else if (returnTo === 'show' && (editId || duplicateId)) {
       const targetId = editId ?? duplicateId;
       setReturnToUrl(`/shows/${encodeURIComponent(targetId ?? '')}?admin=1`);
       setReturnLabel('Date');
     } else {
       setReturnToUrl(`/admin/dates?tab=${returnTab}`);
-      setReturnLabel('Existing dates');
+      setReturnLabel('Dates');
     }
   }, [mode, searchParams]);
 
@@ -1266,11 +1277,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     setVisibilityModes(nextModes);
     setExpandedSections(readExpandedSectionsPreference());
     setDeletedLine(null);
+    setEditLinkActive(false);
     setForm(applyAutoVisibility({ ...emptyShowForm, schedule_items: createEmptyScheduleItems() }, nextModes));
     setPendingAttachments([]);
     handledLoadRef.current = null;
     if (typeof window !== 'undefined') {
-      window.history.replaceState({}, '', '/admin');
+      window.history.replaceState({}, '', '/admin/new');
     }
     setMessage(nextMessage);
     setDirty(false);
@@ -1853,6 +1865,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   }
 
   const isEditingDraft = isEditing && form.status === 'draft';
+  const openingFromEditLink = initialEditTab !== null && editLinkActive && !isEditing;
+  const datesTabActive = mode === 'dates' || (isEditing && form.status !== 'draft') || (openingFromEditLink && initialEditTab === 'dates');
+  const draftsTabActive = mode === 'drafts' || isEditingDraft || (openingFromEditLink && initialEditTab === 'drafts');
   const editorCopy = getEditorCopy(form.day_type);
   const primaryActionLabel = saving ? 'Saving...' : form.status === 'draft' ? 'Save draft' : isEditing ? 'Save changes' : 'Create date';
 
@@ -2223,25 +2238,6 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           </div>
         </div>
       ) : null}
-      {mode === 'new' && isEditing ? (
-        <div className="mb-2">
-          <button
-            type="button"
-            onClick={async () => {
-              if (dirty) {
-                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and return to ${returnLabel}?`, confirmLabel: 'Discard' });
-                if (!confirmed) return;
-              }
-              router.push(returnToUrl);
-            }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
-            aria-label={`Back to ${returnLabel}`}
-          >
-            ←
-          </button>
-        </div>
-      ) : null}
-
       <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span className="hidden px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 sm:inline">Operations</span>
         <button
@@ -2249,30 +2245,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           onClick={async () => {
             if (mode === 'new') {
               if (dirty) {
-                const confirmed = await requestConfirmation({
-                  title: 'Discard edits?',
-                  description: isEditing
-                    ? 'You have unsaved edits. Start a new date instead?'
-                    : 'You have unsaved changes. Start a fresh new date?',
-                  confirmLabel: 'Discard',
-                });
-                if (!confirmed) return;
-              }
-              resetForm('Ready to create');
-              return;
-            }
-            router.push('/admin');
-          }}
-          className={adminTabClassName(mode === 'new' && !isEditing)}
-        >
-          New date
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (mode === 'new') {
-              if (dirty) {
-                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Return to Existing dates instead?', confirmLabel: 'Discard' });
+                const confirmed = await requestConfirmation({ title: 'Discard edits?', description: 'You have unsaved edits. Go back to your dates instead?', confirmLabel: 'Discard' });
                 if (!confirmed) return;
               }
               router.push('/admin/dates');
@@ -2280,9 +2253,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             }
             router.push('/admin/dates');
           }}
-          className={adminTabClassName(mode === 'dates' || (isEditing && form.status !== 'draft'))}
+          className={adminTabClassName(datesTabActive)}
+          aria-current={datesTabActive ? 'page' : undefined}
         >
-          Existing dates
+          Dates
         </button>
         <button
           type="button"
@@ -2297,7 +2271,8 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             }
             router.push('/admin/drafts');
           }}
-          className={adminTabClassName(mode === 'drafts' || isEditingDraft)}
+          className={adminTabClassName(draftsTabActive)}
+          aria-current={draftsTabActive ? 'page' : undefined}
         >
           Drafts
         </button>
@@ -2315,6 +2290,30 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             </Link>
           </>
         ) : null}
+
+        {/* "+ New date" is a button (not a tab) at the end of the row. */}
+        <button
+          type="button"
+          onClick={async () => {
+            if (mode === 'new' && dirty) {
+              const confirmed = await requestConfirmation({
+                title: 'Discard edits?',
+                description: isEditing ? 'You have unsaved edits. Start a new date instead?' : 'You have unsaved changes. Start a fresh new date?',
+                confirmLabel: 'Discard',
+              });
+              if (!confirmed) return;
+            }
+            if (mode === 'new' && !isEditing && !form.id) {
+              resetForm('Ready to create');
+              return;
+            }
+            router.push('/admin/new');
+          }}
+          className="ml-auto inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent-soft px-3 text-sm font-medium text-accent-light transition hover:border-accent/55"
+        >
+          <PlusIcon />
+          New date
+        </button>
       </div>
 
       {canManageProjectActions && isProjectsMode ? (
@@ -2394,9 +2393,27 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
           {/* Title row: "New show day" / "Edit travel day" … with Import on the right.
               Expand/Collapse all sit in this row on desktop and just below it on phones. */}
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-zinc-50">
-              {`${isEditing ? 'Edit' : 'New'} ${getDayTypeBadge(form.day_type).toLowerCase()}`}
-            </h1>
+            <div className="flex min-w-0 items-center gap-2">
+              {isEditing ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (dirty) {
+                      const confirmed = await requestConfirmation({ title: 'Discard edits?', description: `Discard current edits and go back to ${returnLabel.toLowerCase()}?`, confirmLabel: 'Discard' });
+                      if (!confirmed) return;
+                    }
+                    router.push(returnToUrl);
+                  }}
+                  className="-ml-2 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-zinc-300 transition hover:bg-white/[0.06] hover:text-zinc-100"
+                  aria-label={`Back to ${returnLabel.toLowerCase()}`}
+                >
+                  ←
+                </button>
+              ) : null}
+              <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-zinc-50">
+                {`${isEditing ? 'Edit' : 'New'} ${getDayTypeBadge(form.day_type).toLowerCase()}`}
+              </h1>
+            </div>
             <div className="flex shrink-0 items-center gap-4">
               <div className="hidden items-center gap-3 text-xs text-zinc-500 sm:flex">
                 <button type="button" onClick={expandAllSections} className="transition hover:text-zinc-300">
@@ -3793,7 +3810,7 @@ function CollapsibleSection({
 }
 
 
-/** Small two-part switch for Existing dates: Upcoming | Past. */
+/** Small two-part switch on the Dates list: Upcoming | Past. */
 function UpcomingPastSwitch({ active }: { active: 'upcoming' | 'past' }) {
   const segment = (selected: boolean) =>
     `inline-flex min-h-9 items-center rounded-[8px] px-3 text-sm transition ${selected ? 'bg-accent-soft font-medium text-accent-light' : 'text-zinc-400 hover:text-zinc-100'}`;

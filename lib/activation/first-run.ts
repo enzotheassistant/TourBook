@@ -21,7 +21,7 @@ export function getCrewNoArtistsState(role: WorkspaceRole | null | undefined, ha
           title: 'No project is active for this workspace.',
           body: 'This workspace has projects, but none is selected in your current session. Open Admin, confirm workspace + project, then return here.',
           actions: [
-            { label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+            { label: 'Go to admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
             { label: 'View past dates', href: '/?tab=past', ctaId: 'view_past_dates' },
           ],
         }
@@ -36,7 +36,7 @@ export function getCrewNoArtistsState(role: WorkspaceRole | null | undefined, ha
     return {
       title: 'No projects found in this workspace.',
       body: 'To activate Crew dates, create the first project in Admin. This unlocks date creation and publishing.',
-      actions: [{ label: 'Go to Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }],
+      actions: [{ label: 'Go to admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }],
     };
   }
 
@@ -55,7 +55,7 @@ export function getCrewNoUpcomingDatesState(role: WorkspaceRole | null | undefin
     return {
       body: 'No upcoming dates are published yet. Create the first date in Admin to activate this dashboard.',
       actions: [
-        { label: 'Create first date', href: '/admin', tone: 'primary', ctaId: 'create_first_date' },
+        { label: 'Create first date', href: '/admin/new', tone: 'primary', ctaId: 'create_first_date' },
         { label: 'Past dates', href: '/?tab=past', ctaId: 'view_past_dates' },
       ],
     };
