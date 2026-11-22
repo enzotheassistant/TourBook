@@ -9,9 +9,10 @@ To resume in a new session: "Continue the UI plan in UI_PLAN_next_phase.md" → 
 - [x] Step 4: Eye icons for "Visible to crew"
 - [x] Step 5: Compact schedule editor
 - [x] Step 6: Team page cleanup
-- [ ] Step 7: Venue fills in city, province and country
-- [ ] Step 8: Bottom tab bar on phones (admin only)
+- [x] Step 7: Venue fills in city, province and country
+- [x] Step 8: Bottom tab bar on phones (admin only)
 - [ ] Step 9: Managing tours (needs a database change — Phil's OK first)
+- [ ] Step 10 (added 2026-11-22, proposed — confirm with Phil): one flat project list in the picker — every project you can access, your own and invited ones
 
 ## Notes for Phil
 
@@ -33,7 +34,15 @@ Batch 2 (Steps 4–6) — live 2026-11-22, pull request #18:
 - Step 6: one role control per person, owner first, project line only in "All projects" view, Invite button at the top, new invites default to This project, Create invite last, history folded away.
 - Data check (read-only): 15 "revoked" invite records belong to ~10 people who are current members and also have an accepted invite. They're older invites replaced when re-sent (Apr 30–May 3) — history, not broken data. Nothing changed.
 
-Open question before Step 8 (Phil, 2026-11-22): Crew view doesn't belong under "Account", and should Team and Projects be one section? Waiting on Phil's answer to the proposal in chat before building Step 8.
+Batch 3 (Steps 7–8) — on preview, pull request #19 (branch `ui-phase-5-batch3`):
+- Step 7: picking a venue fills City / Region / Country only into empty boxes (country used to overwrite; city was never filled). Hotel search fills region/country only, only when empty. Date box shows "Tue, Dec 1, 2026" when not being edited; saved value unchanged.
+- Step 8 (changed from the written plan, agreed with Phil): sections are **Dates · Team · Settings** — bottom bar on phones (hidden in the editor), top header on desktop. **Crew view** is its own header button (not under Account). Settings = Projects (create/rename/delete), Workspace (shows its name; rename/switch could come later), Your account (email, Log out). The admin "…" menu is gone. `/admin/projects` forwards to `/admin/settings`.
+
+How workspaces and projects work (agreed with Phil, 2026-11-22):
+- A workspace is what you own (basically your account/business). Not everyone needs one — people who are only invited never create one; you only need your own to create your own projects.
+- Invites give access to projects (this project, several, or all projects in the inviter's workspace). Technically, accepting makes you a limited member of the inviter's workspace.
+- You only manage what you own: Settings → Projects lists projects in workspaces you own or administer. Projects you were invited to just appear in your project list to use.
+- Proposed Step 10: the project picker shows one flat list of every project you can access (no grouping; only show the owner's workspace name next to two projects with the same name). Picking one switches to it automatically, so nobody has to "switch workspaces".
 
 ---
 
