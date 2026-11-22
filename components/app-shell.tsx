@@ -184,7 +184,7 @@ export function AppShell({
     ? true
     : canAccessAdminWorkspace(activeWorkspaceRole) || hasAnyAdminAccess(memberships);
   const actionHref = mode === 'admin' ? '/' : '/admin';
-  const actionLabel = mode === 'admin' ? 'Crew View' : 'Admin';
+  const actionLabel = mode === 'admin' ? 'Crew view' : 'Admin';
   const isCrewList = mode === 'crew' && pathname === '/';
   const scopedProjects = useMemo(() => getProjectsForWorkspace(projects, activeWorkspaceId), [projects, activeWorkspaceId]);
   const currentProject = scopedProjects.find((project) => project.id === activeProjectId) ?? scopedProjects[0] ?? null;
@@ -237,7 +237,7 @@ export function AppShell({
               ) : (
                 <>
                   <div className="flex shrink-0 items-center gap-2 sm:hidden">
-                    <HeaderActionMenu actionHref={showAdminLink ? actionHref : '/'} actionLabel={showAdminLink ? actionLabel : 'Crew View'} />
+                    <HeaderActionMenu actionHref={showAdminLink ? actionHref : '/'} actionLabel={showAdminLink ? actionLabel : 'Crew view'} />
                   </div>
                   <div className="hidden shrink-0 items-center gap-2 sm:flex">
                     {showAdminLink ? (

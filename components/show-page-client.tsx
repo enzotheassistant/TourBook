@@ -125,7 +125,7 @@ function getHeaderMetaLine(show: Show) {
 // Just the day type under the venue. Hotel, tour name and schedule details
 // already appear in their own sections below, so repeating them here was noise.
 function getHeaderSupportMeta(show: Show) {
-  return show.day_type === 'travel' ? 'Travel Day' : show.day_type === 'off' ? 'Off Day' : 'Show Day';
+  return show.day_type === 'travel' ? 'Travel day' : show.day_type === 'off' ? 'Off day' : 'Show day';
 }
 
 
@@ -271,7 +271,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
   const headerMetaLine = getHeaderMetaLine(show);
   const headerSupportMeta = getHeaderSupportMeta(show);
-  const daySheetTitle = show.day_type === 'show' ? 'Day Sheet' : 'Day Details';
+  const daySheetTitle = show.day_type === 'show' ? 'Day sheet' : 'Day details';
   const canShowGuestList = show.day_type === 'show';
   const hasAnyDayDetails = hasLocation(show) || Boolean(show.parking_load_info) || visibleScheduleItems.length > 0 || Boolean(show.dos_name || show.dos_phone) || hasAccommodation(show) || Boolean(show.notes);
 
@@ -327,7 +327,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         <div className="rounded-xl border border-white/10 bg-white/[0.045] p-1">
           <div className={`grid gap-1 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
-            {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
+            {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest list</button> : null}
           </div>
         </div>
 
@@ -406,7 +406,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
 
               {!hasAnyDayDetails ? (
-                <SectionCard title="Day Details">
+                <SectionCard title="Day details">
                   <div className="space-y-2">
                     <p className="text-sm text-zinc-100">This {show.day_type} day is on the itinerary, but the crew-facing details have not been filled in yet.</p>
                     <p className="text-sm leading-6 text-zinc-400">The date is locked in, but routing, lodging, contacts, or notes have not been added for this screen yet.</p>
@@ -417,7 +417,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
             </>
           )
         ) : (
-          <SectionCard title="Guest List"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>
+          <SectionCard title="Guest list"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>
         )}
       </main>
     </div>
