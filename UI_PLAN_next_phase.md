@@ -27,7 +27,7 @@ Batch 1 (Steps 1–3) — live 2026-11-22, pull request #17:
 - Step 3: the tab switch no longer calls the server (URL updated in the browser), and the guest list loads in the background when the date opens, so switching is instant.
 - The blue dot next to section names: shown only when a section is folded shut, and it means the section already has something filled in. Reported to Phil; left as is unless he wants it changed.
 
-Batch 2 (Steps 4–6) — on preview, pull request #18 (branch `ui-phase-5-batch2`):
+Batch 2 (Steps 4–6) — live 2026-11-22, pull request #18:
 - Step 4: eye buttons (open = visible to crew, crossed-out = hidden), grey title when hidden, 2-second "Visible to crew" / "Hidden from crew" message. Screen-reader label "<Section>: visible to crew / hidden from crew".
 - Step 5: one row per schedule item; Delete in the "…" menu, no pop-up, Undo message kept. No reordering existed, so none to keep. Per Phil's feedback: **Item on the left, Time on the right**, and the Time box sizes itself to what's typed (no scrolling inside it). If a long time (e.g. "5:00 - 7:00 PM") would make the row cramped, the time drops to its own line under the item for that line only.
 - Step 6: one role control per person, owner first, project line only in "All projects" view, Invite button at the top, new invites default to This project, Create invite last, history folded away.
