@@ -55,6 +55,8 @@ export type GuestListEntry = {
   show_id: string;
   name: string;
   created_at: string;
+  /** True when the signed-in person added this name (lets Crew fix their own names). */
+  added_by_me?: boolean;
 };
 
 export type ShowFormValues = Omit<Show, 'created_at' | 'updated_at'> & {

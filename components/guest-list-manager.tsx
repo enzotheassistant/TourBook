@@ -69,9 +69,11 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
 
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at)), [entries]);
   const workspaceRole = useMemo(() => getWorkspaceRole(memberships, activeWorkspaceId), [memberships, activeWorkspaceId]);
-  // Crew can add names; only Managers and Owners can edit or remove them.
+  // Crew can add names and fix/remove the ones they added. Managers and
+  // Owners can change any name. (Who added a name is never shown.)
   const canAddToGuestList = canAddGuests(workspaceRole);
   const canManageGuestList = canEditGuests(workspaceRole);
+  const canChangeEntry = (entry: { added_by_me?: boolean }) => canManageGuestList || (canAddToGuestList && entry.added_by_me === true);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,8 +97,9 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleDelete(entryId: string) {
-    if (!canManageGuestList) {
-      setError('Only managers can change or remove names. Ask your tour manager.');
+    const target = entries.find((entry) => entry.id === entryId);
+    if (!target || !canChangeEntry(target)) {
+      setError('You can only change names you added.');
       return;
     }
     setError('');
@@ -110,8 +113,9 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
   }
 
   async function handleSaveEdit(entryId: string) {
-    if (!canManageGuestList) {
-      setError('Only managers can change or remove names. Ask your tour manager.');
+    const target = entries.find((entry) => entry.id === entryId);
+    if (!target || !canChangeEntry(target)) {
+      setError('You can only change names you added.');
       return;
     }
     const trimmed = editingValue.trim();
@@ -184,7 +188,7 @@ export function GuestListManager({ showId, note, showNote }: { showId: string; n
                 ) : (
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-zinc-100">{entry.name}</span>
-                    {canManageGuestList ? (
+                    {canChangeEntry(entry) ? (
                       <div data-guest-menu-root="true" className="relative">
                         <button type="button" onClick={() => setOpenMenuId(menuOpen ? null : entry.id)} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05]">
                           <DotsIcon />
