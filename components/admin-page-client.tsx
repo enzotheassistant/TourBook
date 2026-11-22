@@ -616,24 +616,40 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     () => tours.filter((tour) => tour.workspaceId === activeWorkspaceId),
     [tours, activeWorkspaceId],
   );
+  // When inviting or changing people, a Manager limited to some bands only
+  // sees those bands' projects and tours. (The server refuses anything else
+  // too; this keeps the choices honest.)
+  const activeMembership = memberships.find((membership) => membership.workspaceId === activeWorkspaceId) ?? null;
+  const canInviteToAllProjects = canManageProjects(activeWorkspaceRole) || activeMembership?.scopeType === 'workspace';
+  const teamProjects = useMemo(() => {
+    if (canInviteToAllProjects) return workspaceProjects;
+    const allowed = new Set(activeMembership?.projectIds ?? []);
+    return workspaceProjects.filter((project) => allowed.has(project.id));
+  }, [activeMembership, canInviteToAllProjects, workspaceProjects]);
+  const teamTours = useMemo(() => {
+    if (canInviteToAllProjects) return workspaceTours;
+    if (activeMembership?.scopeType === 'tours') {
+      const allowedTours = new Set(activeMembership.tourIds);
+      return workspaceTours.filter((tour) => allowedTours.has(tour.id));
+    }
+    const allowedProjects = new Set(activeMembership?.projectIds ?? []);
+    return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
+  }, [activeMembership, canInviteToAllProjects, workspaceTours]);
   const inviteAvailableTours = useMemo(() => {
-    if (inviteScopeType !== 'tours') return workspaceTours;
-    if (inviteProjectIds.length === 0) return workspaceTours;
+    if (inviteScopeType !== 'tours') return teamTours;
+    if (inviteProjectIds.length === 0) return teamTours;
     const allowedProjects = new Set(inviteProjectIds);
-    return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
-  }, [inviteProjectIds, inviteScopeType, workspaceTours]);
+    return teamTours.filter((tour) => allowedProjects.has(tour.projectId));
+  }, [inviteProjectIds, inviteScopeType, teamTours]);
   const editAvailableTours = useMemo(() => {
-    if (editingMemberScopeType !== 'tours') return workspaceTours;
-    if (editingMemberProjectIds.length === 0) return workspaceTours;
+    if (editingMemberScopeType !== 'tours') return teamTours;
+    if (editingMemberProjectIds.length === 0) return teamTours;
     const allowedProjects = new Set(editingMemberProjectIds);
-    return workspaceTours.filter((tour) => allowedProjects.has(tour.projectId));
-  }, [editingMemberProjectIds, editingMemberScopeType, workspaceTours]);
+    return teamTours.filter((tour) => allowedProjects.has(tour.projectId));
+  }, [editingMemberProjectIds, editingMemberScopeType, teamTours]);
   const canCreateArtistInWorkspace = canCreateArtists(activeWorkspaceRole);
   const isWorkspaceOwner = activeWorkspaceRole === 'owner';
   const canManageProjectActions = canManageProjects(activeWorkspaceRole);
-  // Managers limited to some projects can't invite people to "All projects".
-  const activeMembership = memberships.find((membership) => membership.workspaceId === activeWorkspaceId) ?? null;
-  const canInviteToAllProjects = canManageProjectActions || activeMembership?.scopeType === 'workspace';
   const canManageInvitesInWorkspace = canManageInvites(activeWorkspaceRole);
   const hasAdminAnywhere = useMemo(() => hasAnyAdminAccess(memberships), [memberships]);
   const firstAdminWorkspaceId = useMemo(() => getFirstAdminWorkspaceId(memberships), [memberships]);
@@ -1284,12 +1300,12 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
   // admins always get the whole workspace.
   function applyThisProjectInviteScope() {
     const thisProjectId = contextProjectId || activeProjectId;
-    if (thisProjectId && inviteRole !== 'admin' && workspaceProjects.some((project) => project.id === thisProjectId)) {
+    if (thisProjectId && inviteRole !== 'admin' && teamProjects.some((project) => project.id === thisProjectId)) {
       setInviteScopeType('projects');
       setInviteProjectIds([thisProjectId]);
-    } else if (!canInviteToAllProjects && workspaceProjects[0]) {
+    } else if (!canInviteToAllProjects && teamProjects[0]) {
       setInviteScopeType('projects');
-      setInviteProjectIds([workspaceProjects[0].id]);
+      setInviteProjectIds([teamProjects[0].id]);
     } else {
       setInviteScopeType('workspace');
       setInviteProjectIds([]);
@@ -1917,7 +1933,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
     scopeType: inviteScopeType,
     scopeProjectIds: inviteProjectIds,
     scopeTourIds: inviteTourIds,
-    availableProjects: workspaceProjects,
+    availableProjects: teamProjects,
     availableTours: inviteAvailableTours,
     allowAllProjects: canInviteToAllProjects,
     message: inviteMessage,
@@ -2034,7 +2050,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
             scopeType={inviteScopeType}
             scopeProjectIds={inviteProjectIds}
             scopeTourIds={inviteTourIds}
-            availableProjects={workspaceProjects}
+            availableProjects={teamProjects}
             availableTours={inviteAvailableTours}
             message={inviteMessage}
             creating={creatingInvite}
@@ -2106,8 +2122,9 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
         scopeType={editingMemberScopeType}
         projectIds={editingMemberProjectIds}
         tourIds={editingMemberTourIds}
-        availableProjects={workspaceProjects}
+        availableProjects={teamProjects}
         availableTours={editAvailableTours}
+        allowAllProjects={canInviteToAllProjects}
         canAssignAdmin={isWorkspaceOwner}
         saving={savingMemberEdit}
         onClose={closeMemberEditor}
@@ -3652,6 +3669,7 @@ function EditMemberDialog({
   tourIds,
   availableProjects,
   availableTours,
+  allowAllProjects = true,
   canAssignAdmin,
   saving,
   onClose,
@@ -3669,6 +3687,7 @@ function EditMemberDialog({
   tourIds: string[];
   availableProjects: ProjectSummary[];
   availableTours: TourSummary[];
+  allowAllProjects?: boolean;
   canAssignAdmin: boolean;
   saving: boolean;
   onClose: () => void;
@@ -3718,6 +3737,7 @@ function EditMemberDialog({
             scopeTourIds={tourIds}
             availableProjects={availableProjects}
             availableTours={availableTours}
+            allowAllProjects={allowAllProjects}
             disableScopedAccess={role === 'admin'}
             disabledReason={role === 'admin' ? 'Admins always have full workspace access.' : undefined}
             onScopeTypeChange={onScopeTypeChange}
