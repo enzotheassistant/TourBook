@@ -2588,33 +2588,39 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
               onVisibilityToggle={(value) => updateVisibility('show_schedule', value)}
             >
               <div>
-                {/* One row per schedule item: narrow time box, wide item box, "…" menu
-                    (Delete lives in the menu; an Undo message appears afterwards). */}
+                {/* One row per schedule item: Item on the left, Time on the right, "…" menu.
+                    The Time box sizes itself to what's typed, so short times stay small and
+                    the item gets the room. If a long time (e.g. "5:00 - 7:00 PM") would make
+                    the row cramped, the time drops to its own line under the item instead of
+                    being squeezed or scrolling. Delete lives in the "…" menu (Undo afterwards). */}
                 <ul className="space-y-2">
                   {form.schedule_items.map((item, index) => (
-                    <li key={item.id} className="relative flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item.time}
-                        placeholder="Time"
-                        aria-label={`Time, line ${index + 1}`}
-                        onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
-                        className={`${fieldClassName()} w-[7.25rem] shrink-0 px-3 tabular-nums sm:w-40`}
-                      />
-                      <input
-                        type="text"
-                        value={item.label}
-                        placeholder="Item"
-                        aria-label={`Item, line ${index + 1}`}
-                        onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
-                        className={`${fieldClassName()} min-w-0 flex-1`}
-                      />
+                    <li key={item.id} className="relative flex items-start gap-2">
+                      <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                        <input
+                          type="text"
+                          value={item.label}
+                          placeholder="Item"
+                          aria-label={`Item, line ${index + 1}`}
+                          onChange={(event) => updateScheduleItem(item.id, 'label', event.target.value)}
+                          className={`${fieldClassName()} min-w-[8.5rem] flex-1`}
+                        />
+                        <input
+                          type="text"
+                          value={item.time}
+                          placeholder="Time"
+                          aria-label={`Time, line ${index + 1}`}
+                          onChange={(event) => updateScheduleItem(item.id, 'time', event.target.value)}
+                          style={{ width: `calc(${Math.max(item.time.length, 7)}ch + 2.25rem)` }}
+                          className={`${fieldClassName()} max-w-full shrink-0 px-3 tabular-nums`}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setScheduleMenuId((current) => (current === item.id ? null : item.id))}
                         aria-label={`More options for line ${index + 1}`}
                         aria-expanded={scheduleMenuId === item.id}
-                        className="-mr-2 inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+                        className="-mr-2 mt-0.5 inline-flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
                       >
                         <MoreIcon />
                       </button>
