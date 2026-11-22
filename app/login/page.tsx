@@ -12,7 +12,7 @@ import { LoginPageClient } from "./login-client";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ inviteToken?: string; token?: string }>;
+  searchParams?: Promise<{ inviteToken?: string; token?: string; mode?: string; link?: string }>;
 }) {
   // Read the remembered email and remember-email preference server-side at render time.
   // This is more reliable than fetching it client-side in a useEffect, especially for
@@ -21,6 +21,18 @@ export default async function LoginPage({
   const rememberEmailByDefault = await getRememberEmailPreferenceFromCookies();
   const params = await searchParams;
   const inviteToken = String(params?.inviteToken ?? params?.token ?? '').trim();
+  // ?mode=forgot opens straight on "Reset password" (e.g. from an expired reset link).
+  const initialMode = params?.mode === 'forgot' ? 'forgot' : 'signin';
+  // ?link=expired|invalid explains an email link that no longer works.
+  const linkProblem = params?.link === 'expired' || params?.link === 'invalid' ? params.link : undefined;
 
-  return <LoginPageClient initialEmail={rememberedEmail} initialRememberEmail={rememberEmailByDefault} inviteToken={inviteToken} />;
+  return (
+    <LoginPageClient
+      initialEmail={rememberedEmail}
+      initialRememberEmail={rememberEmailByDefault}
+      inviteToken={inviteToken}
+      initialMode={initialMode}
+      linkProblem={linkProblem}
+    />
+  );
 }
