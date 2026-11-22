@@ -34,7 +34,7 @@ Batch 2 (Steps 4–6) — live 2026-11-22, pull request #18:
 - Step 6: one role control per person, owner first, project line only in "All projects" view, Invite button at the top, new invites default to This project, Create invite last, history folded away.
 - Data check (read-only): 15 "revoked" invite records belong to ~10 people who are current members and also have an accepted invite. They're older invites replaced when re-sent (Apr 30–May 3) — history, not broken data. Nothing changed.
 
-Batch 3 (Steps 7–8) — on preview, pull request #19 (branch `ui-phase-5-batch3`):
+Batch 3 (Steps 7–8) — live 2026-11-22, pull request #19:
 - Step 7: picking a venue fills City / Region / Country only into empty boxes (country used to overwrite; city was never filled). Hotel search fills region/country only, only when empty. Date box shows "Tue, Dec 1, 2026" when not being edited; saved value unchanged.
 - Step 8 (changed from the written plan, agreed with Phil): sections are **Dates · Team · Settings** — bottom bar on phones (hidden in the editor), top header on desktop. **Crew view** is its own header button (not under Account). Settings = Projects (create/rename/delete), Workspace (shows its name; rename/switch could come later), Your account (email, Log out). The admin "…" menu is gone. `/admin/projects` forwards to `/admin/settings`.
 
