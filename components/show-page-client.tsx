@@ -125,7 +125,7 @@ function getHeaderMetaLine(show: Show) {
 // Just the day type under the venue. Hotel, tour name and schedule details
 // already appear in their own sections below, so repeating them here was noise.
 function getHeaderSupportMeta(show: Show) {
-  return show.day_type === 'travel' ? 'Travel Day' : show.day_type === 'off' ? 'Off Day' : 'Show Day';
+  return show.day_type === 'travel' ? 'Travel day' : show.day_type === 'off' ? 'Off day' : 'Show day';
 }
 
 
@@ -133,7 +133,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
   const { activeWorkspaceId, isLoading: contextLoading } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedView = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
+  const viewFromUrl = searchParams.get('view') === 'guest-list' ? 'guest-list' : 'day-sheet';
+  const [activeView, setActiveView] = useState<'day-sheet' | 'guest-list'>(viewFromUrl);
+  // Keep in step if the link changes another way (e.g. browser back/forward).
+  useEffect(() => {
+    setActiveView(viewFromUrl);
+  }, [viewFromUrl]);
+  const requestedView = activeView;
   const returnTab = searchParams.get('tab') === 'past' ? 'past' : 'upcoming';
   const [menuOpen, setMenuOpen] = useState(false);
   const [show, setShow] = useState<Show | null>(null);
@@ -218,10 +224,14 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
     setConfirmState((current) => ({ ...current, open: false }));
   }
 
+  // Switching Day sheet / Guest list happens instantly in the browser: the
+  // link still updates (so shared links open the right tab), but there's no
+  // round trip to the server and the header stays put.
   function setView(nextView: 'day-sheet' | 'guest-list') {
+    setActiveView(nextView);
     const nextParams = new URLSearchParams(searchParams.toString());
     nextParams.set('view', nextView);
-    router.replace(`?${nextParams.toString()}`, { scroll: false });
+    window.history.replaceState(window.history.state, '', `?${nextParams.toString()}`);
   }
 
   async function handleDelete() {
@@ -271,7 +281,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
 
   const headerMetaLine = getHeaderMetaLine(show);
   const headerSupportMeta = getHeaderSupportMeta(show);
-  const daySheetTitle = show.day_type === 'show' ? 'Day Sheet' : 'Day Details';
+  const daySheetTitle = show.day_type === 'show' ? 'Day sheet' : 'Day details';
   const canShowGuestList = show.day_type === 'show';
   const hasAnyDayDetails = hasLocation(show) || Boolean(show.parking_load_info) || visibleScheduleItems.length > 0 || Boolean(show.dos_name || show.dos_phone) || hasAccommodation(show) || Boolean(show.notes);
 
@@ -327,12 +337,14 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
         <div className="rounded-xl border border-white/10 bg-white/[0.045] p-1">
           <div className={`grid gap-1 ${canShowGuestList ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button type="button" onClick={() => setView('day-sheet')} className={viewButtonClassName(requestedView === 'day-sheet')}>{daySheetTitle}</button>
-            {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest List</button> : null}
+            {canShowGuestList ? <button type="button" onClick={() => setView('guest-list')} className={viewButtonClassName(requestedView === 'guest-list')}>Guest list</button> : null}
           </div>
         </div>
 
-        {requestedView === 'day-sheet' || !canShowGuestList ? (
-          show.day_type === 'show' ? (
+        {/* Both tabs stay on the page (the guest list loads quietly in the
+            background), so switching between them is instant. */}
+        <div hidden={requestedView !== 'day-sheet' && canShowGuestList} className="contents">
+        {show.day_type === 'show' ? (
             <>
               {show.visibility.show_venue && (show.venue_name || show.venue_address || show.day_type === 'show') ? <SectionCard title="Venue"><div className="space-y-3 text-sm text-zinc-200"><p className="font-medium">{show.venue_name || 'Venue TBA'}</p>{show.venue_address ? show.venue_maps_url ? <a href={show.venue_maps_url} target="_blank" rel="noreferrer" className="break-words text-accent-light underline underline-offset-4">{show.venue_address}</a> : <p>{show.venue_address}</p> : null}</div></SectionCard> : null}
               {show.visibility.show_schedule && visibleScheduleItems.length > 0 ? <SectionCard title="Schedule"><KeyValueList allowPartial items={visibleScheduleItems.map((item) => ({ label: item.label, value: item.time }))} /></SectionCard> : null}
@@ -406,7 +418,7 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               {show.visibility.show_notes && show.notes ? <SectionCard title="Notes"><MultilineText>{show.notes}</MultilineText></SectionCard> : null}
 
               {!hasAnyDayDetails ? (
-                <SectionCard title="Day Details">
+                <SectionCard title="Day details">
                   <div className="space-y-2">
                     <p className="text-sm text-zinc-100">This {show.day_type} day is on the itinerary, but the crew-facing details have not been filled in yet.</p>
                     <p className="text-sm leading-6 text-zinc-400">The date is locked in, but routing, lodging, contacts, or notes have not been added for this screen yet.</p>
@@ -415,10 +427,13 @@ export function ShowPageClient({ showId, adminMode = false }: { showId: string; 
               ) : null}
               <AttachmentsSection dateId={show.id} adminMode={adminMode} />
             </>
-          )
-        ) : (
-          <SectionCard title="Guest List"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>
-        )}
+          )}
+        </div>
+        {canShowGuestList ? (
+          <div hidden={requestedView !== 'guest-list'}>
+            <SectionCard title="Guest list"><GuestListManager showId={show.id} note={show.guest_list_notes} showNote={show.visibility.show_guest_list_notes} /></SectionCard>
+          </div>
+        ) : null}
       </main>
     </div>
   );

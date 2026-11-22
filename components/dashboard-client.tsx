@@ -194,7 +194,7 @@ function InviteAcceptancePanel({
   return (
     <section className="rounded-xl border border-white/10 bg-white/[0.045] p-4">
       <div className="space-y-3">
-        <h2 className="text-base font-semibold">Workspace Invite</h2>
+        <h2 className="text-base font-semibold">Workspace invite</h2>
 
         <label className="block text-sm text-zinc-300">
           <span className="mb-1 block">Invite token</span>
@@ -615,16 +615,16 @@ export function DashboardClient() {
                 : hasPendingInvite
                   ? 'TourBook detected an invite on this sign-in. We are applying that access now. If it does not resolve automatically, use the invite panel above.'
                   : hasWorkspaceAccess
-                    ? 'Your account has workspace access, but no workspace is active in this session. Open Admin to refresh context and continue.'
+                    ? 'Your account has workspace access, but no workspace is active in this session. Open admin to refresh context and continue.'
                     : 'You do not have a workspace yet. Ask a workspace owner to invite you, then refresh this page.'}
             actions={inviteFlow.phase === 'error'
               ? [{ label: 'Retry invite access', href: '/', tone: 'primary', ctaId: 'retry_invite_access' }]
               : hasAdminAnywhere
                 ? [
-                    { label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
-                    { label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' },
+                    { label: 'Open admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' },
+                    { label: 'Past dates', href: '/?tab=past', ctaId: 'view_past_dates' },
                   ]
-                : [{ label: 'Past Dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
+                : [{ label: 'Past dates', href: '/?tab=past', ctaId: 'view_past_dates' }]}
             telemetry={{
               stateType: inviteFlow.phase === 'joining'
                 ? 'invite.joining'
@@ -721,8 +721,8 @@ export function DashboardClient() {
             title="No past dates yet."
             body="Past dates will appear here after your first show is added and completed."
             actions={canCreateDateInWorkspace
-              ? [{ label: 'Open Admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }, { label: 'Upcoming Dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]
-              : [{ label: 'Upcoming Dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]}
+              ? [{ label: 'Open admin', href: '/admin', tone: 'primary', ctaId: 'open_admin' }, { label: 'Upcoming dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]
+              : [{ label: 'Upcoming dates', href: '/?tab=upcoming', ctaId: 'view_upcoming_dates' }]}
             telemetry={{
               stateType: 'crew.no_past_dates',
               workspaceId: activeWorkspaceId,

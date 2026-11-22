@@ -22,7 +22,7 @@ function buildScheduleItems(date: DateRecord): Show['schedule_items'] {
   }
 
   return [
-    { id: `load-in-${date.id}`, label: 'Load In', time: String(date.load_in_time ?? '') },
+    { id: `load-in-${date.id}`, label: 'Load in', time: String(date.load_in_time ?? '') },
     { id: `soundcheck-${date.id}`, label: 'Soundcheck', time: String(date.soundcheck_time ?? '') },
     { id: `doors-${date.id}`, label: 'Doors', time: String(date.doors_time ?? '') },
     { id: `show-${date.id}`, label: 'Show', time: String(date.show_time ?? '') },

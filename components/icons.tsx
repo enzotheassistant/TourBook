@@ -25,3 +25,12 @@ export function ChevronIcon({ open = false, className = 'h-5 w-5' }: { open?: bo
     </svg>
   );
 }
+
+/** The one "+" icon (used before labels like "New date" and "Add line"). Follow it with a small gap. */
+export function PlusIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={`${className} shrink-0`}>
+      <path d="M10 4.5V15.5M4.5 10H15.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
