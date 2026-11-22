@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
+import { GUEST_LIST_ADD_ROLES, GUEST_LIST_WRITE_ROLES } from '@/lib/data/server/authorization';
 import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { getDateScoped } from '@/lib/data/server/dates';
 import { toCsvCell } from '@/lib/data/server/csv-utils';
@@ -19,6 +19,10 @@ function normalizeGuestListEntry(row: any): ScopedGuestListEntry {
 
 async function requireGuestListWriteAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
   await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_WRITE_ROLES]);
+}
+
+async function requireGuestListAddAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
+  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_ADD_ROLES]);
 }
 
 async function resolveWorkspaceForDate(
@@ -84,7 +88,11 @@ export async function listGuestListEntriesScoped(
   dateId: string,
 ): Promise<ScopedGuestListEntry[]> {
   const supabase = requireScopedDataClient(supabaseInput);
-  const resolvedWorkspaceId = workspaceId?.trim() ? workspaceId : await resolveWorkspaceForDate(supabase, userId, dateId);
+  const resolvedWorkspaceId = workspaceId?.trim()
+    ? workspaceId
+    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
+  // Viewers don't get the guest list at all.
+  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
   await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const { data, error } = await supabase
     .from('guest_list_entries')
@@ -112,8 +120,8 @@ export async function addGuestListEntriesScoped(
   const supabase = requireScopedDataClient(supabaseInput);
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
-    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_WRITE_ROLES);
-  await requireGuestListWriteAccess(supabase, userId, resolvedWorkspaceId);
+    : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
+  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
   const dateRecord = await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
   const cleanedNames = names.map((name) => name.trim()).filter(Boolean);
 

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, ensureProjectInWorkspace, ensureTourInScope, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { MemberUpdateValidationError, validateWorkspaceMemberUpdatePayload } from '@/lib/data/server/member-update-utils';
 import type { WorkspaceMemberDirectoryEntry, WorkspaceRole, WorkspaceScopeType } from '@/lib/types/tenant';
+import { hasFullWorkspaceControl, isManagerAssignableRole, isWithinActorScope, overlapsActorScope } from '@/lib/data/server/manager-scope';
 
 function normalizeScopeType(value: unknown): WorkspaceScopeType {
   const raw = String(value ?? '').trim().toLowerCase();
@@ -148,6 +149,19 @@ async function replaceMemberTourGrants(
   }
 }
 
+async function readMemberScope(supabase: SupabaseClient, memberId: string, scopeTypeValue: unknown) {
+  const scopeType = normalizeScopeType(scopeTypeValue);
+  const [projectMap, tourMap] = await Promise.all([
+    getMemberProjectIds(supabase, [memberId]),
+    getMemberTourIds(supabase, [memberId]),
+  ]);
+  return {
+    scopeType,
+    projectIds: [...new Set(projectMap.get(memberId) ?? [])],
+    tourIds: [...new Set(tourMap.get(memberId) ?? [])],
+  };
+}
+
 async function readWorkspaceMemberById(supabase: SupabaseClient, workspaceId: string, memberId: string) {
   const { data, error } = await supabase
     .from('workspace_members')
@@ -167,7 +181,8 @@ async function readWorkspaceMemberById(supabase: SupabaseClient, workspaceId: st
 
 export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
   const authSupabase = requireScopedDataClient(supabaseInput);
-  await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  const fullControl = hasFullWorkspaceControl(actor.role);
 
   const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
@@ -190,13 +205,24 @@ export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, 
     getUserDirectoryInfoByUserId(userIds),
   ]);
 
-  return rows.map((row: any) => {
+  return rows.flatMap((row: any) => {
     const memberId = String(row.id);
     const scopeType = normalizeScopeType(row.scope_type);
-    const projectIds = [...new Set(projectMap.get(memberId) ?? [])];
-    const tourIds = [...new Set(tourMap.get(memberId) ?? [])];
+    let projectIds = [...new Set(projectMap.get(memberId) ?? [])];
+    let tourIds = [...new Set(tourMap.get(memberId) ?? [])];
+
+    // Managers only see people who share a project/tour with them, and only
+    // the parts of each person's access that the Manager also has.
+    if (!fullControl) {
+      if (!overlapsActorScope(actor, { scopeType, projectIds, tourIds })) return [];
+      if (actor.scopeType !== 'workspace') {
+        projectIds = projectIds.filter((id) => actor.projectIds.includes(id));
+        if (actor.scopeType === 'tours') tourIds = tourIds.filter((id) => actor.tourIds.includes(id));
+      }
+    }
+
     const directoryInfo = directoryInfoByUserId.get(String(row.user_id)) ?? { email: null, name: null };
-    return {
+    return [{
       id: memberId,
       workspaceId: String(row.workspace_id),
       userId: String(row.user_id),
@@ -207,7 +233,7 @@ export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, 
       projectIds: scopeType === 'workspace' ? [] : projectIds,
       tourIds: scopeType === 'tours' ? tourIds : [],
       createdAt: row.created_at ? String(row.created_at) : null,
-    } satisfies WorkspaceMemberDirectoryEntry;
+    } satisfies WorkspaceMemberDirectoryEntry];
   });
 }
 
@@ -223,13 +249,20 @@ export async function updateWorkspaceMemberScoped(
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
   const targetRole = String(existing.role) as WorkspaceRole;
   const targetUserId = String(existing.user_id);
 
   if (targetUserId === userId) {
     throw new ApiError(409, 'Use a dedicated account flow instead of editing your own membership here.');
+  }
+
+  if (!hasFullWorkspaceControl(actor.role)) {
+    const targetScope = await readMemberScope(supabase, memberId, existing.scope_type);
+    if (!isManagerAssignableRole(targetRole) || !isWithinActorScope(actor, targetScope)) {
+      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to change it.');
+    }
   }
   if (targetRole === 'owner') {
     throw new ApiError(409, 'Workspace owner cannot be edited from Team.');
@@ -250,6 +283,10 @@ export async function updateWorkspaceMemberScoped(
   if (payload.role === 'owner') {
     throw new ApiError(400, 'Use workspace ownership transfer instead of assigning owner here.');
   }
+  if (payload.role === 'admin' && targetRole !== 'admin') {
+    throw new ApiError(400, 'Choose Viewer, Crew or Manager.');
+  }
+
   if (actor.role !== 'owner' && payload.role === 'admin') {
     throw new ApiError(403, 'Only the workspace owner can assign admin access.');
   }
@@ -285,6 +322,17 @@ export async function updateWorkspaceMemberScoped(
   const nextProjectIds = payload.scopeType === 'tours'
     ? [...new Set(validatedTours.map((tour) => tour.projectId))]
     : validatedProjectIds;
+
+  if (!hasFullWorkspaceControl(actor.role)) {
+    const nextScope = {
+      scopeType: payload.scopeType,
+      projectIds: nextProjectIds,
+      tourIds: validatedTours.map((tour) => tour.tourId),
+    };
+    if (!isManagerAssignableRole(payload.role) || !isWithinActorScope(actor, nextScope)) {
+      throw new ApiError(403, 'You can only give access to projects you manage.');
+    }
+  }
 
   const { error: updateError } = await supabase
     .from('workspace_members')
@@ -337,13 +385,20 @@ export async function removeWorkspaceMemberScoped(
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin']);
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
-
   const targetRole = String(existing.role) as WorkspaceRole;
   const targetUserId = String(existing.user_id);
+
   if (targetUserId === userId) {
     throw new ApiError(409, 'Use a separate leave-workspace flow instead of removing yourself here.');
+  }
+
+  if (!hasFullWorkspaceControl(actor.role)) {
+    const targetScope = await readMemberScope(supabase, memberId, existing.scope_type);
+    if (!isManagerAssignableRole(targetRole) || !isWithinActorScope(actor, targetScope)) {
+      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to remove them.');
+    }
   }
   if (targetRole === 'owner') {
     throw new ApiError(409, 'Workspace owner cannot be removed from Team.');

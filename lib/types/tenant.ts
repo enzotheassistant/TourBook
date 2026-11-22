@@ -1,4 +1,4 @@
-export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'viewer';
+export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'crew' | 'viewer';
 export type WorkspaceScopeType = 'workspace' | 'projects' | 'tours';
 
 export type WorkspaceSummary = {
@@ -54,7 +54,7 @@ export type ViewerUser = {
   email: string | null;
 };
 
-export type WorkspaceInviteRole = 'admin' | 'editor' | 'viewer';
+export type WorkspaceInviteRole = 'admin' | 'editor' | 'crew' | 'viewer';
 
 export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
 

@@ -1,8 +1,10 @@
 import crypto from 'node:crypto';
 
-export type WorkspaceInviteRole = 'admin' | 'editor' | 'viewer';
+export type WorkspaceInviteRole = 'admin' | 'editor' | 'crew' | 'viewer';
 
-const INVITE_ALLOWED_ROLES: readonly WorkspaceInviteRole[] = ['admin', 'editor', 'viewer'];
+// New invites can be Manager ('editor'), Crew or Viewer. 'admin' is retired;
+// the type keeps it only so older invite records still read correctly.
+const INVITE_ALLOWED_ROLES: readonly WorkspaceInviteRole[] = ['editor', 'crew', 'viewer'];
 const DEFAULT_EXPIRY_DAYS = 14;
 
 export function normalizeInviteEmail(value: string | null | undefined) {
@@ -12,7 +14,7 @@ export function normalizeInviteEmail(value: string | null | undefined) {
 export function validateInviteRole(role: string | null | undefined): WorkspaceInviteRole {
   const normalized = String(role ?? '').trim().toLowerCase();
   if (!INVITE_ALLOWED_ROLES.includes(normalized as WorkspaceInviteRole)) {
-    throw new Error('Invite role must be one of: admin, editor, viewer.');
+    throw new Error('Invite role must be one of: editor, crew, viewer.');
   }
   return normalized as WorkspaceInviteRole;
 }
