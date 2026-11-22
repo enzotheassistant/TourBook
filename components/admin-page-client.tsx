@@ -2556,8 +2556,10 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   mapsUrl={form.venue_maps_url}
                   city={form.city}
                   region={form.region}
+                  country={form.country}
                   onAddressChange={(value) => updateField('venue_address', value)}
                   onMapsUrlChange={(value) => updateField('venue_maps_url', value)}
+                  onCityDetected={(value) => updateField('city', value)}
                   onRegionDetected={(value) => updateField('region', value.toUpperCase())}
                   onCountryDetected={(value) => updateField('country', value.toUpperCase())}
                 />
@@ -2686,6 +2688,7 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
                   mapsUrl={form.hotel_maps_url}
                   city={form.city}
                   region={form.region}
+                  country={form.country}
                   onAddressChange={(value) => updateField('hotel_address', value)}
                   onMapsUrlChange={(value) => updateField('hotel_maps_url', value)}
                   onRegionDetected={(value) => updateField('region', value.toUpperCase())}
@@ -4360,6 +4363,16 @@ function InlineSelect({
   );
 }
 
+/** "2026-12-01" -> "Tue, Dec 1, 2026" (null if it isn't a complete YYYY-MM-DD date). */
+function formatFriendlyIsoDate(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (Number.isNaN(date.getTime()) || date.getMonth() !== Number(m) - 1) return null;
+  return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
+
 function FlexibleDateInput({
   label,
   value,
@@ -4374,6 +4387,10 @@ function FlexibleDateInput({
   const textInputId = useId();
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const pickerInputRef = useRef<HTMLInputElement | null>(null);
+  // Show a saved date as "Tue, Dec 1, 2026" while you're not typing in the box;
+  // the stored value stays YYYY-MM-DD.
+  const [focused, setFocused] = useState(false);
+  const displayValue = !focused ? formatFriendlyIsoDate(value) ?? value : value;
 
   function commitNextValue(rawValue: string) {
     const normalized = parseFlexibleDateInput(rawValue);
@@ -4406,12 +4423,16 @@ function FlexibleDateInput({
           ref={textInputRef}
           id={textInputId}
           type="text"
-          value={value}
+          value={displayValue}
           aria-label={label}
           inputMode="numeric"
-          placeholder="YYYY-MM-DD"
+          placeholder="Choose a date"
+          onFocus={() => setFocused(true)}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={(event) => commitNextValue(event.target.value)}
+          onBlur={(event) => {
+            setFocused(false);
+            commitNextValue(event.target.value);
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
