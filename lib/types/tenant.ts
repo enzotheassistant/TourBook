@@ -1,3 +1,5 @@
+import type { BandAccess } from '@/lib/access/band-access';
+
 export type WorkspaceRole = 'owner' | 'admin' | 'editor' | 'crew' | 'viewer';
 export type WorkspaceScopeType = 'workspace' | 'projects' | 'tours';
 
@@ -12,10 +14,13 @@ export type WorkspaceMemberSummary = {
   id: string;
   workspaceId: string;
   userId: string;
+  /** Highest level across their bands (their level everywhere for "all projects"). */
   role: WorkspaceRole;
   scopeType: WorkspaceScopeType;
   projectIds: string[];
   tourIds: string[];
+  /** Level on each band they can open (missing for "all projects"; use `role`). */
+  projectRoles?: Record<string, WorkspaceRole>;
 };
 
 export type WorkspaceMemberDirectoryEntry = {
@@ -29,6 +34,8 @@ export type WorkspaceMemberDirectoryEntry = {
   projectIds: string[];
   tourIds: string[];
   createdAt: string | null;
+  /** Per-band access: one level per band (or one level for all projects). */
+  access?: BandAccess;
 };
 
 export type ProjectSummary = {
@@ -72,6 +79,8 @@ export type WorkspaceInviteSummary = {
   status: WorkspaceInviteStatus;
   invitedByUserId: string;
   acceptedByUserId: string | null;
+  /** Per-band access the invite gives. */
+  access?: BandAccess;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;

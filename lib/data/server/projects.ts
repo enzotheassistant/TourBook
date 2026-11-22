@@ -50,7 +50,7 @@ export async function listProjectsScoped(supabaseInput: SupabaseClient, userId: 
     .order('created_at', { ascending: true })
     .limit(200);
 
-  if (access.scopeType === 'projects') {
+  if (access.scopeType !== 'workspace') {
     query = query.in('id', access.projectIds);
   }
 

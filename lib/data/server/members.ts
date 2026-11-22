@@ -1,8 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ApiError, ensureProjectInWorkspace, ensureTourInScope, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
+import { ApiError, getPrivilegedDataClient, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
 import { MemberUpdateValidationError, validateWorkspaceMemberUpdatePayload } from '@/lib/data/server/member-update-utils';
 import type { WorkspaceMemberDirectoryEntry, WorkspaceRole, WorkspaceScopeType } from '@/lib/types/tenant';
-import { hasFullWorkspaceControl, isManagerAssignableRole, isWithinActorScope, overlapsActorScope } from '@/lib/data/server/manager-scope';
+import { canGrantBandEntry, canManageWholeAccess, hasFullWorkspaceControl, isManagerAssignableRole, managedProjectIdsFor, sharesBandWith } from '@/lib/data/server/manager-scope';
+import { applyManagerEdits, highestRole, newlyAddedProjects, normalizeEntries, type BandAccess, type BandRole } from '@/lib/access/band-access';
+import { readManyMemberBandAccess, readMemberBandAccess, validateAccessInWorkspace, writeMemberBandAccess } from '@/lib/data/server/member-access-store';
+
+// Team members, per band: each person has a level on each band they can open
+// (or one level for all projects). Owners manage everyone; Managers only the
+// bands they manage — every other band a person has is left untouched.
 
 function normalizeScopeType(value: unknown): WorkspaceScopeType {
   const raw = String(value ?? '').trim().toLowerCase();
@@ -10,48 +16,6 @@ function normalizeScopeType(value: unknown): WorkspaceScopeType {
   if (raw === 'projects') return 'projects';
   if (raw === 'tours') return 'tours';
   return 'workspace';
-}
-
-async function getMemberProjectIds(supabase: SupabaseClient, memberIds: string[]) {
-  if (!memberIds.length) return new Map<string, string[]>();
-  const { data, error } = await supabase
-    .from('workspace_member_projects')
-    .select('workspace_member_id, project_id')
-    .in('workspace_member_id', memberIds);
-
-  if (error) {
-    if (isMissingRelationError(error)) return new Map<string, string[]>();
-    throw new ApiError(500, error.message);
-  }
-
-  return (data ?? []).reduce((map: Map<string, string[]>, row: any) => {
-    const memberId = String(row.workspace_member_id);
-    const next = map.get(memberId) ?? [];
-    next.push(String(row.project_id));
-    map.set(memberId, next);
-    return map;
-  }, new Map<string, string[]>());
-}
-
-async function getMemberTourIds(supabase: SupabaseClient, memberIds: string[]) {
-  if (!memberIds.length) return new Map<string, string[]>();
-  const { data, error } = await supabase
-    .from('workspace_member_tours')
-    .select('workspace_member_id, project_id, tour_id')
-    .in('workspace_member_id', memberIds);
-
-  if (error) {
-    if (isMissingRelationError(error)) return new Map<string, string[]>();
-    throw new ApiError(500, error.message);
-  }
-
-  return (data ?? []).reduce((map: Map<string, string[]>, row: any) => {
-    const memberId = String(row.workspace_member_id);
-    const next = map.get(memberId) ?? [];
-    next.push(String(row.tour_id));
-    map.set(memberId, next);
-    return map;
-  }, new Map<string, string[]>());
 }
 
 function deriveDisplayName(user: any) {
@@ -84,84 +48,6 @@ async function getUserDirectoryInfoByUserId(userIds: string[]) {
   }
 }
 
-async function replaceMemberProjectGrants(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  memberId: string,
-  projectIds: string[],
-) {
-  const { error: deleteError } = await supabase
-    .from('workspace_member_projects')
-    .delete()
-    .eq('workspace_member_id', memberId);
-
-  if (deleteError) {
-    if (isMissingRelationError(deleteError)) throw new ApiError(409, 'Workspace membership scope schema is not ready yet.');
-    throw new ApiError(500, deleteError.message);
-  }
-
-  if (!projectIds.length) return;
-
-  const { error: insertError } = await supabase
-    .from('workspace_member_projects')
-    .insert(projectIds.map((projectId) => ({
-      workspace_member_id: memberId,
-      workspace_id: workspaceId,
-      project_id: projectId,
-    })));
-
-  if (insertError) {
-    if (isMissingRelationError(insertError)) throw new ApiError(409, 'Workspace membership scope schema is not ready yet.');
-    throw new ApiError(500, insertError.message);
-  }
-}
-
-async function replaceMemberTourGrants(
-  supabase: SupabaseClient,
-  workspaceId: string,
-  memberId: string,
-  tours: Array<{ projectId: string; tourId: string }>,
-) {
-  const { error: deleteError } = await supabase
-    .from('workspace_member_tours')
-    .delete()
-    .eq('workspace_member_id', memberId);
-
-  if (deleteError) {
-    if (isMissingRelationError(deleteError)) throw new ApiError(409, 'Workspace tour scope schema is not ready yet.');
-    throw new ApiError(500, deleteError.message);
-  }
-
-  if (!tours.length) return;
-
-  const { error: insertError } = await supabase
-    .from('workspace_member_tours')
-    .insert(tours.map(({ projectId, tourId }) => ({
-      workspace_member_id: memberId,
-      workspace_id: workspaceId,
-      project_id: projectId,
-      tour_id: tourId,
-    })));
-
-  if (insertError) {
-    if (isMissingRelationError(insertError)) throw new ApiError(409, 'Workspace tour scope schema is not ready yet.');
-    throw new ApiError(500, insertError.message);
-  }
-}
-
-async function readMemberScope(supabase: SupabaseClient, memberId: string, scopeTypeValue: unknown) {
-  const scopeType = normalizeScopeType(scopeTypeValue);
-  const [projectMap, tourMap] = await Promise.all([
-    getMemberProjectIds(supabase, [memberId]),
-    getMemberTourIds(supabase, [memberId]),
-  ]);
-  return {
-    scopeType,
-    projectIds: [...new Set(projectMap.get(memberId) ?? [])],
-    tourIds: [...new Set(tourMap.get(memberId) ?? [])],
-  };
-}
-
 async function readWorkspaceMemberById(supabase: SupabaseClient, workspaceId: string, memberId: string) {
   const { data, error } = await supabase
     .from('workspace_members')
@@ -174,15 +60,50 @@ async function readWorkspaceMemberById(supabase: SupabaseClient, workspaceId: st
     if (isMissingRelationError(error)) throw new ApiError(409, 'Workspace membership schema is not ready yet.');
     throw new ApiError(500, error.message);
   }
-
   if (!data) throw new ApiError(404, 'Member not found.');
   return data;
 }
 
+/** Trim someone's access to the bands the viewer can see (Managers don't see other bands). */
+function visibleAccess(access: BandAccess, viewer: BandAccess | null): BandAccess {
+  if (!viewer || viewer.allProjects || access.allProjects) return access;
+  const mine = new Set(viewer.entries.map((entry) => entry.projectId));
+  const entries = access.entries.filter((entry) => mine.has(entry.projectId));
+  return { allProjects: false, role: highestRole(entries.map((entry) => entry.role)), entries };
+}
+
+function toDirectoryEntry(row: any, access: BandAccess, info: { email: string | null; name: string | null }): WorkspaceMemberDirectoryEntry {
+  const scopeType = normalizeScopeType(row.scope_type);
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    userId: String(row.user_id),
+    name: info.name,
+    email: info.email,
+    role: (access.allProjects ? access.role : access.role ?? row.role) as WorkspaceRole,
+    scopeType,
+    projectIds: access.allProjects ? [] : access.entries.map((entry) => entry.projectId),
+    tourIds: access.allProjects ? [] : [...new Set(access.entries.flatMap((entry) => entry.tourIds))],
+    createdAt: row.created_at ? String(row.created_at) : null,
+    access,
+  } satisfies WorkspaceMemberDirectoryEntry;
+}
+
+async function requireTeamActor(authSupabase: SupabaseClient, userId: string, workspaceId: string) {
+  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId);
+  const fullControl = hasFullWorkspaceControl(actor.role);
+  const managesSomething = actor.bandAccess.allProjects
+    ? ['owner', 'admin', 'editor'].includes(actor.bandAccess.role)
+    : actor.bandAccess.entries.some((entry) => ['owner', 'admin', 'editor'].includes(entry.role));
+  if (!fullControl && !managesSomething) {
+    throw new ApiError(403, 'You do not have permission to perform this action.');
+  }
+  return { actor, fullControl };
+}
+
 export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, userId: string, workspaceId: string) {
   const authSupabase = requireScopedDataClient(supabaseInput);
-  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
-  const fullControl = hasFullWorkspaceControl(actor.role);
+  const { actor, fullControl } = await requireTeamActor(authSupabase, userId, workspaceId);
 
   const supabase = getPrivilegedDataClient();
   const { data, error } = await supabase
@@ -197,72 +118,86 @@ export async function listWorkspaceMembersScoped(supabaseInput: SupabaseClient, 
   }
 
   const rows = data ?? [];
-  const memberIds = rows.map((row: any) => String(row.id));
-  const userIds = rows.map((row: any) => String(row.user_id));
-  const [projectMap, tourMap, directoryInfoByUserId] = await Promise.all([
-    getMemberProjectIds(supabase, memberIds),
-    getMemberTourIds(supabase, memberIds),
-    getUserDirectoryInfoByUserId(userIds),
+  const [accessByMember, directoryInfoByUserId] = await Promise.all([
+    readManyMemberBandAccess(supabase, rows as any[]),
+    getUserDirectoryInfoByUserId(rows.map((row: any) => String(row.user_id))),
   ]);
 
   return rows.flatMap((row: any) => {
-    const memberId = String(row.id);
-    const scopeType = normalizeScopeType(row.scope_type);
-    let projectIds = [...new Set(projectMap.get(memberId) ?? [])];
-    let tourIds = [...new Set(tourMap.get(memberId) ?? [])];
-
-    // Managers only see people who share a project/tour with them, and only
-    // the parts of each person's access that the Manager also has.
-    if (!fullControl) {
-      if (!overlapsActorScope(actor, { scopeType, projectIds, tourIds })) return [];
-      if (actor.scopeType !== 'workspace') {
-        projectIds = projectIds.filter((id) => actor.projectIds.includes(id));
-        if (actor.scopeType === 'tours') tourIds = tourIds.filter((id) => actor.tourIds.includes(id));
-      }
-    }
-
-    const directoryInfo = directoryInfoByUserId.get(String(row.user_id)) ?? { email: null, name: null };
-    return [{
-      id: memberId,
-      workspaceId: String(row.workspace_id),
-      userId: String(row.user_id),
-      name: directoryInfo.name,
-      email: directoryInfo.email,
-      role: String(row.role) as WorkspaceRole,
-      scopeType,
-      projectIds: scopeType === 'workspace' ? [] : projectIds,
-      tourIds: scopeType === 'tours' ? tourIds : [],
-      createdAt: row.created_at ? String(row.created_at) : null,
-    } satisfies WorkspaceMemberDirectoryEntry];
+    const access = accessByMember.get(String(row.id));
+    if (!access) return [];
+    // Managers only see people who share a band with them, and only those bands.
+    if (!fullControl && !sharesBandWith(actor.bandAccess, access)) return [];
+    const shown = fullControl ? access : visibleAccess(access, actor.bandAccess);
+    const info = directoryInfoByUserId.get(String(row.user_id)) ?? { email: null, name: null };
+    return [toDirectoryEntry(row, shown, info)];
   });
+}
+
+/** Turn the request body into the wanted access (new per-band form, or the older single-level form). */
+function desiredAccessFromInput(input: {
+  access?: unknown;
+  role?: unknown;
+  scopeType?: unknown;
+  projectIds?: unknown;
+  tourIds?: unknown;
+}, tourProjectById: Map<string, string>): BandAccess {
+  const raw = input.access as { allProjects?: unknown; role?: unknown; entries?: unknown } | undefined;
+  if (raw && typeof raw === 'object') {
+    if (raw.allProjects === true) {
+      const role = String(raw.role ?? '') as BandRole;
+      if (!['admin', 'editor', 'crew', 'viewer'].includes(role)) throw new ApiError(400, 'Choose Viewer, Crew or Manager.');
+      return { allProjects: true, role, entries: [] };
+    }
+    const entries = normalizeEntries(Array.isArray(raw.entries) ? raw.entries : []);
+    return { allProjects: false, role: highestRole(entries.map((entry) => entry.role)), entries };
+  }
+
+  // Older form: one level + one kind of scope.
+  let payload;
+  try {
+    payload = validateWorkspaceMemberUpdatePayload(input);
+  } catch (error) {
+    if (error instanceof MemberUpdateValidationError) throw new ApiError(error.status, error.message);
+    throw error;
+  }
+  if (payload.role === 'owner') throw new ApiError(400, 'Use workspace ownership transfer instead of assigning owner here.');
+  const role = payload.role as BandRole;
+  if (payload.scopeType === 'workspace') return { allProjects: true, role, entries: [] };
+  if (payload.scopeType === 'projects') {
+    const entries = payload.projectIds.map((projectId) => ({ projectId, role, tourIds: [] as string[] }));
+    return { allProjects: false, role, entries };
+  }
+  const byProject = new Map<string, string[]>();
+  for (const tourId of payload.tourIds) {
+    const projectId = tourProjectById.get(tourId);
+    if (!projectId) throw new ApiError(404, 'Tour not found in this workspace.');
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), tourId]);
+  }
+  const entries = [...byProject.entries()].map(([projectId, tourIds]) => ({ projectId, role, tourIds }));
+  return { allProjects: false, role, entries };
 }
 
 export async function updateWorkspaceMemberScoped(
   supabaseInput: SupabaseClient,
   userId: string,
-  input: { workspaceId: string; memberId: string; role?: unknown; scopeType?: unknown; projectIds?: unknown; tourIds?: unknown },
-) {
+  input: { workspaceId: string; memberId: string; access?: unknown; role?: unknown; scopeType?: unknown; projectIds?: unknown; tourIds?: unknown },
+): Promise<WorkspaceMemberDirectoryEntry & { removed?: boolean; addedProjectIds?: string[] }> {
   const authSupabase = requireScopedDataClient(supabaseInput);
   const supabase = getPrivilegedDataClient();
   const workspaceId = String(input.workspaceId ?? '').trim();
   const memberId = String(input.memberId ?? '').trim();
+
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  const { actor, fullControl } = await requireTeamActor(authSupabase, userId, workspaceId);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
   const targetRole = String(existing.role) as WorkspaceRole;
   const targetUserId = String(existing.user_id);
 
   if (targetUserId === userId) {
     throw new ApiError(409, 'Use a dedicated account flow instead of editing your own membership here.');
-  }
-
-  if (!hasFullWorkspaceControl(actor.role)) {
-    const targetScope = await readMemberScope(supabase, memberId, existing.scope_type);
-    if (!isManagerAssignableRole(targetRole) || !isWithinActorScope(actor, targetScope)) {
-      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to change it.');
-    }
   }
   if (targetRole === 'owner') {
     throw new ApiError(409, 'Workspace owner cannot be edited from Team.');
@@ -271,106 +206,85 @@ export async function updateWorkspaceMemberScoped(
     throw new ApiError(403, 'Only the workspace owner can edit another admin.');
   }
 
-  let payload;
-  try {
-    payload = validateWorkspaceMemberUpdatePayload(input);
-  } catch (error) {
-    if (error instanceof MemberUpdateValidationError) {
-      throw new ApiError(error.status, error.message);
+  const current = await readMemberBandAccess(supabase, existing as any);
+
+  // For the older single-level form with tours, look up which band each tour is on.
+  const legacyTourIds = Array.isArray(input.tourIds) ? (input.tourIds as unknown[]).map(String) : [];
+  const tourProjectById = new Map<string, string>();
+  if (!input.access && legacyTourIds.length) {
+    const { data: tours } = await supabase.from('tours').select('id, project_id').eq('workspace_id', workspaceId).in('id', legacyTourIds);
+    for (const row of tours ?? []) tourProjectById.set(String((row as any).id), String((row as any).project_id));
+  }
+
+  const desired = await validateAccessInWorkspace(supabase, workspaceId, desiredAccessFromInput(input, tourProjectById));
+
+  // The retired admin level can only be kept, never newly given.
+  const usesAdmin = desired.allProjects ? desired.role === 'admin' : desired.entries.some((entry) => entry.role === 'admin');
+  if (usesAdmin && targetRole !== 'admin') throw new ApiError(400, 'Choose Viewer, Crew or Manager.');
+  if (usesAdmin && actor.role !== 'owner') throw new ApiError(403, 'Only the workspace owner can assign admin access.');
+
+  let next: BandAccess;
+  if (fullControl) {
+    next = desired;
+  } else {
+    // Managers: only their bands change; everything else stays as it was.
+    if (current.allProjects && !canManageWholeAccess(actor.bandAccess, current)) {
+      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to change it.');
     }
-    throw error;
-  }
-  if (payload.role === 'owner') {
-    throw new ApiError(400, 'Use workspace ownership transfer instead of assigning owner here.');
-  }
-  if (payload.role === 'admin' && targetRole !== 'admin') {
-    throw new ApiError(400, 'Choose Viewer, Crew or Manager.');
-  }
-
-  if (actor.role !== 'owner' && payload.role === 'admin') {
-    throw new ApiError(403, 'Only the workspace owner can assign admin access.');
-  }
-
-  const validatedProjectIds = payload.scopeType === 'projects'
-    ? await Promise.all(payload.projectIds.map(async (projectId) => {
-        await ensureProjectInWorkspace(supabase, workspaceId, projectId);
-        return projectId;
-      }))
-    : [];
-
-  const validatedTours = payload.scopeType === 'tours'
-    ? await Promise.all(payload.tourIds.map(async (tourId) => {
-        const { data: tour, error } = await supabase
-          .from('tours')
-          .select('id, project_id')
-          .eq('workspace_id', workspaceId)
-          .eq('id', tourId)
-          .maybeSingle();
-
-        if (error) {
-          if (isMissingRelationError(error)) throw new ApiError(409, 'Workspace tour scope schema is not ready yet.');
-          throw new ApiError(500, error.message);
+    if (desired.allProjects) {
+      if (!(actor.bandAccess.allProjects && isManagerAssignableRole(desired.role) && ['owner', 'admin', 'editor'].includes(actor.bandAccess.role))) {
+        throw new ApiError(403, 'You can only give access to projects you manage.');
+      }
+      next = desired;
+    } else {
+      const candidateIds = [
+        ...(current.allProjects ? [] : current.entries.map((entry) => entry.projectId)),
+        ...desired.entries.map((entry) => entry.projectId),
+      ];
+      const managed = managedProjectIdsFor(actor.bandAccess, candidateIds);
+      const sameAsNow = (entry: { projectId: string; role: string; tourIds: string[] }) => {
+        if (current.allProjects) return false;
+        const now = current.entries.find((item) => item.projectId === entry.projectId);
+        return !!now && now.role === entry.role && [...now.tourIds].sort().join() === [...entry.tourIds].sort().join();
+      };
+      for (const entry of desired.entries) {
+        if (!managed.includes(entry.projectId)) continue; // other bands: ignored, kept as they are
+        if (sameAsNow(entry)) continue;
+        if (!canGrantBandEntry(actor.bandAccess, entry)) {
+          throw new ApiError(403, 'You can only give access to projects you manage.');
         }
-        if (!tour) throw new ApiError(404, 'Tour not found in this workspace.');
-        const projectId = String(tour.project_id);
-        await ensureProjectInWorkspace(supabase, workspaceId, projectId);
-        await ensureTourInScope(supabase, workspaceId, projectId, String(tour.id));
-        return { projectId, tourId: String(tour.id) };
-      }))
-    : [];
-
-  const nextProjectIds = payload.scopeType === 'tours'
-    ? [...new Set(validatedTours.map((tour) => tour.projectId))]
-    : validatedProjectIds;
-
-  if (!hasFullWorkspaceControl(actor.role)) {
-    const nextScope = {
-      scopeType: payload.scopeType,
-      projectIds: nextProjectIds,
-      tourIds: validatedTours.map((tour) => tour.tourId),
-    };
-    if (!isManagerAssignableRole(payload.role) || !isWithinActorScope(actor, nextScope)) {
-      throw new ApiError(403, 'You can only give access to projects you manage.');
+      }
+      // A band the actor manages only partly (some tours) can't be taken away from someone with the whole band.
+      if (!current.allProjects) {
+        for (const entry of current.entries) {
+          if (managed.includes(entry.projectId) && !canGrantBandEntry(actor.bandAccess, entry)) {
+            const stillSame = desired.entries.find((item) => item.projectId === entry.projectId);
+            if (!stillSame || !sameAsNow(stillSame)) {
+              throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to change it.');
+            }
+          }
+        }
+      }
+      next = current.allProjects ? current : applyManagerEdits({ current, edits: desired.entries, managedProjectIds: managed });
     }
   }
 
-  const { error: updateError } = await supabase
-    .from('workspace_members')
-    .update({
-      role: payload.role,
-      scope_type: payload.scopeType,
-    })
-    .eq('workspace_id', workspaceId)
-    .eq('id', memberId);
+  const info = (await getUserDirectoryInfoByUserId([targetUserId])).get(targetUserId) ?? { email: null, name: null };
 
-  if (updateError) {
-    if (isMissingRelationError(updateError)) throw new ApiError(409, 'Workspace membership schema is not ready yet.');
-    throw new ApiError(500, updateError.message);
+  // No bands left: they're no longer on the team.
+  if (!next.allProjects && next.entries.length === 0) {
+    const { error: deleteError } = await supabase.from('workspace_members').delete().eq('workspace_id', workspaceId).eq('id', memberId);
+    if (deleteError) throw new ApiError(500, deleteError.message);
+    return { ...toDirectoryEntry(existing, { allProjects: false, role: null, entries: [] }, info), removed: true, addedProjectIds: [] };
   }
 
-  await replaceMemberProjectGrants(supabase, workspaceId, memberId, payload.scopeType === 'workspace' ? [] : nextProjectIds);
-  await replaceMemberTourGrants(supabase, workspaceId, memberId, payload.scopeType === 'tours' ? validatedTours : []);
-
-  const [projectMap, tourMap, emailsByUserId, updated] = await Promise.all([
-    getMemberProjectIds(supabase, [memberId]),
-    getMemberTourIds(supabase, [memberId]),
-    getUserDirectoryInfoByUserId([targetUserId]),
-    readWorkspaceMemberById(supabase, workspaceId, memberId),
-  ]);
-
-  const scopeType = normalizeScopeType(updated.scope_type);
+  await writeMemberBandAccess(supabase, workspaceId, memberId, next);
+  const updated = await readWorkspaceMemberById(supabase, workspaceId, memberId);
+  const shown = fullControl ? next : visibleAccess(next, actor.bandAccess);
   return {
-    id: String(updated.id),
-    workspaceId: String(updated.workspace_id),
-    userId: targetUserId,
-    email: emailsByUserId.get(targetUserId)?.email ?? null,
-    name: emailsByUserId.get(targetUserId)?.name ?? null,
-    role: String(updated.role) as WorkspaceRole,
-    scopeType,
-    projectIds: scopeType === 'workspace' ? [] : [...new Set(projectMap.get(memberId) ?? [])],
-    tourIds: scopeType === 'tours' ? [...new Set(tourMap.get(memberId) ?? [])] : [],
-    createdAt: updated.created_at ? String(updated.created_at) : null,
-  } satisfies WorkspaceMemberDirectoryEntry;
+    ...toDirectoryEntry(updated, shown, info),
+    addedProjectIds: newlyAddedProjects(current, next),
+  };
 }
 
 export async function removeWorkspaceMemberScoped(
@@ -382,10 +296,11 @@ export async function removeWorkspaceMemberScoped(
   const supabase = getPrivilegedDataClient();
   const workspaceId = String(input.workspaceId ?? '').trim();
   const memberId = String(input.memberId ?? '').trim();
+
   if (!workspaceId) throw new ApiError(400, 'workspaceId is required.');
   if (!memberId) throw new ApiError(400, 'memberId is required.');
 
-  const actor = await requireWorkspaceAccess(authSupabase, userId, workspaceId, ['owner', 'admin', 'editor']);
+  const { actor, fullControl } = await requireTeamActor(authSupabase, userId, workspaceId);
   const existing = await readWorkspaceMemberById(supabase, workspaceId, memberId);
   const targetRole = String(existing.role) as WorkspaceRole;
   const targetUserId = String(existing.user_id);
@@ -393,18 +308,17 @@ export async function removeWorkspaceMemberScoped(
   if (targetUserId === userId) {
     throw new ApiError(409, 'Use a separate leave-workspace flow instead of removing yourself here.');
   }
-
-  if (!hasFullWorkspaceControl(actor.role)) {
-    const targetScope = await readMemberScope(supabase, memberId, existing.scope_type);
-    if (!isManagerAssignableRole(targetRole) || !isWithinActorScope(actor, targetScope)) {
-      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to remove them.');
-    }
-  }
   if (targetRole === 'owner') {
     throw new ApiError(409, 'Workspace owner cannot be removed from Team.');
   }
   if (actor.role !== 'owner' && targetRole === 'admin') {
     throw new ApiError(403, 'Only the workspace owner can remove another admin.');
+  }
+  if (!fullControl) {
+    const current = await readMemberBandAccess(supabase, existing as any);
+    if (!canManageWholeAccess(actor.bandAccess, current)) {
+      throw new ApiError(403, 'This person has access beyond the projects you manage. Ask the workspace owner to remove them.');
+    }
   }
 
   const { error: deleteError } = await supabase

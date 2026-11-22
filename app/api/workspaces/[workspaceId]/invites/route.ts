@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { finalizeAuthResponse, requireApiAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/data/server/shared';
-import { createWorkspaceInviteScoped, getProjectNamesForInviteScope, listWorkspaceInvitesScoped } from '@/lib/data/server/invites';
+import { createWorkspaceInviteScoped, getInviteBandsForEmail, listWorkspaceInvitesScoped } from '@/lib/data/server/invites';
 import { sendInviteEmailBestEffort } from '@/lib/invites/email-delivery';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
@@ -27,11 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { workspaceId } = await params;
 
   try {
-    const body = (await request.json()) as { name?: string | null; email?: string; role?: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null };
+    const body = (await request.json()) as { name?: string | null; email?: string; access?: unknown; role?: string; scopeType?: string; projectIds?: string[]; tourIds?: string[]; expiresAt?: string | null };
     const created = await createWorkspaceInviteScoped(authState.supabase, authState.user.id, {
       workspaceId,
       name: body.name ?? null,
       email: body.email ?? '',
+      access: body.access,
       role: body.role ?? '',
       scopeType: body.scopeType ?? 'workspace',
       projectIds: body.projectIds ?? [],
@@ -45,16 +46,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq('id', workspaceId)
       .maybeSingle();
 
-    const scopeProjectNames = created.invite.scopeType === 'projects'
-      ? await getProjectNamesForInviteScope(workspaceId, created.invite.projectIds)
-      : [];
+    // The email lists only the bands they were given, each with its level.
+    const bands = await getInviteBandsForEmail(workspaceId, created.invite);
 
     const origin = request.nextUrl?.origin || request.headers.get('origin') || null;
     const emailDelivery = await sendInviteEmailBestEffort({
       invite: created.invite,
       acceptToken: created.token,
       workspaceName: workspace?.name ? String(workspace.name) : null,
-      scopeProjectNames,
+      bands,
       requestOrigin: origin,
     });
 

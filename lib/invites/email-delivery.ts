@@ -7,6 +7,8 @@ type SendInviteEmailInput = {
   acceptToken: string;
   workspaceName?: string | null;
   scopeProjectNames?: string[];
+  /** Per-band levels, e.g. [{ name: 'Texas King', role: 'crew' }]. Preferred over scopeProjectNames. */
+  bands?: Array<{ name: string; role: WorkspaceInviteRole }>;
   inviterName?: string | null;
   requestOrigin?: string | null;
 };
@@ -42,31 +44,47 @@ function roleLabel(role: WorkspaceInviteRole) {
   return 'Viewer';
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] as string));
+}
+
+function joinNames(names: string[]) {
+  if (names.length <= 1) return names[0] ?? 'TourBook';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 function renderInviteEmail(input: SendInviteEmailInput) {
   const acceptLink = buildAcceptLink(input);
   const appName = process.env.INVITE_EMAIL_APP_NAME?.trim() || 'TourBook';
   const workspaceName = input.workspaceName?.trim() || '';
   const inviterName = input.inviterName?.trim() || 'A teammate';
   const role = roleLabel(input.invite.role);
-  const projectNames = (input.scopeProjectNames ?? []).map((name) => name.trim()).filter(Boolean);
+  const bands = (input.bands ?? []).filter((band) => band.name.trim());
+  const projectNames = bands.length
+    ? bands.map((band) => band.name.trim())
+    : (input.scopeProjectNames ?? []).map((name) => name.trim()).filter(Boolean);
 
-  const scopeLabel = input.invite.scopeType === 'projects'
+  const scopeLabel = bands.length
+    ? bands.map((band) => `${band.name.trim()} (${roleLabel(band.role)})`).join(', ')
+    : input.invite.scopeType === 'projects'
     ? `projects: ${projectNames.length ? projectNames.join(', ') : 'selected project(s)'}`
     : input.invite.scopeType === 'tours'
       ? `tours: ${projectNames.length ? projectNames.join(', ') : 'selected tour(s)'}`
       : `workspace: ${workspaceName || 'your workspace'}`;
 
-  const subjectTarget = input.invite.scopeType === 'projects'
+  const subjectTarget = bands.length
+    ? joinNames(projectNames)
+    : input.invite.scopeType === 'projects'
     ? (projectNames.length ? projectNames.join(', ') : 'selected projects')
     : input.invite.scopeType === 'tours'
       ? (projectNames.length ? projectNames.join(', ') : 'selected tours')
       : (workspaceName || 'your workspace');
 
   const subject = `${inviterName} invited you to ${subjectTarget} on ${appName}`;
+  const accessLines = bands.length ? [`Access: ${scopeLabel}`] : [`Scope: ${scopeLabel}`, `Role: ${role}`];
   const text = [
     `You were invited to join ${appName}.`,
-    `Scope: ${scopeLabel}`,
-    `Role: ${role}`,
+    ...accessLines,
     `Accept invite: ${acceptLink}`,
     `Invite expires: ${new Date(input.invite.expiresAt).toISOString()}`,
     '',
@@ -76,8 +94,9 @@ function renderInviteEmail(input: SendInviteEmailInput) {
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
       <p>You were invited to join <strong>${appName}</strong>.</p>
-      <p><strong>Scope:</strong> ${scopeLabel}</p>
-      <p><strong>Role:</strong> ${role}</p>
+      ${bands.length
+        ? `<p><strong>Access:</strong> ${escapeHtml(scopeLabel)}</p>`
+        : `<p><strong>Scope:</strong> ${escapeHtml(scopeLabel)}</p><p><strong>Role:</strong> ${role}</p>`}
       <p>
         <a href="${acceptLink}" style="display:inline-block;background:#111;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;">Accept invite</a>
       </p>
@@ -181,5 +200,60 @@ export async function sendInviteEmailBestEffort(input: SendInviteEmailInput): Pr
       reason: `invite_email_failed:${adapter.provider}:${reason}`,
     });
     return { ok: false, provider: adapter.provider, mode: adapter.mode, reason };
+  }
+}
+
+
+/**
+ * A plain heads-up when someone already on the team is given access to
+ * another band. No link to accept — they just open the app. (Nothing is sent
+ * when access is removed.)
+ */
+export async function sendAccessAddedEmailBestEffort(input: {
+  email: string;
+  bands: Array<{ name: string; role: WorkspaceInviteRole }>;
+  requestOrigin?: string | null;
+}): Promise<EmailDeliveryResult> {
+  const bands = input.bands.filter((band) => band.name.trim());
+  if (!input.email || !bands.length) return { ok: true, provider: 'none', mode: 'noop', reason: 'nothing_to_send' };
+
+  const appName = process.env.INVITE_EMAIL_APP_NAME?.trim() || 'TourBook';
+  const appLink = resolveAppBaseUrl(input.requestOrigin);
+  const names = joinNames(bands.map((band) => band.name.trim()));
+  const lines = bands.map((band) => `${band.name.trim()} as ${roleLabel(band.role)}`);
+  const subject = `You've been added to ${names} on ${appName}`;
+  const text = [
+    `You've been added to ${lines.join(', ')} on ${appName}.`,
+    `Open ${appName} and pick it from your project list: ${appLink}`,
+  ].join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+      <p>You've been added to <strong>${escapeHtml(lines.join(', '))}</strong> on ${appName}.</p>
+      <p>Open ${appName} and pick it from your project list.</p>
+      <p><a href="${appLink}" style="display:inline-block;background:#111;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;">Open ${appName}</a></p>
+    </div>
+  `.trim();
+
+  const provider = (process.env.INVITE_EMAIL_PROVIDER || '').trim().toLowerCase();
+  if (provider !== 'resend') {
+    console.info('[access-email][noop] provider not configured', { email: input.email, subject });
+    return { ok: true, provider: 'noop-log', mode: 'noop', reason: 'provider_not_configured' };
+  }
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.INVITE_EMAIL_FROM?.trim();
+  if (!apiKey || !from) return { ok: false, provider: 'resend', mode: 'live', reason: 'missing_resend_env' };
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [input.email], subject, text, html }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      return { ok: false, provider: 'resend', mode: 'live', reason: `resend_http_${response.status}:${body.slice(0, 160)}` };
+    }
+    return { ok: true, provider: 'resend', mode: 'live' };
+  } catch (error) {
+    return { ok: false, provider: 'resend', mode: 'live', reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }

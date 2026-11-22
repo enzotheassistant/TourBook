@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { GUEST_LIST_ADD_ROLES, canMutateGuestList } from '@/lib/data/server/authorization';
-import { ApiError, isMissingRelationError, requireScopedDataClient, requireWorkspaceAccess } from '@/lib/data/server/shared';
+import { ApiError, isMissingRelationError, requireProjectRole, requireScopedDataClient, requireWorkspaceAccess, roleForAccessProject } from '@/lib/data/server/shared';
 import { getDateScoped } from '@/lib/data/server/dates';
 import { toCsvCell } from '@/lib/data/server/csv-utils';
 import type { ScopedGuestListEntry } from '@/lib/types/date-record';
@@ -27,16 +27,25 @@ function normalizeGuestListEntry(row: any, userId: string): ScopedGuestListEntry
  * they added themselves. Viewers can't change anything.
  */
 async function requireOwnOrManagedGuestEntry(supabase: SupabaseClient, userId: string, workspaceId: string, entryId: string) {
-  const access = await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_ADD_ROLES]);
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
   const entry = await getGuestListEntryScoped(supabase, userId, workspaceId, entryId);
-  if (!canMutateGuestList(access.role) && !entry.added_by_me) {
+  // Levels are per band: use the level on this name's band.
+  const role = roleForAccessProject(access, entry.project_id);
+  if (!role || !GUEST_LIST_ADD_ROLES.includes(role)) {
+    throw new ApiError(403, 'You do not have permission to perform this action.');
+  }
+  if (!canMutateGuestList(role) && !entry.added_by_me) {
     throw new ApiError(403, 'You can only change names you added.');
   }
   return entry;
 }
 
-async function requireGuestListAddAccess(supabase: SupabaseClient, userId: string, workspaceId: string) {
-  await requireWorkspaceAccess(supabase, userId, workspaceId, [...GUEST_LIST_ADD_ROLES]);
+/** Crew and above on the date's band can see the guest list and add names. Returns the date. */
+async function requireGuestListAddAccess(supabase: SupabaseClient, userId: string, workspaceId: string, dateId: string) {
+  const access = await requireWorkspaceAccess(supabase, userId, workspaceId);
+  const dateRecord = await getDateScoped(supabase, userId, workspaceId, dateId);
+  requireProjectRole(access, String(dateRecord.project_id), GUEST_LIST_ADD_ROLES);
+  return dateRecord;
 }
 
 async function resolveWorkspaceForDate(
@@ -106,8 +115,7 @@ export async function listGuestListEntriesScoped(
     ? workspaceId
     : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
   // Viewers don't get the guest list at all.
-  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
-  await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
+  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId, dateId);
   const { data, error } = await supabase
     .from('guest_list_entries')
     .select(GUEST_COLUMNS)
@@ -135,8 +143,7 @@ export async function addGuestListEntriesScoped(
   const resolvedWorkspaceId = workspaceId?.trim()
     ? workspaceId
     : await resolveWorkspaceForDate(supabase, userId, dateId, GUEST_LIST_ADD_ROLES);
-  await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId);
-  const dateRecord = await getDateScoped(supabase, userId, resolvedWorkspaceId, dateId);
+  const dateRecord = await requireGuestListAddAccess(supabase, userId, resolvedWorkspaceId, dateId);
   const cleanedNames = names.map((name) => name.trim()).filter(Boolean);
 
   if (!cleanedNames.length) {

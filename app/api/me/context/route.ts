@@ -6,6 +6,7 @@ import type {
   ProjectSummary,
   TourSummary,
   WorkspaceMemberSummary,
+  WorkspaceRole,
   WorkspaceSummary,
 } from '@/lib/types/tenant';
 
@@ -76,11 +77,21 @@ export async function GET(request: NextRequest) {
     const memberIds = membershipRows.map((row: any) => String(row.id));
     const memberProjectMap = new Map<string, string[]>();
     const memberTourMap = new Map<string, string[]>();
+    // Level on each band (per-band levels); highest wins if a band appears twice.
+    const memberProjectRoles = new Map<string, Record<string, WorkspaceRole>>();
+    const roleRank: Record<string, number> = { viewer: 1, crew: 2, editor: 3, admin: 4, owner: 5 };
+    const noteProjectRole = (memberId: string, projectId: string, role: unknown) => {
+      if (!role || !projectId) return;
+      const roles = memberProjectRoles.get(memberId) ?? {};
+      const next = String(role) as WorkspaceRole;
+      if (!roles[projectId] || (roleRank[next] ?? 0) > (roleRank[roles[projectId]] ?? 0)) roles[projectId] = next;
+      memberProjectRoles.set(memberId, roles);
+    };
 
     if (memberIds.length) {
       const grantsResult = await supabase
         .from('workspace_member_projects')
-        .select('workspace_member_id, project_id')
+        .select('*')
         .in('workspace_member_id', memberIds);
 
       if (grantsResult.error && !isMissingRelationError(grantsResult.error)) {
@@ -92,6 +103,7 @@ export async function GET(request: NextRequest) {
         const list = memberProjectMap.get(memberId) ?? [];
         list.push(String((row as any).project_id));
         memberProjectMap.set(memberId, list);
+        noteProjectRole(memberId, String((row as any).project_id), (row as any).role);
       }
 
       const tourGrantsResult = await supabase
@@ -116,6 +128,7 @@ export async function GET(request: NextRequest) {
           const projects = memberProjectMap.get(memberId) ?? [];
           projects.push(String(rawProjectId));
           memberProjectMap.set(memberId, projects);
+          noteProjectRole(memberId, String(rawProjectId), (row as any).role);
         }
       }
     }
@@ -162,9 +175,16 @@ export async function GET(request: NextRequest) {
         const scopeType = normalizeScopeType(row.scope_type);
         if (!scopeType) return null;
         const projectIds = scopeType === 'workspace' ? [] : [...new Set(memberProjectMap.get(String(row.id)) ?? [])];
-        const tourIds = scopeType === 'tours' ? [...new Set(memberTourMap.get(String(row.id)) ?? [])] : [];
-        if (scopeType === 'projects' && projectIds.length === 0) return null;
-        if (scopeType === 'tours' && tourIds.length === 0) return null;
+        // A person can have whole bands and some-tours bands at once.
+        const tourIds = scopeType === 'workspace' ? [] : [...new Set(memberTourMap.get(String(row.id)) ?? [])];
+        if (scopeType !== 'workspace' && projectIds.length === 0) return null;
+
+        // Per-band levels; a band without its own level uses the person's level.
+        const storedRoles = memberProjectRoles.get(String(row.id)) ?? {};
+        const projectRoles: Record<string, WorkspaceRole> = {};
+        if (scopeType !== 'workspace') {
+          for (const projectId of projectIds) projectRoles[projectId] = storedRoles[projectId] ?? row.role;
+        }
 
         return {
           id: String(row.id),
@@ -174,6 +194,7 @@ export async function GET(request: NextRequest) {
           scopeType,
           projectIds,
           tourIds,
+          projectRoles,
         };
       })
       .filter(Boolean) as WorkspaceMemberSummary[];
