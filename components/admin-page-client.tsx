@@ -2394,14 +2394,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       </div>
       ) : null}
 
+      {/* Page titles sit close under the header, matching the Dates buttons. */}
       {isProjectsMode ? (
-        <div className="flex min-h-10 items-center px-1">
-          <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Settings</h2>
-        </div>
+        <h2 className="px-1 text-lg font-semibold leading-tight tracking-tight text-zinc-50">Settings</h2>
       ) : null}
 
       {canManageProjectActions && isProjectsMode ? (
-        <h3 className="px-1 pt-1 text-sm font-medium text-zinc-400">Projects</h3>
+        <h3 className="px-1 text-sm font-medium text-zinc-400">Projects</h3>
       ) : null}
       {canManageProjectActions && isProjectsMode ? (
         <ProjectManagementSection
@@ -2447,13 +2446,13 @@ export function AdminPageClient({ mode = 'new' }: { mode?: 'new' | 'dates' | 'dr
       {isTeamMode && canManageInvitesInWorkspace ? (
         <div className="space-y-3">
           {/* Team page header: Invite opens the invite form here at the top. */}
-          <div className="flex min-h-10 items-center justify-between gap-3 px-1">
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-50">Team</h2>
+          <div className="flex items-center justify-between gap-3 px-1">
+            <h2 className="text-lg font-semibold leading-tight tracking-tight text-zinc-50">Team</h2>
             {!inviteFormOpen ? (
               <button
                 type="button"
                 onClick={openInviteForm}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent-soft px-3 text-sm font-medium text-accent-light transition hover:border-accent/55"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border border-accent/35 bg-accent-soft px-3 text-sm font-medium text-accent-light transition hover:border-accent/55"
               >
                 <PlusIcon />
                 Invite
