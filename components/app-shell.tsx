@@ -123,6 +123,9 @@ function CrewMenu({ showAdminLink, showStartWorkspace = false }: { showAdminLink
               Start your own workspace
             </Link>
           ) : null}
+          <Link href="/account" className="block border-b border-white/5 px-4 py-3 text-sm text-zinc-100 transition hover:bg-white/[0.04]" onClick={() => setOpen(false)}>
+            Account
+          </Link>
           <LogoutButton variant="menu" />
         </div>
       ) : null}

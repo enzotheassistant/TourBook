@@ -383,6 +383,22 @@ export async function renameWorkspace(input: { workspaceId: string; name: string
   return payload.workspace;
 }
 
+/** Delete a workspace you own and everything in it. */
+export async function deleteWorkspace(input: { workspaceId: string; confirmName: string; password: string }) {
+  return request<{ deleted: { id: string; name: string } }>(`/api/workspaces/${encodeURIComponent(input.workspaceId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmName: input.confirmName, password: input.password }),
+  });
+}
+
+/** Delete your own account. */
+export async function deleteMyAccount(input: { password: string; confirm: string }) {
+  return request<{ deleted: true }>('/api/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ password: input.password, confirm: input.confirm }),
+  });
+}
+
 export async function createArtist(input: { workspaceId: string; name: string; slug?: string | null }) {
   return request<ProjectSummary>('/api/projects', {
     method: 'POST',

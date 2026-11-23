@@ -12,7 +12,7 @@ import { LoginPageClient } from "./login-client";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ inviteToken?: string; token?: string; mode?: string; link?: string }>;
+  searchParams?: Promise<{ inviteToken?: string; token?: string; mode?: string; link?: string; account?: string }>;
 }) {
   // Read the remembered email and remember-email preference server-side at render time.
   // This is more reliable than fetching it client-side in a useEffect, especially for
@@ -26,6 +26,9 @@ export default async function LoginPage({
   // ?link=expired|invalid explains an email link that no longer works.
   const linkProblem = params?.link === 'expired' || params?.link === 'invalid' ? params.link : undefined;
 
+  // ?account=deleted confirms a just-deleted account.
+  const accountDeleted = params?.account === 'deleted';
+
   return (
     <LoginPageClient
       initialEmail={rememberedEmail}
@@ -33,6 +36,7 @@ export default async function LoginPage({
       inviteToken={inviteToken}
       initialMode={initialMode}
       linkProblem={linkProblem}
+      accountDeleted={accountDeleted}
     />
   );
 }
