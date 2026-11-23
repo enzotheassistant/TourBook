@@ -9,6 +9,8 @@ interface LoginPageClientProps {
   initialEmail?: string | null;
   initialRememberEmail?: boolean;
   inviteToken?: string;
+  initialMode?: "signin" | "forgot";
+  linkProblem?: "expired" | "invalid";
 }
 
 type AuthMode = "signin" | "signup" | "forgot";
@@ -42,6 +44,18 @@ function mapAuthError(message?: string, options?: { mode?: AuthMode; fallback?: 
     return 'An account with this email already exists. Try signing in instead.';
   }
 
+  // Too many requests in a short time (e.g. tapping "Send reset email" twice).
+  if (
+    text.includes('for security purposes')
+    || text.includes('rate limit')
+    || text.includes('too many requests')
+    || text.includes('over_email_send_rate_limit')
+  ) {
+    return mode === 'forgot'
+      ? 'We just sent a link to this email. Check your inbox and spam folder, or try again in a minute.'
+      : 'Too many tries in a short time. Please wait a minute and try again.';
+  }
+
   if (text.includes('password') && text.includes('weak')) {
     return 'Password is too weak. Use at least 8 characters with a stronger mix.';
   }
@@ -70,12 +84,17 @@ function mapAuthError(message?: string, options?: { mode?: AuthMode; fallback?: 
   return raw || fallback;
 }
 
-export function LoginPageClient({ initialEmail, initialRememberEmail = true, inviteToken = "" }: LoginPageClientProps) {
-  const [mode, setMode] = useState<AuthMode>("signin");
+const LINK_PROBLEM_MESSAGES = {
+  expired: "That email link has expired or was already used. If you were resetting your password, send yourself a new link below.",
+  invalid: "That email link didn't work. If you were resetting your password, send yourself a new link below.",
+} as const;
+
+export function LoginPageClient({ initialEmail, initialRememberEmail = true, inviteToken = "", initialMode = "signin", linkProblem }: LoginPageClientProps) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState(initialEmail || "");
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(initialRememberEmail);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(linkProblem ? LINK_PROBLEM_MESSAGES[linkProblem] : "");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const routedRef = useRef(false);
